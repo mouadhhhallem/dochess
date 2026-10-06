@@ -3,7 +3,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  timeout: 60000,
+  timeout: 90000,
+  // Two workers: the P2P specs each drive two live pages plus the real
+  // Clerk/PeerJS CDNs, and four parallel Edge instances OOM the runner.
+  workers: 2,
   use: {
     headless: true,
     // Use installed Chrome browser instead of bundled Chromium
