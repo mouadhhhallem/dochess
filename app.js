@@ -21,6 +21,14 @@ function esc(v) {
 
 /* ── Tiny sound engine using Web Audio API ── */
 class SoundEngine {
+    constructor() {
+        try { this.muted = localStorage.getItem('cc_mute') === '1'; } catch (_) { this.muted = false; }
+    }
+    toggleMute() {
+        this.muted = !this.muted;
+        try { localStorage.setItem('cc_mute', this.muted ? '1' : '0'); } catch (_) {}
+        return this.muted;
+    }
     _ctx() {
         if (!this._audioCtx) {
             const C = window.AudioContext || window.webkitAudioContext;
@@ -30,6 +38,7 @@ class SoundEngine {
         return this._audioCtx || null;
     }
     _beep(type, freqStart, freqEnd, dur, gain, delay = 0) {
+        if (this.muted) return;
         const ctx = this._ctx(); if (!ctx) return;
         const o = ctx.createOscillator(), g = ctx.createGain();
         o.type = type;
@@ -55,6 +64,7 @@ class SoundEngine {
         this._beep('sine', 920, 640, 0.10, 0.05, 0.03);
     }
     playSuccess() {
+        if (this.muted) return;
         const ctx = this._ctx(); if (!ctx) return;
         [523, 659, 784, 988].forEach((f, i) => {
             const o = ctx.createOscillator(), g = ctx.createGain();
@@ -150,6 +160,10 @@ class ChessCourseApp {
                 else if (a === 'online-leave-ask') this._onlineLeaveAsk();
                 else if (a === 'online-rematch') this._onlineRematch();
                 else if (a === 'online-review') this._onlineReview();
+                else if (a === 'mute') this.toggleMute();
+                else if (a === 'flip-board') this._flipLessonBoard();
+                else if (a === 'flip-online') this._flipOnlineBoard();
+                else if (a === 'gameover-hide') { document.getElementById('gameover-card').style.display = 'none'; }
                 else if (a === 'online-draw-offer') this._onlineDrawOffer();
                 else if (a === 'movenav') this._onlineNavGo(action.dataset.where);
                 else if (a === 'profile-signin') this._profileSignIn();
@@ -433,6 +447,7 @@ class ChessCourseApp {
                         <div class="info">
                             <span class="name">${esc(t.name)}</span>
                             <span class="sub">${esc(t.title)} (Black)</span>
+                            <div class="captured-row" data-cap="opp"></div>
                         </div>
                         <div class="turn-indicator" id="ti-opp">Waiting</div>
                     </div>
@@ -447,6 +462,7 @@ class ChessCourseApp {
                         <div class="info">
                             <span class="name">You</span>
                             <span class="sub">White</span>
+                            <div class="captured-row" data-cap="you"></div>
                         </div>
                         <div class="turn-indicator" id="ti-you">Your turn</div>
                     </div>
@@ -461,8 +477,11 @@ class ChessCourseApp {
                         <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Move Log</h4>
                         <div class="move-log" id="move-log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
                     </div>
+                    <div id="gameover-card" style="display:none"></div>
                     <div class="lesson-actions">
                         <button class="btn-secondary" data-action="reset-board">Reset Board</button>
+                        <button class="btn-secondary" data-action="flip-board" title="Flip board">Flip</button>
+                        ${this._muteBtnHTML()}
                         ${free ? `<label class="diff-label">Computer:
                             <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
                                 <option value="easy" selected>Easy</option>
@@ -540,8 +559,11 @@ class ChessCourseApp {
         const inCheck  = this.game._isKingInCheck(this.game.currentPlayer);
         const kingPos  = inCheck ? this.game.findKing(this.game.currentPlayer) : null;
 
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
+        const flip = !!this.boardFlip;
+        const at = (dr, dc) => [flip ? 7 - dr : dr, flip ? 7 - dc : dc];
+        for (let dr = 0; dr < 8; dr++) {
+            for (let dc = 0; dc < 8; dc++) {
+                const [r, c] = at(dr, dc);
                 const sq = document.createElement('div');
                 const light = (r + c) % 2 === 0;
                 sq.className = `chess-square ${light ? 'white' : 'black'}`;
@@ -569,13 +591,13 @@ class ChessCourseApp {
                 }
 
                 // Coordinate labels (ink from CSS classes, not hard-coded JS colors)
-                if (r === 7) {
+                if (dr === 7) {
                     const fl = document.createElement('span');
                     fl.className = 'coord-file';
                     fl.textContent = String.fromCharCode(97 + c);
                     sq.appendChild(fl);
                 }
-                if (c === 0) {
+                if (dc === 0) {
                     const rk = document.createElement('span');
                     rk.className = 'coord-rank';
                     rk.textContent = 8 - r;
@@ -586,6 +608,7 @@ class ChessCourseApp {
                 sq.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._click(r, c); }
                 });
+                this._bindDrag(sq, board, r, c, 'lesson');
                 board.appendChild(sq);
             }
         }
@@ -622,12 +645,75 @@ class ChessCourseApp {
 
         this._updateMoveLog();
         this._updateTurnUI();
+        this._paintCaptured('lesson-content', this.game, 'white');
+    }
+
+    /* ── Drag-and-drop (pointer events, touch-friendly) ─────────────
+       Dragging a piece glides a ghost under the pointer; dropping on a
+       square runs the exact same path as click-click. A tap never moves
+       enough to start a drag, so plain clicks are untouched. ─────── */
+    _bindDrag(sq, boardEl, r, c, kind) {
+        sq.addEventListener('pointerdown', (e) => {
+            if (e.button !== undefined && e.button > 0) return;
+            if (!sq.querySelector('img.chess-piece')) return;
+            this._drag = { from: [r, c], x0: e.clientX, y0: e.clientY, ghost: null, kind };
+        });
+        sq.addEventListener('pointermove', (e) => {
+            const d = this._drag;
+            if (!d || d.kind !== kind) return;
+            if (!d.ghost) {
+                if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) <= 10) return;
+                const img = sq.querySelector('img.chess-piece');
+                if (!img) { this._drag = null; return; }
+                const rect = img.getBoundingClientRect();
+                const g = img.cloneNode();
+                g.className += ' drag-ghost';
+                g.style.width = rect.width + 'px';
+                g.style.height = rect.height + 'px';
+                document.body.appendChild(g);
+                d.ghost = g; d.w = rect.width; d.h = rect.height;
+                if (kind === 'lesson') { if (!this.game.selectedSquare) this._click(r, c); }
+                else { const s = this.online; if (s && !s.sel) this._onlineClick(r, c); }
+            }
+            d.ghost.style.transform = `translate(${e.clientX - d.w / 2}px, ${e.clientY - d.h / 2}px)`;
+        });
+        const drop = (e) => {
+            const d = this._drag;
+            if (!d || d.kind !== kind) return;
+            this._drag = null;
+            if (!d.ghost) return;
+            d.ghost.remove();
+            // Perform the drop FIRST (the swallow flag below would block it),
+            // then arm the flag so the trailing click of the same gesture dies.
+            const t = (e.clientX !== undefined && document.elementFromPoint(e.clientX, e.clientY) || { closest: () => null }).closest('.chess-square');
+            let acted = false;
+            if (!t || t.dataset.row === undefined) {
+                if (kind === 'lesson' && this.game.selectedSquare) { this.game.selectedSquare = null; this.game.legalMoves = []; this._draw(); acted = true; }
+            } else {
+                const tr = +t.dataset.row, tc = +t.dataset.col;
+                if (kind === 'lesson') {
+                    const sel = this.game.selectedSquare;
+                    if (sel && (sel[0] !== tr || sel[1] !== tc)) { this._click(tr, tc); acted = true; }
+                    else if (!sel) { this.game.selectedSquare = null; this.game.legalMoves = []; this._draw(); acted = true; }
+                } else {
+                    const s = this.online;
+                    if (s && s.sel && (s.sel[0] !== tr || s.sel[1] !== tc)) { this._onlineClick(tr, tc); acted = true; }
+                }
+            }
+            if (acted) {
+                this._dragMoved = true;
+                setTimeout(() => { this._dragMoved = false; }, 0);
+            }
+        };
+        sq.addEventListener('pointerup', drop);
+        sq.addEventListener('pointercancel', () => { if (this._drag?.ghost) this._drag.ghost.remove(); this._drag = null; });
     }
 
     /* ══════════════════════════════════════════════════════════════
        CLICK HANDLER
     ══════════════════════════════════════════════════════════════ */
     _click(r, c) {
+        if (this._dragMoved) return;
         if (this.cpuBusy) return;
         if (this.game.pendingPromotion) return;
         if (!this.isFreeGame && this.exerciseDone) {
@@ -1076,7 +1162,7 @@ class ChessCourseApp {
         // Speech bubble
         if (lockedDone) { this._setSpeech('Well done! Click "Complete Lesson" to continue.'); return; }
         if (this.cpuBusy) { this._setSpeech((this._cpuDifficulty || 'easy') === 'medium' ? 'Thinking a few moves deep…' : 'Playing a casual move…'); return; }
-        if (this.game.gameOver) return;
+        if (this.game.gameOver) { this._refreshGameOverCard(); return; }
         const status = this.game.getGameStatus();
         if (status.startsWith('check-white'))      this._setSpeech('Your king is in check — defend it!');
         else if (status.startsWith('check-black')) this._setSpeech('Check! The black king is under attack.');
@@ -1087,6 +1173,7 @@ class ChessCourseApp {
         } else {
             this._setSpeech('Think carefully about your next move.');
         }
+        this._refreshGameOverCard();
     }
 
     _setSpeech(msg) {
@@ -1617,8 +1704,9 @@ class ChessCourseApp {
         };
         const fmt = (ms) => { const t = Math.ceil(ms / 1000); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
         const top = document.getElementById('oclock-top'), bot = document.getElementById('oclock-bottom');
-        if (top) { top.textContent = fmt(left(s.oppColor)); top.classList.toggle('low', left(s.oppColor) < 20000); }
-        if (bot) { bot.textContent = fmt(left(s.myColor)); bot.classList.toggle('low', left(s.myColor) < 20000); }
+        const active = s.phase === 'play' && !s.result ? s.clock.side : null;
+        if (top) { top.textContent = fmt(left(s.oppColor)); top.classList.toggle('low', left(s.oppColor) < 20000); top.classList.toggle('active-turn', active === s.oppColor); }
+        if (bot) { bot.textContent = fmt(left(s.myColor)); bot.classList.toggle('low', left(s.myColor) < 20000); bot.classList.toggle('active-turn', active === s.myColor); }
     }
     _startOnlinePing() {
         const s = this.online;
@@ -2025,7 +2113,7 @@ class ChessCourseApp {
                 <div class="arena">
                     <div class="profile-card opponent" id="oprofile-opp">
                         ${s.opp?.img ? `<img class="avatar" src="${esc(s.opp.img)}" width="52" height="52" alt="${esc(s.opp?.name || 'Opponent')}">` : `<div class="avatar-letter">${esc((s.opp?.name || 'F')[0].toUpperCase())}</div>`}
-                        <div class="info"><span class="name">${esc(s.opp?.name || 'Opponent')}</span><span class="sub">${theirs} · ${s.opp?.rating || ''}</span></div>
+                        <div class="info"><span class="name">${esc(s.opp?.name || 'Opponent')}</span><span class="sub">${theirs} · ${s.opp?.rating || ''}</span><div class="captured-row" data-cap="opp"></div></div>
                         <div class="clock" id="oclock-top">--:--</div>
                     </div>
                     <div class="speech-bubble" id="online-status">Connecting…</div>
@@ -2033,8 +2121,8 @@ class ChessCourseApp {
                     <div id="online-promo" class="promotion-picker hidden"></div>
                     <div id="online-result">${resultLine}</div>
                     <div class="profile-card player" id="oprofile-you">
-                        <div class="avatar-letter you">${(this._meTag().name || 'Y')[0].toUpperCase()}</div>
-                        <div class="info"><span class="name">You</span><span class="sub">${mine} · ${OnlineRatings.get(this.userId, s.control.id)}</span></div>
+                        <div class="avatar-letter you">${esc((this._meTag().name || 'Y')[0].toUpperCase())}</div>
+                        <div class="info"><span class="name">You</span><span class="sub">${mine} · ${OnlineRatings.get(this.userId, s.control.id)}</span><div class="captured-row" data-cap="you"></div></div>
                         <div class="clock" id="oclock-bottom">--:--</div>
                     </div>
                 </div>
@@ -2047,6 +2135,7 @@ class ChessCourseApp {
                             <button class="icon-btn live" id="mv-live" data-action="movenav" data-where="live" title="Back to live">Live</button>
                             <button class="icon-btn" id="mv-next" data-action="movenav" data-where="next" title="Next move"><svg viewBox="0 0 24 24"><path d="M10 5l7 7-7 7"/></svg></button>
                             <button class="icon-btn" id="mv-end" data-action="movenav" data-where="end" title="Latest move"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
+                            <button class="icon-btn" id="mv-flip" data-action="flip-online" title="Flip board"><svg viewBox="0 0 24 24"><path d="M7 4v13M7 20l-3-3M7 20l3-3M17 20V7M17 4l-3 3M17 4l3 3"/></svg></button>
                         </div>
                         <div class="move-log" id="online-log"><span style="color:var(--text-muted-dim)">No moves yet.</span></div>
                     </div>
@@ -2054,9 +2143,11 @@ class ChessCourseApp {
                         ${over
                             ? `<button class="btn-primary btn-glow-strong" data-action="online-rematch">Rematch</button>
                                <button class="btn-secondary" data-action="online-review">Review</button>
+                               ${this._muteBtnHTML()}
                                <button class="btn-secondary" data-action="online-leave">Lobby</button>`
                             : `<button class="btn-secondary" data-action="online-draw-offer">Draw</button>
                                <button class="btn-secondary" data-action="online-resign-ask">Resign</button>
+                               ${this._muteBtnHTML()}
                                <button class="btn-secondary" data-action="online-leave-ask">Leave</button>`}
                     </div>
                 </div>
@@ -2068,6 +2159,69 @@ class ChessCourseApp {
     }
 
     // Rating count-up: tween the displayed rating from old to new.
+    toggleMute() {
+        const muted = this.snd.toggleMute();
+        document.querySelectorAll('.mute-btn').forEach(b => {
+            b.setAttribute('aria-pressed', muted ? 'true' : 'false');
+            b.title = muted ? 'Unmute sounds' : 'Mute sounds';
+        });
+        return muted;
+    }
+    _muteBtnHTML() {
+        const m = this.snd.muted ? 'true' : 'false';
+        return `<button class="icon-btn mute-btn" data-action="mute" aria-pressed="${m}" title="${this.snd.muted ? 'Unmute sounds' : 'Mute sounds'}">
+            <svg viewBox="0 0 24 24" class="spk-on"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8a5 5 0 0 1 0 8M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+            <svg viewBox="0 0 24 24" class="spk-off"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l6 6M22 9l-6 6"/></svg>
+        </button>`;
+    }
+    _flipLessonBoard() { this.boardFlip = !this.boardFlip; this._draw(); }
+    _flipOnlineBoard() { const s = this.online; if (!s) return; s.flipView = !s.flipView; this._drawOnline(); }
+
+    _paintCaptured(rootId, engine, myColor) {
+        const root = document.getElementById(rootId);
+        if (!root || !engine) return;
+        const vals = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+        const takes = { white: [], black: [] };
+        engine.moveHistory.forEach(m => {
+            if (!m.captured) return;
+            (m.piece === m.piece.toUpperCase() ? takes.white : takes.black).push(m.captured);
+        });
+        const score = (arr) => arr.reduce((a, p) => a + (vals[p.toLowerCase()] || 0), 0);
+        const diff = score(takes.white) - score(takes.black);
+        const order = { q: 0, r: 1, b: 2, n: 3, p: 4 };
+        const render = (arr, edge) => arr.slice()
+            .sort((a, b) => order[a.toLowerCase()] - order[b.toLowerCase()])
+            .map(p => `<img src="${this._pieceFile(p)}" width="20" height="20" alt="" loading="lazy">`).join('')
+            + (edge > 0 ? `<span class="mat-edge">+${edge}</span>` : '');
+        root.querySelectorAll('[data-cap]').forEach(el => {
+            const side = el.dataset.cap === 'you' ? myColor : (myColor === 'white' ? 'black' : 'white');
+            el.innerHTML = render(side === 'white' ? takes.white : takes.black, side === 'white' ? diff : -diff);
+        });
+    }
+
+    _refreshGameOverCard() {
+        const card = document.getElementById('gameover-card');
+        if (!card) return;
+        if (!this.isFreeGame || !this.currentLesson || !this.game.gameOver) { card.style.display = 'none'; return; }
+        const status = this.game.getGameStatus();
+        let title = 'Game over', body = '';
+        if (status.startsWith('checkmate')) {
+            const w = status.split('-')[1] === 'white';
+            title = w ? 'You win!' : 'Computer wins';
+            body = w ? 'Checkmate — magnificent play! Your lesson is complete.' : 'Checkmate — study the final position, then try again!';
+        } else if (status === 'stalemate') { title = 'Draw'; body = 'Stalemate — neither side has a legal move.'; }
+        else if (status.startsWith('draw-')) {
+            title = 'Draw';
+            body = { 'draw-insufficient': 'Neither side can possibly checkmate.', 'draw-repetition': 'Threefold repetition.', 'draw-fifty': 'Fifty-move rule.' }[status] || '';
+        } else { card.style.display = 'none'; return; }
+        card.innerHTML = `<h3>${title}</h3><p>${body}</p>
+            <div class="lesson-actions">
+                <button class="btn-primary btn-glow-strong" data-action="reset-board">Rematch</button>
+                <button class="btn-secondary" data-action="gameover-hide">Review board</button>
+                <button class="btn-secondary" data-action="back-lessons">Lessons</button>
+            </div>`;
+        card.style.display = '';
+    }
     _animateRate() {
         const el = document.querySelector('#online-result .rate-count');
         if (!el) return;
@@ -2207,7 +2361,7 @@ class ChessCourseApp {
         const board = document.getElementById('online-board');
         if (!board || !s) return;
         board.innerHTML = '';
-        const flip = s.myColor === 'black';
+        const flip = (s.myColor === 'black') !== !!s.flipView;
         const at = (dr, dc) => [flip ? 7 - dr : dr, flip ? 7 - dc : dc];
         // History view: null = live head; otherwise replay the first N plies
         // into a scratch engine so ‹ › never touches the real game.
@@ -2253,6 +2407,7 @@ class ChessCourseApp {
                 if (dc === 0) { const rk = document.createElement('span'); rk.className = 'coord-rank'; rk.textContent = alg[1]; sq.appendChild(rk); }
                 sq.addEventListener('click', () => this._onlineClick(r, c));
                 sq.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._onlineClick(r, c); } });
+                this._bindDrag(sq, board, r, c, 'online');
                 board.appendChild(sq);
             }
         }
@@ -2278,6 +2433,7 @@ class ChessCourseApp {
             }
         }
         this._paintOnlineNav(live, view, viewing);
+        this._paintCaptured('online-content', s.engine, s.myColor);
     }
 
     /* ── Move navigator ‹ › : step through history, Live returns ── */
@@ -2289,6 +2445,7 @@ class ChessCourseApp {
         if (where === 'start') s.viewPly = 0;
         else if (where === 'prev') s.viewPly = Math.max(0, view - 1);
         else if (where === 'next') s.viewPly = Math.min(live, view + 1);
+        else if (where === 'flip') { this._flipOnlineBoard(); return; }
         else s.viewPly = null;
         this._drawOnline();
         if (s.viewPly == null) this._onlineStatus();
@@ -2307,6 +2464,7 @@ class ChessCourseApp {
 
     _onlineClick(r, c) {
         const s = this.online;
+        if (this._dragMoved) return;
         if (!s || s.phase !== 'play' || s.result || s.pendingPromo) return;
         if (s.viewPly != null && s.viewPly < s.engine.moveHistory.length) {
             s.viewPly = null; // first tap while reviewing returns to live
@@ -2862,6 +3020,7 @@ class ChessCourseApp {
 
     _go(id) {
         this._trackScreen(id);
+        try { document.body.dataset.screen = id; } catch (_) {}
         ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen']
             .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
         // Keep nav highlighted so users always know where they are

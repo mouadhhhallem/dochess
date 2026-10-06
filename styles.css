@@ -13,6 +13,9 @@
     src: url('assets/fonts/inter-latin.woff2') format('woff2');
 }
 
+/* ── Reset (load-bearing: without it UA margins leak everywhere) ── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
 /* ── CSS Variables ────────────────────────────────────────────── */
 :root {
     /* Deep navy foundation */
@@ -847,8 +850,7 @@ body {
 
 /* ── Board Container (was missing — board rendered as vertical stack) ── */
 #chess-board-wrapper {
-    width: 100%;
-    max-width: 560px;
+    width: min(100%, calc(100dvh - 290px), 760px);
     margin: 0 auto;
     padding: 12px;
     background: var(--bg-card);
@@ -1285,7 +1287,6 @@ body {
     font-size: 0.85rem;
     background: rgba(16, 185, 129, 0.15);
     padding: 0.35rem 0.9rem;
-}
     border-radius: 20px;
     border: 1px solid rgba(16, 185, 129, 0.3);
 }
@@ -1625,6 +1626,93 @@ body[data-theme='day'] .profile-lesson-title { color: var(--text-main); }
 body[data-theme='day'] .header,
 body[data-theme='day'] .nav { background: #ffffff; }
 
+/* ── Phase 6: match layout ──────────────────────────────────────── */
+@media (min-width: 1025px) {
+    #lesson-screen .lesson-content,
+    #online-screen .lesson-content {
+        grid-template-columns: minmax(0, 1fr) 340px;
+        align-items: start;
+    }
+    #online-board-wrapper {
+        width: min(100%, calc(100dvh - 290px), 760px);
+    }
+}
+
+/* Clocks: large tabular numerals, turn highlight, low-time pulse. */
+.clock {
+    font-variant-numeric: tabular-nums;
+}
+
+#oprofile-you .clock,
+#oprofile-opp .clock { font-size: 1.5rem; }
+
+.clock.active-turn {
+    border-color: var(--accent-bright);
+    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.35);
+}
+
+.clock.low { animation: clockPulse 1s ease-in-out infinite; }
+
+@keyframes clockPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.45); }
+}
+
+/* Captured pieces + material edge on the player bars. */
+.captured-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 22px;
+    margin-top: 0.2rem;
+    flex-wrap: wrap;
+}
+
+.captured-row:empty { display: none; }
+
+.captured-row img { width: 20px; height: 20px; }
+
+.mat-edge {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--accent-bright);
+    margin-left: 0.3rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Drag ghost follows the pointer above everything. */
+.drag-ghost {
+    position: fixed;
+    z-index: 9995;
+    pointer-events: none;
+    transform: translate(-50%, -60%) scale(1.12);
+}
+
+.chess-square { touch-action: pan-y; }
+
+/* Game-over result card (free game). */
+#gameover-card {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 1.5rem 1.75rem;
+    text-align: center;
+    margin-top: 1.5rem;
+}
+
+#gameover-card h3 { font-size: 1.4rem; font-weight: 800; color: white; margin-bottom: 0.4rem; }
+#gameover-card p { color: var(--text-muted); font-size: 0.92rem; margin-bottom: 1.25rem; }
+#gameover-card .lesson-actions { margin-top: 0; }
+
+body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
+
+/* Mute + flip buttons ride the standard secondary style. */
+.icon-btn svg { pointer-events: none; }
+
+.mute-btn .spk-off { display: none; }
+.mute-btn[aria-pressed="true"] .spk-on { display: none; }
+.mute-btn[aria-pressed="true"] .spk-off { display: block; }
+
 /* ── Online play ──────────────────────────────────────────────── */
 #online-board-wrapper {
     width: 100%;
@@ -1908,7 +1996,7 @@ body[data-theme='day'] .confirm-card h3 { color: var(--text-main); }
     align-items: center;
     justify-content: center;
     min-width: 44px;
-    height: 36px;
+    height: 44px;
     padding: 0 0.5rem;
     background: var(--bg-main);
     border: 1px solid var(--glass-border);
@@ -1997,4 +2085,48 @@ body[data-theme='day'] .confirm-card h3 { color: var(--text-main); }
 @keyframes menuDrop {
     from { opacity: 0; transform: translateY(-8px); }
     to   { opacity: 1; transform: none; }
+}
+
+/* ── Phase 6: compact match chrome on phones ────────────────────── */
+@media (max-width: 768px) {
+    .container { padding: 0 10px; }
+    #chess-board-wrapper,
+    #online-board-wrapper {
+        width: max(270px, min(100%, calc(100dvh - 430px)));
+        padding: 8px;
+    }
+    .arena .profile-card { padding: 0.6rem 0.8rem; gap: 0.6rem; }
+    .arena .profile-card .avatar,
+    .arena .avatar-letter { width: 40px; height: 40px; font-size: 1.1rem; }
+    .arena .speech-bubble { padding: 0.7rem 0.9rem; font-size: 0.85rem; }
+    .arena .feedback { padding: 0.9rem 1rem; margin-top: 1rem; font-size: 0.88rem; }
+    .arena .move-log { max-height: 110px; }
+    .arena .clock { font-size: 1.15rem; }
+    .lesson-actions { gap: 0.6rem; margin-top: 1.25rem; }
+    .arena .dashboard-section, .lesson-dashboard .dashboard-section { padding: 1rem; }
+    .movenav { flex-wrap: wrap; }
+    /* Online match fits one phone screen: tight chrome, short log. */
+    #online-screen h2 { display: none; }
+    #online-screen .arena { gap: 0.4rem; }
+    #online-screen .lesson-content { gap: 0.5rem; }
+    #online-screen .arena .profile-card { padding: 0.5rem 0.7rem; }
+    #online-screen .arena .move-log { padding: 0.5rem 0.7rem; max-height: 72px; }
+    #online-screen .arena .feedback { margin-top: 0.5rem; }
+    #online-screen .arena .speech-bubble { padding: 0.55rem 0.9rem; }
+    #online-screen .lesson-actions { margin-top: 0.5rem; flex-direction: row; flex-wrap: nowrap; align-items: center; overflow-x: auto; padding-bottom: 0.25rem; }
+    #online-screen .lesson-actions .btn-secondary { white-space: nowrap; }
+    #online-screen.screen { padding: 10px 0 12px; }
+    /* Match screen on phones: bars + board + actions only. Turn state
+       already lives in the indicators and clocks; the log stays a tap
+       away on larger screens. */
+    #online-screen .arena .speech-bubble { display: none; }
+    #online-screen .dashboard-section .move-log { display: none; }
+    body[data-screen="online-screen"] .header .container { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+    body[data-screen="online-screen"] .logo-icon { width: 28px; height: 28px; }
+    body[data-screen="online-screen"] .logo h1 { font-size: 1rem; }
+    #online-screen .dashboard-section > h4:first-child { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .clock.low { animation: none; }
 }
