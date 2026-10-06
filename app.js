@@ -2208,7 +2208,7 @@ class ChessCourseApp {
     _refreshGameOverCard() {
         const card = document.getElementById('gameover-card');
         if (!card) return;
-        if (!this.isFreeGame || !this.currentLesson || !this.game.gameOver) { card.style.display = 'none'; return; }
+        if (!this.isFreeGame || !this.currentLesson || !this.game.gameOver) { card.style.display = 'none'; this._gameOverShown = false; return; }
         const status = this.game.getGameStatus();
         let title = 'Game over', body = '';
         if (status.startsWith('checkmate')) {
@@ -2219,14 +2219,26 @@ class ChessCourseApp {
         else if (status.startsWith('draw-')) {
             title = 'Draw';
             body = { 'draw-insufficient': 'Neither side can possibly checkmate.', 'draw-repetition': 'Threefold repetition.', 'draw-fifty': 'Fifty-move rule.' }[status] || '';
-        } else { card.style.display = 'none'; return; }
-        card.innerHTML = `<h3 id="gameover-title">${title}</h3><p>${body}</p>
+        } else { card.style.display = 'none'; this._gameOverShown = false; return; }
+        card.innerHTML = `<h3 id="gameover-title" tabindex="-1">${title}</h3><p>${body}</p>
             <div class="lesson-actions">
                 <button class="btn-primary btn-glow-strong" data-action="reset-board">Rematch</button>
                 <button class="btn-secondary" data-action="gameover-hide">Review board</button>
                 <button class="btn-secondary" data-action="back-lessons">Lessons</button>
             </div>`;
         card.style.display = '';
+        // Reveal once per game-over: the card sits below the move log and is
+        // otherwise off-screen, so winners never saw it. Scroll (no motion
+        // when reduced-motion is set) and land focus on the heading so screen
+        // readers announce the result.
+        if (!this._gameOverShown) {
+            this._gameOverShown = true;
+            try {
+                const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                card.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+                card.querySelector('#gameover-title')?.focus({ preventScroll: true });
+            } catch (_) {}
+        }
     }
     _animateRate() {
         const el = document.querySelector('#online-result .rate-count');

@@ -54,15 +54,24 @@ test('a11y: skip link, live regions, named controls, keyboard board', async ({ p
   });
   await page.locator('.lesson-card button').last().click();
   await expect(page.locator('#lesson-screen')).toBeVisible();
-  const dialogOk = await page.evaluate(() => {
+  await page.evaluate(() => {
     const app = window.app;
     app.game.gameOver = true;
     app.game.getGameStatus = () => 'stalemate';
     app._refreshGameOverCard();
+  });
+  // Reveal scroll is smooth: let it land before measuring.
+  await page.waitForTimeout(800);
+  const dialogOk = await page.evaluate(() => {
     const card = document.getElementById('gameover-card');
-    return card && card.style.display !== 'none'
-      && card.getAttribute('role') === 'dialog'
-      && (card.getAttribute('aria-labelledby') === 'gameover-title');
+    if (!card || card.style.display === 'none') return false;
+    if (card.getAttribute('role') !== 'dialog') return false;
+    if (card.getAttribute('aria-labelledby') !== 'gameover-title') return false;
+    // Reveal: card scrolled into view, focus on the heading (announces result).
+    const r = card.getBoundingClientRect();
+    const inView = r.top >= 0 && r.bottom <= window.innerHeight;
+    const focused = document.activeElement && document.activeElement.id === 'gameover-title';
+    return inView && focused;
   });
   expect(dialogOk).toBe(true);
 });
