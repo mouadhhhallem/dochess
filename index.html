@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css?v=27">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'">
 </head>
 <body>
     <div id="app">
@@ -28,11 +29,11 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></g></svg>
                 </button>
                 <nav class="nav" id="main-nav">
-                    <button class="nav-btn" id="nav-home" data-nav="home" onclick="showHome()" type="button">Home</button>
-                    <button class="nav-btn" id="nav-lessons" data-nav="lessons" onclick="showLessons()" type="button">Lessons</button>
-                    <button class="nav-btn" id="nav-progress" data-nav="progress" onclick="showProgress()" type="button">Progress</button>
-                    <button class="nav-btn" id="nav-profile" data-nav="profile" onclick="showProfile()" type="button">Profile</button>
-                    <button class="nav-btn" id="nav-online" data-nav="online" onclick="showOnline()" type="button">Online</button>
+                    <button class="nav-btn" id="nav-home" data-nav="home" type="button">Home</button>
+                    <button class="nav-btn" id="nav-lessons" data-nav="lessons" type="button">Lessons</button>
+                    <button class="nav-btn" id="nav-progress" data-nav="progress" type="button">Progress</button>
+                    <button class="nav-btn" id="nav-profile" data-nav="profile" type="button">Profile</button>
+                    <button class="nav-btn" id="nav-online" data-nav="online" type="button">Online</button>
                     <button class="nav-btn theme-toggle" id="theme-toggle" data-nav="theme" type="button" aria-pressed="false" title="Switch to day mode">
                         <span class="theme-sky" aria-hidden="true">
                             <svg class="theme-sun" viewBox="0 0 24 24"><g stroke-linecap="round"><circle cx="12" cy="12" r="4.6" fill="none" stroke-width="2"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M19.2 4.8l-1.8 1.8M6.6 17.4l-1.8 1.8" stroke-width="2"/></g></svg>
@@ -67,7 +68,7 @@
                         <img class="hero-chess-icon" id="hero-logo-img" src="assets/logos/logo-for-dark.png?v=22" alt="DoChess">
                         <h2>Master the <span>Game of Kings</span></h2>
                         <p>Learn chess from scratch with 10 interactive lessons guided by expert teachers. Every move, every rule — made simple.</p>
-                        <button class="btn-primary btn-glow-strong" id="start-learning-btn" onclick="showLessons()" type="button">Start Learning →</button>
+                        <button class="btn-primary btn-glow-strong" id="start-learning-btn" type="button">Start Learning →</button>
                     </div>
 
                     <!-- How it works: the real first-run path, nothing more -->
@@ -120,7 +121,7 @@
             <!-- Lesson Detail Screen -->
             <div id="lesson-screen" class="screen">
                 <div class="container">
-                    <button class="btn-secondary" style="margin-bottom:1.5rem" data-action="back-lessons" onclick="showLessons()" type="button">← Back to Lessons</button>
+                    <button class="btn-secondary" style="margin-bottom:1.5rem" data-action="back-lessons" type="button">← Back to Lessons</button>
                     <div id="lesson-content">
                         <!-- Rendered by JS -->
                     </div>
@@ -177,8 +178,8 @@
 
     <script src="chess.js?v=15"></script>
     <script src="clerk-config.js?v=18"></script>
-    <script src="online.js?v=25"></script>
-    <script src="app.js?v=27"></script>
+    <script src="online.js?v=28"></script>
+    <script src="app.js?v=28"></script>
     <script defer crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/peerjs@1/dist/peerjs.min.js"></script>
 </body>
 </html>

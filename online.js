@@ -80,12 +80,37 @@ class OnlineNet {
         });
     }
 
+    // Message allowlist: known types + expected field shapes only.
+    // Anything else is dropped silently before it reaches the app.
+    static validMessage(msg) {
+        if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return false;
+        const isStr = (v) => typeof v === 'string';
+        const isNum = (v) => typeof v === 'number' && isFinite(v);
+        const isBool = (v) => typeof v === 'boolean';
+        const sq = (v) => isStr(v) && /^[a-h][1-8]$/.test(v);
+        const promo = (v) => v === null || v === undefined || (isStr(v) && /^[QRBNqrbn]$/.test(v));
+        const user = (v) => v === undefined || (v && typeof v === 'object');
+        switch (msg.type) {
+            case 'hello': return isStr(msg.code) && user(msg.user) && (msg.rejoin === undefined || isBool(msg.rejoin)) && (msg.lastPly === undefined || isNum(msg.lastPly));
+            case 'welcome': return isStr(msg.game_id) && (msg.color === 'white' || msg.color === 'black') && isStr(msg.control) && user(msg.user) && (!msg.state || typeof msg.state === 'object');
+            case 'move': return sq(msg.from) && sq(msg.to) && promo(msg.promo) && (msg.ply === undefined || isNum(msg.ply)) && (msg.mid === undefined || isStr(msg.mid));
+            case 'state': return !msg.state || typeof msg.state === 'object';
+            case 'rejected': return true;
+            case 'game_over': return isStr(msg.result) && (msg.reason === undefined || isStr(msg.reason));
+            case 'resign': case 'draw_offer': case 'draw_accept': case 'draw_decline':
+            case 'rematch_want': case 'rematch_accept': case 'rematch_decline': case 'sync_request':
+                return true;
+            case 'host_left': return true;
+            case 'ping': case 'pong': return true;
+            default: return false;
+        }
+    }
+
     _adopt(conn) {
         this.conns.set(conn.peer, conn);
         conn.on('data', (msg) => {
-            if (msg && typeof msg === 'object') {
-                try { this.onEvent(msg.type, msg, conn); } catch (_) {}
-            }
+            if (!OnlineNet.validMessage(msg)) return;
+            try { this.onEvent(msg.type, msg, conn); } catch (_) {}
         });
         const drop = () => {
             if (this.conns.get(conn.peer) === conn) this.conns.delete(conn.peer);
@@ -205,6 +230,24 @@ const OnlineRatings = {
             .slice(0, 50);
     }
 };
+
+/* ── Peer input validation (Phase 1 security) ──
+   Everything arriving over WebRTC is untrusted. sanitizePeerUser() is the
+   SINGLE place peer identity is cleaned: name becomes plain text
+   (max 24 chars, no control chars), img must be https: (else null),
+   rating a finite int 100-4000 (else START), id ^[\w-]{1,64}$ (else guest).
+   Renderers must still escape (defense in depth). */
+function sanitizePeerUser(u) {
+    const clean = { id: 'guest', name: 'Friend', img: null, rating: (typeof OnlineRatings !== 'undefined' ? OnlineRatings.START : 800) };
+    if (!u || typeof u !== 'object') return clean;
+    if (typeof u.id === 'string' && /^[\w-]{1,64}$/.test(u.id)) clean.id = u.id;
+    if (typeof u.name === 'string') {
+        clean.name = u.name.replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 24) || 'Friend';
+    }
+    if (typeof u.img === 'string' && /^https:/.test(u.img)) clean.img = u.img.slice(0, 500);
+    if (Number.isInteger(u.rating) && u.rating >= 100 && u.rating <= 4000) clean.rating = u.rating;
+    return clean;
+}
 
 /* ── Durable session store (launch-to-scale §5: history as an event log) ──
    Append-only move log per game_id + portable clock snapshot, so a dead

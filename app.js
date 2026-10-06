@@ -12,6 +12,13 @@
  * ✓ Sound effects
  */
 
+/* ── HTML escaping (Phase 1 security): every non-constant value placed
+   into a template string goes through esc(). Peer data is additionally
+   cleaned once at receipt (sanitizePeerUser in online.js). ── */
+function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 /* ── Tiny sound engine using Web Audio API ── */
 class SoundEngine {
     _ctx() {
@@ -132,6 +139,21 @@ class ChessCourseApp {
                 if (a === 'reset-board') this.resetBoard();
                 else if (a === 'mark-complete') this.markComplete();
                 else if (a === 'back-lessons') this.showLessons();
+                else if (a === 'pick-control') this._pickControl(action.dataset.id);
+                else if (a === 'online-host') this._onlineHost();
+                else if (a === 'online-host-code') this._onlineHost(action.dataset.code);
+                else if (a === 'online-join') this._onlineJoin();
+                else if (a === 'online-join-code') this._onlineJoin(action.dataset.code, true);
+                else if (a === 'online-leave') this._onlineLeave();
+                else if (a === 'online-resign-ask') this._onlineResignAsk();
+                else if (a === 'online-leave-ask') this._onlineLeaveAsk();
+                else if (a === 'online-rematch') this._onlineRematch();
+                else if (a === 'online-review') this._onlineReview();
+                else if (a === 'online-draw-offer') this._onlineDrawOffer();
+                else if (a === 'movenav') this._onlineNavGo(action.dataset.where);
+                else if (a === 'profile-signin') this._profileSignIn();
+                else if (a === 'manage-account') this.openUserProfile();
+                else if (a === 'logout') this.signOut();
             });
         }
     }
@@ -312,7 +334,7 @@ class ChessCourseApp {
             const t = this.teachers.find(x => x.id === l?.teacherId);
             if (!l || !t) return;
             const d = document.createElement('div'); d.className = 'completed-lesson-item';
-            d.innerHTML = `<div class="completed-lesson-info"><img src="${t.img}" alt="${t.name}"><div><h4>${l.title}</h4><p style="font-size:.82rem;color:var(--text-muted-dim)">Lesson ${l.id}</p></div></div><div class="completed-date">Done ✓</div>`;
+            d.innerHTML = `<div class="completed-lesson-info"><img src="${t.img}" alt="${esc(t.name)}"><div><h4>${esc(l.title)}</h4><p style="font-size:.82rem;color:var(--text-muted-dim)">Lesson ${l.id}</p></div></div><div class="completed-date">Done ✓</div>`;
             list.appendChild(d);
         });
     }
@@ -326,7 +348,7 @@ class ChessCourseApp {
         g.innerHTML = '';
         this.teachers.forEach(t => {
             const c = document.createElement('div'); c.className = 'teacher-card';
-            c.innerHTML = `<img src="${t.img}" alt="${t.name}"><h4>${t.name}</h4><p style="font-weight:600;color:var(--accent);margin-bottom:.4rem">${t.title}</p><p>${t.desc}</p>`;
+            c.innerHTML = `<img src="${t.img}" alt="${esc(t.name)}"><h4>${esc(t.name)}</h4><p style="font-weight:600;color:var(--accent);margin-bottom:.4rem">${esc(t.title)}</p><p>${esc(t.desc)}</p>`;
             g.appendChild(c);
         });
         this._syncProgress();
@@ -345,9 +367,9 @@ class ChessCourseApp {
             const tag = l.type === 'free-game' ? ' <span class="free-game-tag">Full Game</span>' : '';
             const card = document.createElement('div'); card.className = `lesson-card${open ? '' : ' locked'}`;
             card.innerHTML = `
-                <div class="lesson-header"><h3>${l.title}${tag}</h3><div class="lesson-meta"><span>Lesson ${l.id}</span>${badge}</div></div>
-                <div class="lesson-body"><p>${l.desc.replace(/<[^>]+>/g, '')}</p></div>
-                <div class="lesson-footer"><button class="btn-primary" style="padding:.6rem 1.4rem;font-size:.92rem" data-open-lesson="${l.id}" onclick="app.openLesson(${l.id})" ${open ? '' : 'disabled'}>${done ? 'Review' : 'Start'}</button></div>`;
+                <div class="lesson-header"><h3>${esc(l.title)}${tag}</h3><div class="lesson-meta"><span>Lesson ${l.id}</span>${badge}</div></div>
+                <div class="lesson-body"><p>${esc(l.desc.replace(/<[^>]+>/g, ''))}</p></div>
+                <div class="lesson-footer"><button class="btn-primary" style="padding:.6rem 1.4rem;font-size:.92rem" data-open-lesson="${l.id}" ${open ? '' : 'disabled'}>${done ? 'Review' : 'Start'}</button></div>`;
             g.appendChild(card);
         });
     }
@@ -372,24 +394,24 @@ class ChessCourseApp {
             : `<div class="exercise-instructions free-game-box"><h4>Free Game Mode</h4><p>You are White. The computer plays Black. Play a full game — good luck!</p></div>`;
 
         const btn = free
-            ? `<button class="btn-primary btn-glow-strong" id="complete-btn" data-action="mark-complete" onclick="app.markComplete()">Mark Complete</button>`
-            : `<button class="btn-primary btn-glow-strong" id="complete-btn" data-action="mark-complete" onclick="app.markComplete()" disabled title="Finish the exercise move first">Complete Lesson</button>`;
+            ? `<button class="btn-primary btn-glow-strong" id="complete-btn" data-action="mark-complete">Mark Complete</button>`
+            : `<button class="btn-primary btn-glow-strong" id="complete-btn" data-action="mark-complete" disabled title="Finish the exercise move first">Complete Lesson</button>`;
 
         document.getElementById('lesson-content').innerHTML = `
             <div class="lesson-detail-header">
                 <div class="lesson-title">
                     <div class="lesson-number">${l.id}</div>
-                    <div><h2>${l.title}</h2><p>${l.objective}</p></div>
+                    <div><h2>${esc(l.title)}</h2><p>${esc(l.objective)}</p></div>
                 </div>
-                <div class="teacher-info"><img src="${t.img}" alt="${t.name}"><span>${t.name}</span></div>
+                <div class="teacher-info"><img src="${t.img}" alt="${esc(t.name)}"><span>${esc(t.name)}</span></div>
             </div>
             <div class="lesson-content">
                 <div class="arena">
                     <div class="profile-card opponent" id="profile-opp">
-                        <img class="avatar" src="${t.img}" alt="${t.name}">
+                        <img class="avatar" src="${t.img}" alt="${esc(t.name)}">
                         <div class="info">
-                            <span class="name">${t.name}</span>
-                            <span class="sub">${t.title} (Black)</span>
+                            <span class="name">${esc(t.name)}</span>
+                            <span class="sub">${esc(t.title)} (Black)</span>
                         </div>
                         <div class="turn-indicator" id="ti-opp">Waiting</div>
                     </div>
@@ -397,7 +419,7 @@ class ChessCourseApp {
                     <div id="chess-board-wrapper"><div id="chess-board"></div></div>
                     <div id="promotion-picker" class="promotion-picker hidden"></div>
                     <div id="lesson-feedback" class="feedback info">
-                        Welcome to <strong>${l.title}</strong>! ${free ? 'You are White — make your first move!' : 'Follow the exercise above.'}
+                        Welcome to <strong>${esc(l.title)}</strong>! ${free ? 'You are White — make your first move!' : 'Follow the exercise above.'}
                     </div>
                     <div class="profile-card player" id="profile-you">
                         <img class="avatar" src="${this._pieceFile('P')}" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
@@ -419,7 +441,7 @@ class ChessCourseApp {
                         <div class="move-log" id="move-log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
                     </div>
                     <div class="lesson-actions">
-                        <button class="btn-secondary" data-action="reset-board" onclick="app.resetBoard()">Reset Board</button>
+                        <button class="btn-secondary" data-action="reset-board">Reset Board</button>
                         ${btn}
                     </div>
                 </div>
@@ -1030,17 +1052,18 @@ class ChessCourseApp {
         const controls = ChessCourseApp.onlineControls();
         const sel = this._onlineControlId || 'blitz';
         const tiles = controls.map(c => `
-            <button class="control-tile${c.id === sel ? ' sel' : ''}" data-control="${c.id}" onclick="app._pickControl('${c.id}')">
+            <button class="control-tile${c.id === sel ? ' sel' : ''}" data-action="pick-control" data-id="${c.id}">
                 <span class="control-name">${c.name}</span>
                 <span class="control-label">${c.label}</span>
                 <span class="control-rating">${signed ? OnlineRatings.get(this.userId, c.id) : '–'}</span>
             </button>`).join('');
         const board = OnlineRatings.board(sel).map((p, i) =>
-            `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${p.name}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
+            `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
             || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
         box.innerHTML = `
             <div class="online-lobby">
-                ${signed ? '' : `<div class="exercise-instructions"><h4>Sign in to play online</h4><p>Online games are rated, so every player needs an identity. <button class="linklike" onclick="app._profileSignIn()">Sign in / Join</button></p></div>`}
+                ${signed ? '' : `<div class="exercise-instructions"><h4>Sign in to play online</h4><p>Online games are rated, so every player needs an identity. <button class="linklike"
+           data-action="profile-signin">Sign in / Join</button></p></div>`}
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Time control</h4>
                     <div class="control-grid">${tiles}</div>
@@ -1049,18 +1072,20 @@ class ChessCourseApp {
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Play a friend</h4>
                     <p class="lobby-hint">Share a 6-letter code. Your tabs connect directly; the host's tab validates every move and owns both clocks. Dropped connections auto-rejoin with the same code, and every move is saved so a dead tab can resume.</p>
                     <div class="lobby-actions">
-                        <button class="btn-primary" onclick="app._onlineHost()" ${signed ? '' : 'disabled'}>Create game code</button>
+                        <button class="btn-primary" data-action="online-host" ${signed ? '' :
+                'disabled'}>Create game code</button>
                         <div class="join-row">
                             <input id="join-code" class="join-input" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false">
-                            <button class="btn-secondary" onclick="app._onlineJoin()" ${signed ? '' : 'disabled'}>Join</button>
+                            <button class="btn-secondary" data-action="online-join" ${signed ? '' :
+                'disabled'}>Join</button>
                         </div>
                     </div>
                     ${(() => {
                         const lh = signed ? this._lastHosted() : null;
                         const lj = signed ? this._lastJoined() : null;
                         let h = '';
-                        if (lh) h += `<div class="lobby-actions"><button class="btn-secondary" onclick="app._onlineHost('${lh.code}')">Re-host ${lh.code} — restore where you left off</button></div>`;
-                        if (lj && (!lh || lj !== lh.code)) h += `<div class="lobby-actions"><button class="btn-secondary" onclick="app._onlineJoin('${lj}', true)">Rejoin ${lj}</button></div>`;
+                        if (lh) h += `<div class="lobby-actions"><button class="btn-secondary" data-action="online-host-code" data-code="${lh.code}">Re-host ${esc(lh.code)} — restore where you left off</button></div>`;
+                        if (lj && (!lh || lj !== lh.code)) h += `<div class="lobby-actions"><button class="btn-secondary" data-action="online-join-code" data-code="${lj}">Rejoin ${esc(lj)}</button></div>`;
                         return h;
                     })()}
                     <div id="online-lobby-status" class="feedback info" style="display:none"></div>
@@ -1209,7 +1234,8 @@ class ChessCourseApp {
                 <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Game code</h4>
                 <div class="game-code">${code}</div>
                 <p class="lobby-hint">${msg}</p>
-                <div class="lobby-actions"><button class="btn-secondary" onclick="app._onlineLeave()">Cancel</button></div>
+                <div class="lobby-actions"><button class="btn-secondary"
+           data-action="online-leave">Cancel</button></div>
             </div>`;
     }
 
@@ -1321,7 +1347,7 @@ class ChessCourseApp {
         if (type === 'hello') {
             if (msg.code !== s.code || (s.phase !== 'waiting' && s.phase !== 'play')) { try { conn.close(); } catch (_) {} return; }
             s.conn = conn;
-            s.opp = { id: msg.user?.id || 'guest', name: msg.user?.name || 'Friend', img: msg.user?.img || null, rating: msg.user?.rating || OnlineRatings.START };
+            s.opp = sanitizePeerUser(msg.user);
             if (s.resumed) {
                 // Rejoining joiner meets the restored session: same game,
                 // same colors, full snapshot. Epoch already bumped at re-host.
@@ -1384,7 +1410,7 @@ class ChessCourseApp {
             if (s.phase !== 'joining' && !(s.phase === 'play' && s.peerGone)) return;
             if (typeof msg.epoch === 'number') s.epoch = msg.epoch;
             s.gameId = msg.game_id;
-            s.opp = { id: msg.user?.id || 'guest', name: msg.user?.name || 'Friend', img: msg.user?.img || null, rating: msg.user?.rating || OnlineRatings.START };
+            s.opp = sanitizePeerUser(msg.user);
             this._startOnlineGame(msg.color === 'white' ? 'white' : 'black', s.opp, msg.control, true);
             this._applyOnlineState(msg.state);
             s.peerGone = false;
@@ -1668,8 +1694,8 @@ class ChessCourseApp {
             <div class="lesson-content">
                 <div class="arena">
                     <div class="profile-card opponent" id="oprofile-opp">
-                        ${s.opp?.img ? `<img class="avatar" src="${s.opp.img}" alt="${s.opp?.name || 'Opponent'}">` : `<div class="avatar-letter">${(s.opp?.name || 'F')[0].toUpperCase()}</div>`}
-                        <div class="info"><span class="name">${s.opp?.name || 'Opponent'}</span><span class="sub">${theirs} · ${s.opp?.rating || ''}</span></div>
+                        ${s.opp?.img ? `<img class="avatar" src="${esc(s.opp.img)}" alt="${esc(s.opp?.name || 'Opponent')}">` : `<div class="avatar-letter">${esc((s.opp?.name || 'F')[0].toUpperCase())}</div>`}
+                        <div class="info"><span class="name">${esc(s.opp?.name || 'Opponent')}</span><span class="sub">${theirs} · ${s.opp?.rating || ''}</span></div>
                         <div class="clock" id="oclock-top">--:--</div>
                     </div>
                     <div class="speech-bubble" id="online-status">Connecting…</div>
@@ -1686,22 +1712,22 @@ class ChessCourseApp {
                     <div class="dashboard-section">
                         <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">${s.control.name} ${s.control.label} · Rated</h4>
                         <div class="movenav" role="group" aria-label="Step through moves">
-                            <button class="icon-btn" id="mv-start" onclick="app._onlineNavGo('start')" title="First move"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 5l-8 7 8 7"/></svg></button>
-                            <button class="icon-btn" id="mv-prev" onclick="app._onlineNavGo('prev')" title="Previous move"><svg viewBox="0 0 24 24"><path d="M14 5l-7 7 7 7"/></svg></button>
-                            <button class="icon-btn live" id="mv-live" onclick="app._onlineNavGo('live')" title="Back to live">Live</button>
-                            <button class="icon-btn" id="mv-next" onclick="app._onlineNavGo('next')" title="Next move"><svg viewBox="0 0 24 24"><path d="M10 5l7 7-7 7"/></svg></button>
-                            <button class="icon-btn" id="mv-end" onclick="app._onlineNavGo('end')" title="Latest move"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
+                            <button class="icon-btn" id="mv-start" data-action="movenav" data-where="start" title="First move"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 5l-8 7 8 7"/></svg></button>
+                            <button class="icon-btn" id="mv-prev" data-action="movenav" data-where="prev" title="Previous move"><svg viewBox="0 0 24 24"><path d="M14 5l-7 7 7 7"/></svg></button>
+                            <button class="icon-btn live" id="mv-live" data-action="movenav" data-where="live" title="Back to live">Live</button>
+                            <button class="icon-btn" id="mv-next" data-action="movenav" data-where="next" title="Next move"><svg viewBox="0 0 24 24"><path d="M10 5l7 7-7 7"/></svg></button>
+                            <button class="icon-btn" id="mv-end" data-action="movenav" data-where="end" title="Latest move"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
                         </div>
                         <div class="move-log" id="online-log"><span style="color:var(--text-muted-dim)">No moves yet.</span></div>
                     </div>
                     <div class="lesson-actions" id="online-actions">
                         ${over
-                            ? `<button class="btn-primary btn-glow-strong" onclick="app._onlineRematch()">Rematch</button>
-                               <button class="btn-secondary" onclick="app._onlineReview()">Review</button>
-                               <button class="btn-secondary" onclick="app._onlineLeave()">Lobby</button>`
-                            : `<button class="btn-secondary" onclick="app._onlineDrawOffer()">Draw</button>
-                               <button class="btn-secondary" onclick="app._onlineResignAsk()">Resign</button>
-                               <button class="btn-secondary" onclick="app._onlineLeaveAsk()">Leave</button>`}
+                            ? `<button class="btn-primary btn-glow-strong" data-action="online-rematch">Rematch</button>
+                               <button class="btn-secondary" data-action="online-review">Review</button>
+                               <button class="btn-secondary" data-action="online-leave">Lobby</button>`
+                            : `<button class="btn-secondary" data-action="online-draw-offer">Draw</button>
+                               <button class="btn-secondary" data-action="online-resign-ask">Resign</button>
+                               <button class="btn-secondary" data-action="online-leave-ask">Leave</button>`}
                     </div>
                 </div>
             </div>`;
@@ -1723,12 +1749,12 @@ class ChessCourseApp {
             veil.id = 'confirm-veil';
             veil.className = 'confirm-veil';
             veil.innerHTML = `
-                <div class="confirm-card" role="dialog" aria-modal="true" aria-label="${title}">
-                    <h3>${title}</h3>
-                    <p>${body}</p>
+                <div class="confirm-card" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+                    <h3>${esc(title)}</h3>
+                    <p>${esc(body)}</p>
                     <div class="confirm-actions">
-                        <button class="btn-secondary" data-x="no">${cancelLabel}</button>
-                        <button class="btn-primary" data-x="yes">${okLabel}</button>
+                        <button class="btn-secondary" data-x="no">${esc(cancelLabel)}</button>
+                        <button class="btn-primary" data-x="yes">${esc(okLabel)}</button>
                     </div>
                 </div>`;
             const done = (v) => { veil.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
@@ -2269,23 +2295,23 @@ class ChessCourseApp {
                     <div class="profile-lessons">${this._profileLessonsHTML()}</div>
                 </div>
                 <div class="profile-actions">
-                    <button class="btn-primary btn-glow-strong" onclick="app._profileSignIn()">Sign in / Join</button>
+                    <button class="btn-primary btn-glow-strong" data-action="profile-signin">Sign in / Join</button>
                 </div>`;
             return;
         }
         const name = user.fullName || user.username || (user.primaryEmailAddress?.emailAddress) || 'Player';
         const email = user.primaryEmailAddress?.emailAddress || '';
-        const img = user.imageUrl || 'assets/pieces/white-king.svg';
+        const img = (typeof user.imageUrl === 'string' && /^https:/.test(user.imageUrl)) ? user.imageUrl : 'assets/pieces/white-king.svg';
         let joined = '';
         try { if (user.createdAt) joined = new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }); } catch (_) {}
         box.innerHTML = `
             <div class="profile-card profile-hero">
-                <img class="profile-avatar" src="${img}" alt="${name}">
+                <img class="profile-avatar" src="${esc(img)}" alt="${esc(name)}">
                 <div class="profile-id">
-                    <h3>${name}</h3>
-                    ${email ? `<p>${email}</p>` : ''}
-                    ${joined ? `<p class="profile-joined">Playing since ${joined}</p>` : ''}
-                    <p class="profile-joined"><span class="presence-dot"></span>${this._lastSeenText()}</p>
+                    <h3>${esc(name)}</h3>
+                    ${email ? `<p>${esc(email)}</p>` : ''}
+                    ${joined ? `<p class="profile-joined">Playing since ${esc(joined)}</p>` : ''}
+                    <p class="profile-joined"><span class="presence-dot"></span>${esc(this._lastSeenText())}</p>
                 </div>
             </div>
             ${this._profileStatsHTML(name)}
@@ -2303,8 +2329,8 @@ class ChessCourseApp {
                 <div class="profile-lessons">${this._profileLessonsHTML()}</div>
             </div>
             <div class="profile-actions">
-                <button class="btn-secondary" onclick="app.openUserProfile()">Manage account</button>
-                <button class="btn-secondary" onclick="app.signOut()">Log out</button>
+                <button class="btn-secondary" data-action="manage-account">Manage account</button>
+                <button class="btn-secondary" data-action="logout">Log out</button>
             </div>`;
     }
 
@@ -2344,7 +2370,7 @@ class ChessCourseApp {
             const ctrl = (cats.find(c => c.id === g.control) || { name: g.control }).name;
             const when = new Date(g.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
             const d = (g.delta === null || g.delta === undefined) ? '' : `<span class="delta ${g.delta >= 0 ? 'up' : 'down'}">${g.delta >= 0 ? '+' : ''}${g.delta}</span>`;
-            return `<div class="profile-lesson-row">${badge}<span class="profile-lesson-title">vs ${g.opp}</span><span class="recent-meta">${ctrl} · ${Math.ceil((g.plies || 0) / 2)} moves · ${when}</span>${d}</div>`;
+            return `<div class="profile-lesson-row">${badge}<span class="profile-lesson-title">vs ${esc(g.opp)}</span><span class="recent-meta">${esc(ctrl)} · ${Math.ceil((g.plies || 0) / 2)} moves · ${esc(when)}</span>${d}</div>`;
         }).join('') : '<p class="board-empty">No games yet — open the Online tab and take on a friend to start your record.</p>';
         return `
             <div class="profile-card block">
@@ -2365,9 +2391,9 @@ class ChessCourseApp {
                 : '<span class="profile-locked">Locked</span>';
             return `<div class="profile-lesson-row">
                 <span class="lesson-number sm">${l.id}</span>
-                <span class="profile-lesson-title">${l.title}</span>
+                <span class="profile-lesson-title">${esc(l.title)}</span>
                 ${badge}
-                <button class="btn-secondary sm" data-open-lesson="${l.id}" onclick="app.openLesson(${l.id})" ${open ? '' : 'disabled'}>${done ? 'Review' : 'Play'}</button>
+                <button class="btn-secondary sm" data-open-lesson="${l.id}" ${open ? '' : 'disabled'}>${done ? 'Review' : 'Play'}</button>
             </div>`;
         }).join('');
     }

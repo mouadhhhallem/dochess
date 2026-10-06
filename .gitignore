@@ -20,6 +20,10 @@ _*_tmp.js
 detect.json
 detect2.json
 
+# Design baseline/comparison screenshots (brief BEFORE YOU START)
+baselines/
+shots/
+
 # Old debug/test helpers (not part of the app)
 debug.js
 debug2.js
