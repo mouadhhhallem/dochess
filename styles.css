@@ -4,6 +4,14 @@
    ================================================================ */
 
 /* Type: single workhorse family (Inter). Display faces banned incl. Outfit. */
+/* Self-hosted Inter variable font, latin subset, font-display swap. */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url('assets/fonts/inter-latin.woff2') format('woff2');
+}
 
 /* ── CSS Variables ────────────────────────────────────────────── */
 :root {

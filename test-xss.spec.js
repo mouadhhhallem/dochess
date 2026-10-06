@@ -9,9 +9,8 @@ test('peer and profile names cannot execute scripts', async ({ page }) => {
   });
   await page.goto('index.html');
   await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
-  // Let the real Clerk SDK finish loading first: its sign-in-state
-  // listener would otherwise clobber the stub below mid-assertions.
-  await page.waitForFunction(() => !!window.app._clerk, null, { timeout: 25000 }).catch(() => {});
+  // Clerk only loads on sign-in tap (lazy) or a returning session, so a
+  // fresh profile can stub it immediately with nothing to race against.
   await page.waitForTimeout(400);
 
   // 1. Profile path: hostile Clerk display name must render as literal text.

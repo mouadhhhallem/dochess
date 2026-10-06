@@ -5,12 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DoChess — Master the Game of Kings</title>
     <meta name="description" content="DoChess: interactive chess course with 10 structured lessons. Learn moves, tactics, and strategy with a beautiful chess board.">
-    <link rel="icon" type="image/png" href="assets/logos/logo-for-light.png?v=22">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=27">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'">
+    <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
+    <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="styles.css?v=29">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
 </head>
 <body>
     <div id="app">
@@ -19,7 +17,7 @@
         <header class="header">
             <div class="container">
                 <div class="logo">
-                    <img class="logo-icon" id="logo-img" src="assets/logos/logo-for-dark.png?v=22" alt="DoChess">
+                    <img class="logo-icon" id="logo-img" src="assets/logos/logo-128-dark.png?v=28" alt="DoChess" width="40" height="40">
                     <div>
                         <h1>DoChess</h1>
                         <p>Learn Chess Academy</p>
@@ -65,7 +63,7 @@
 
                     <!-- Hero -->
                     <div class="hero">
-                        <img class="hero-chess-icon" id="hero-logo-img" src="assets/logos/logo-for-dark.png?v=22" alt="DoChess">
+                        <img class="hero-chess-icon" id="hero-logo-img" src="assets/logos/logo-256-dark.png?v=28" alt="DoChess" width="88" height="88" fetchpriority="high">
                         <h2>Master the <span>Game of Kings</span></h2>
                         <p>Learn chess from scratch with 10 interactive lessons guided by expert teachers. Every move, every rule — made simple.</p>
                         <button class="btn-primary btn-glow-strong" id="start-learning-btn" type="button">Start Learning →</button>
@@ -178,8 +176,8 @@
 
     <script src="chess.js?v=15"></script>
     <script src="clerk-config.js?v=18"></script>
-    <script src="online.js?v=28"></script>
-    <script src="app.js?v=28"></script>
-    <script defer crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/peerjs@1/dist/peerjs.min.js"></script>
+    <script src="online.js?v=29"></script>
+    <script src="app.js?v=29"></script>
+
 </body>
 </html>

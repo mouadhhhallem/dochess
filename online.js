@@ -27,6 +27,24 @@ class OnlineNet {
 
     static get available() { return typeof window.Peer !== 'undefined'; }
 
+    // Lazy-load the vendored PeerJS (~85KB) only when online play is used,
+    // so the course itself never pays for it. Same-origin, no SRI needed.
+    static _loadP = null;
+    static ensure() {
+        if (typeof window.Peer !== 'undefined') return Promise.resolve(true);
+        if (!OnlineNet._loadP) {
+            OnlineNet._loadP = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'vendor/peerjs.min.js?v=28';
+                s.async = true;
+                s.onload = () => (typeof window.Peer !== 'undefined' ? resolve(true) : reject(new Error('peerjs unavailable')));
+                s.onerror = () => reject(new Error('peerjs unavailable'));
+                document.head.appendChild(s);
+            }).catch((e) => { OnlineNet._loadP = null; throw e; });
+        }
+        return OnlineNet._loadP;
+    }
+
     static makeCode() {
         const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
         let s = '';
@@ -39,7 +57,8 @@ class OnlineNet {
     static normalizeCode(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); }
     static hostIdFor(code) { return 'ccg-' + code; }
 
-    host(code) {
+    async host(code) {
+        await OnlineNet.ensure();
         return new Promise((resolve, reject) => {
             this.destroy();
             let peer;
@@ -58,7 +77,8 @@ class OnlineNet {
         });
     }
 
-    join(code) {
+    async join(code) {
+        await OnlineNet.ensure();
         return new Promise((resolve, reject) => {
             this.destroy();
             let peer;

@@ -106,6 +106,7 @@ class ChessCourseApp {
         this._applyTheme(this._resolveTheme(), false);
         this._initAuth();
         this._bindMenu();
+        this._bindImgFallback();
         window.addEventListener('beforeunload', () => this._flushStudyTime());
         document.addEventListener('visibilitychange', () => { if (document.hidden) this._flushStudyTime(); else this._studySince = Date.now(); });
         this._renderHome();
@@ -176,7 +177,23 @@ class ChessCourseApp {
         const white = piece === piece.toUpperCase();
         const src = this._pieceFile(piece);
         const label = `${white ? 'White' : 'Black'} ${src.split('-').pop().split('.')[0]}`;
-        return `<img src="${src}" class="chess-piece ${white ? 'white' : 'black'}" alt="${label}" draggable="false" onerror="this.outerHTML=window.app._svgFallback('${piece}')">`;
+        return `<img src="${src}" class="chess-piece ${white ? 'white' : 'black'}" alt="${label}" width="45" height="45"
+            draggable="false" data-fallback-piece="${piece}">`;
+    }
+    // CSP-safe image fallback: one capture-phase listener swaps any broken
+    // piece image for inline SVG (inline onerror= attributes are banned).
+    _bindImgFallback() {
+        if (document.body.dataset.imgFallback) return;
+        document.body.dataset.imgFallback = '1';
+        document.addEventListener('error', (e) => {
+            const img = e.target;
+            if (img && img.tagName === 'IMG' && img.dataset.fallbackPiece && !img.dataset.fbkDone) {
+                img.dataset.fbkDone = '1';
+                const tmp = document.createElement('div');
+                tmp.innerHTML = this._svgFallback(img.dataset.fallbackPiece);
+                img.replaceWith(tmp.firstChild);
+            }
+        }, true);
     }
     // Minimal inline fallback (used only if an image file is missing)
     _svgFallback(piece) {
@@ -209,11 +226,13 @@ class ChessCourseApp {
        DATA
     ══════════════════════════════════════════════════════════════ */
     _buildTeachers() {
+        // Lightweight 192px PNG exports of the full portraits in
+        // teacher{1,2,3}.svg (kept as sources). ~40-60KB, not megabytes.
         const v = ChessCourseApp.assetV();
         return [
-            { id:1, name:'Grandmaster Elena', title:'Chess Master & Strategist',  desc:'A calm and patient grandmaster who teaches the fundamentals with wisdom and precision.',         img:`assets/teacher1.svg?${v}` },
-            { id:2, name:'Coach Marcus',      title:'Tactical Specialist',         desc:'An energetic coach who focuses on tactics, patterns, and aggressive play.',                     img:`assets/teacher2.svg?${v}` },
-            { id:3, name:'Professor Aris',    title:'Historical Chess Expert',     desc:'A scholarly teacher who brings chess history to life while teaching essential concepts.',       img:`assets/teacher3.svg?${v}` }
+            { id:1, name:'Grandmaster Elena', title:'Chess Master & Strategist',  desc:'A calm and patient grandmaster who teaches the fundamentals with wisdom and precision.',         img:`assets/teacher1-192.png?${v}` },
+            { id:2, name:'Coach Marcus',      title:'Tactical Specialist',         desc:'An energetic coach who focuses on tactics, patterns, and aggressive play.',                     img:`assets/teacher2-192.png?${v}` },
+            { id:3, name:'Professor Aris',    title:'Historical Chess Expert',     desc:'A scholarly teacher who brings chess history to life while teaching essential concepts.',       img:`assets/teacher3-192.png?${v}` }
         ];
     }
 
@@ -334,7 +353,8 @@ class ChessCourseApp {
             const t = this.teachers.find(x => x.id === l?.teacherId);
             if (!l || !t) return;
             const d = document.createElement('div'); d.className = 'completed-lesson-item';
-            d.innerHTML = `<div class="completed-lesson-info"><img src="${t.img}" alt="${esc(t.name)}"><div><h4>${esc(l.title)}</h4><p style="font-size:.82rem;color:var(--text-muted-dim)">Lesson ${l.id}</p></div></div><div class="completed-date">Done ✓</div>`;
+                        d.innerHTML = `<div class="completed-lesson-info"><img src="${t.img}" width="44" height="44" loading="lazy"
+                            alt="${esc(t.name)}"><div><h4>${esc(l.title)}</h4><p style="font-size:.82rem;color:var(--text-muted-dim)">Lesson ${l.id}</p></div></div><div class="completed-date">Done ✓</div>`;
             list.appendChild(d);
         });
     }
@@ -348,7 +368,7 @@ class ChessCourseApp {
         g.innerHTML = '';
         this.teachers.forEach(t => {
             const c = document.createElement('div'); c.className = 'teacher-card';
-            c.innerHTML = `<img src="${t.img}" alt="${esc(t.name)}"><h4>${esc(t.name)}</h4><p style="font-weight:600;color:var(--accent);margin-bottom:.4rem">${esc(t.title)}</p><p>${esc(t.desc)}</p>`;
+            c.innerHTML = `<img src="${t.img}" width="88" height="88" loading="lazy" alt="${esc(t.name)}"><h4>${esc(t.name)}</h4><p style="font-weight:600;color:var(--accent);margin-bottom:.4rem">${esc(t.title)}</p><p>${esc(t.desc)}</p>`;
             g.appendChild(c);
         });
         this._syncProgress();
@@ -403,12 +423,13 @@ class ChessCourseApp {
                     <div class="lesson-number">${l.id}</div>
                     <div><h2>${esc(l.title)}</h2><p>${esc(l.objective)}</p></div>
                 </div>
-                <div class="teacher-info"><img src="${t.img}" alt="${esc(t.name)}"><span>${esc(t.name)}</span></div>
+                <div class="teacher-info"><img src="${t.img}" width="32" height="32" loading="lazy"
+                                                alt="${esc(t.name)}"><span>${esc(t.name)}</span></div>
             </div>
             <div class="lesson-content">
                 <div class="arena">
                     <div class="profile-card opponent" id="profile-opp">
-                        <img class="avatar" src="${t.img}" alt="${esc(t.name)}">
+                        <img class="avatar" src="${t.img}" width="52" height="52" alt="${esc(t.name)}">
                         <div class="info">
                             <span class="name">${esc(t.name)}</span>
                             <span class="sub">${esc(t.title)} (Black)</span>
@@ -422,7 +443,7 @@ class ChessCourseApp {
                         Welcome to <strong>${esc(l.title)}</strong>! ${free ? 'You are White — make your first move!' : 'Follow the exercise above.'}
                     </div>
                     <div class="profile-card player" id="profile-you">
-                        <img class="avatar" src="${this._pieceFile('P')}" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
+                        <img class="avatar" src="${this._pieceFile('P')}" width="52" height="52" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
                         <div class="info">
                             <span class="name">You</span>
                             <span class="sub">White</span>
@@ -1056,7 +1077,14 @@ class ChessCourseApp {
         if (!box) return;
         this._stopOnlineTick();
         if (typeof OnlineNet !== 'undefined' && !OnlineNet.available) {
-            box.innerHTML = `<div class="feedback error">Online play needs the PeerJS network library, which did not load. Check your connection and reload.</div>`;
+            box.innerHTML = `<div class="feedback info">Loading real-time engine…</div>`;
+            OnlineNet.ensure().then(
+                () => { if (document.getElementById('online-content')) this._renderOnlineLobby(); },
+                () => {
+                    const b2 = document.getElementById('online-content');
+                    if (b2) b2.innerHTML = `<div class="feedback error">Online play needs the network library, which did not load. Check your connection and reopen this tab.</div>`;
+                }
+            );
             return;
         }
         const signed = !!(this._clerk && this._clerk.user);
@@ -1732,7 +1760,7 @@ class ChessCourseApp {
             <div class="lesson-content">
                 <div class="arena">
                     <div class="profile-card opponent" id="oprofile-opp">
-                        ${s.opp?.img ? `<img class="avatar" src="${esc(s.opp.img)}" alt="${esc(s.opp?.name || 'Opponent')}">` : `<div class="avatar-letter">${esc((s.opp?.name || 'F')[0].toUpperCase())}</div>`}
+                        ${s.opp?.img ? `<img class="avatar" src="${esc(s.opp.img)}" width="52" height="52" alt="${esc(s.opp?.name || 'Opponent')}">` : `<div class="avatar-letter">${esc((s.opp?.name || 'F')[0].toUpperCase())}</div>`}
                         <div class="info"><span class="name">${esc(s.opp?.name || 'Opponent')}</span><span class="sub">${theirs} · ${s.opp?.rating || ''}</span></div>
                         <div class="clock" id="oclock-top">--:--</div>
                     </div>
@@ -2219,40 +2247,70 @@ class ChessCourseApp {
         if (this._clerk) { try { await this._clerk.signOut(); } catch (_) {} }
     }
 
-    /* ── Clerk authentication (optional, graceful without a key) ──── */
-    async _initAuth() {
+    /* ── Clerk authentication (optional, lazy, graceful without a key) ─
+       The ~450KB SDK loads only when needed: silently in the background
+       for returning sessions, otherwise on the first Sign-in tap. The
+       course itself never pays for it. */
+    _initAuth() {
         const key = window.CHESS_CLERK_KEY;
         if (!key || typeof key !== 'string' || !key.startsWith('pk_')) return; // no accounts configured
-        const loadScript = (src, keyAttr) => new Promise((res, rej) => {
-            const s = document.createElement('script');
-            s.src = src; s.async = true; s.crossOrigin = 'anonymous';
-            // The UMD bundle reads its key off its own script tag at
-            // evaluation time and aborts without it (per Clerk docs).
-            if (keyAttr) s.setAttribute('data-clerk-publishable-key', keyAttr);
-            s.onload = res; s.onerror = () => rej(new Error('auth unavailable'));
-            document.head.appendChild(s);
-        });
+        document.getElementById('auth-slot')?.removeAttribute('hidden');
+        document.getElementById('auth-btn')?.addEventListener('click', () => this._authSignIn());
+        document.getElementById('logout-btn')?.addEventListener('click', async () => { try { await this._clerk?.signOut(); } catch (_) {} });
+        // Returning session? Restore silently so the avatar is already there.
+        let returning = false;
         try {
-            // Pinned CDN bundles (the per-instance /npm path 307-redirects
-            // and never materializes window.Clerk under file://).
-            await loadScript('https://cdn.jsdelivr.net/npm/@clerk/ui@1/dist/ui.browser.js');
-            await loadScript('https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6/dist/clerk.browser.js', key);
-            if (!window.Clerk) throw new Error('auth unavailable');
-            await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
-            this._clerk = window.Clerk;
-            document.getElementById('auth-slot')?.removeAttribute('hidden');
-            document.getElementById('auth-btn')?.addEventListener('click', () => this._clerk.openSignIn({}));
-            document.getElementById('logout-btn')?.addEventListener('click', async () => { try { await this._clerk.signOut(); } catch (_) {} });
-            this._clerk.addListener(({ user }) => {
+            returning = localStorage.getItem('cc_had_session') === '1' || /(^|;\s*)__session=/.test(document.cookie);
+        } catch (_) {}
+        if (returning) this._ensureClerk();
+    }
+    _clerkLoadP = null;
+    async _ensureClerk() {
+        if (this._clerk) return this._clerk;
+        if (!this._clerkLoadP) {
+            this._clerkLoadP = (async () => {
+                const key = window.CHESS_CLERK_KEY;
+                // Pinned versions + SRI hashes (a failed hash rejects the
+                // script, and the course keeps working without accounts).
+                const SRI = {
+                    ui: 'sha384-4GUvezHdeeeXUl+biTEv1J5e48+PY6g69mc75RUZASJcYBS2ziMHnctpzk/vXwHQ',
+                    js: 'sha384-cEAsa1TiyCAEmd4+EaWuF7yatGWPa1+FeHkoewWSl71xCJYSy5nyAOJ7TKzd5Rzo'
+                };
+                const loadScript = (src, integrity, keyAttr) => new Promise((res, rej) => {
+                    const s = document.createElement('script');
+                    s.src = src; s.async = true; s.crossOrigin = 'anonymous';
+                    if (integrity) s.integrity = integrity;
+                    // The UMD bundle reads its key off its own script tag at
+                    // evaluation time and aborts without it (per Clerk docs).
+                    if (keyAttr) s.setAttribute('data-clerk-publishable-key', keyAttr);
+                    s.onload = res; s.onerror = () => rej(new Error('auth unavailable'));
+                    document.head.appendChild(s);
+                });
+                // Pinned CDN bundles (the per-instance /npm path 307-redirects
+                // and never materializes window.Clerk under file://).
+                await loadScript('https://cdn.jsdelivr.net/npm/@clerk/ui@1.39.0/dist/ui.browser.js', SRI.ui);
+                await loadScript('https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6.36.0/dist/clerk.browser.js', SRI.js, key);
+                if (!window.Clerk) throw new Error('auth unavailable');
+                await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
+                this._clerk = window.Clerk;
+                this._clerk.addListener(({ user }) => {
+                    try {
+                        if (user) localStorage.setItem('cc_had_session', '1');
+                        else localStorage.removeItem('cc_had_session');
+                    } catch (_) {}
+                    this._syncAuthUI();
+                    this._setUser(user ? user.id : null);
+                });
                 this._syncAuthUI();
-                this._setUser(user ? user.id : null);
-            });
-            this._syncAuthUI();
-            this._setUser(this._clerk.user ? this._clerk.user.id : null);
-        } catch (_) {
-            // Offline or blocked CDN: the course works fully without accounts.
-            document.getElementById('auth-slot')?.setAttribute('hidden', '');
+                this._setUser(this._clerk.user ? this._clerk.user.id : null);
+                return this._clerk;
+            })().catch(() => { this._clerkLoadP = null; return null; });
         }
+        return this._clerkLoadP;
+    }
+    async _authSignIn() {
+        const c = await this._ensureClerk();
+        if (c) { try { c.openSignIn({}); } catch (_) {} }
     }
     _syncAuthUI() {
         const slot = document.getElementById('userbutton-slot');
@@ -2297,9 +2355,9 @@ class ChessCourseApp {
         // Theme-aware brand marks: white knight on dark chrome, black knight on light.
         const v = ChessCourseApp.assetV();
         const logo = document.getElementById('logo-img');
-        if (logo) logo.src = this.theme === 'day' ? `assets/logos/logo-for-light.png?${v}` : `assets/logos/logo-for-dark.png?${v}`;
+        if (logo) logo.src = this.theme === 'day' ? `assets/logos/logo-128-light.png?${v}` : `assets/logos/logo-128-dark.png?${v}`;
         const heroLogo = document.getElementById('hero-logo-img');
-        if (heroLogo) heroLogo.src = this.theme === 'day' ? `assets/logos/logo-for-light.png?${v}` : `assets/logos/logo-for-dark.png?${v}`;
+        if (heroLogo) heroLogo.src = this.theme === 'day' ? `assets/logos/logo-256-light.png?${v}` : `assets/logos/logo-256-dark.png?${v}`;
         if (persist) {
             try { localStorage.setItem('ccp_theme', this.theme); } catch (_) {}
         }
@@ -2349,7 +2407,7 @@ class ChessCourseApp {
         if (!user) {
             box.innerHTML = `
                 <div class="profile-card profile-hero">
-                    <img class="profile-avatar" src="assets/pieces/white-king.svg" alt="Guest">
+                    <img class="profile-avatar" src="assets/pieces/white-king.svg" width="96" height="96" alt="Guest">
                     <div class="profile-id">
                         <h3>Guest learner</h3>
                         <p>Sign in to track this course across devices — progress stays on this browser until then.</p>
@@ -2373,7 +2431,7 @@ class ChessCourseApp {
         try { if (user.createdAt) joined = new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }); } catch (_) {}
         box.innerHTML = `
             <div class="profile-card profile-hero">
-                <img class="profile-avatar" src="${esc(img)}" alt="${esc(name)}">
+                <img class="profile-avatar" src="${esc(img)}" width="96" height="96" alt="${esc(name)}">
                 <div class="profile-id">
                     <h3>${esc(name)}</h3>
                     ${email ? `<p>${esc(email)}</p>` : ''}
