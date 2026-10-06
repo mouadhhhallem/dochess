@@ -655,7 +655,7 @@ class ChessCourseApp {
                 : 'Checkmate! The computer wins. Study the position and try again!';
             this._fb(msg, winner === 'white' ? 'success' : 'error');
             this.game.gameOver = true;
-            if (winner === 'white') { this.snd.playSuccess(); this._confetti(); }
+            if (winner === 'white') { this.snd.playSuccess(); }
             if (winner === 'white') this.markDone(this.currentLesson.id);
             this._updateTurnUI();
             return;
@@ -701,7 +701,7 @@ class ChessCourseApp {
             const st = g.getGameStatus();
             if (st.startsWith('checkmate')) {
                 this._fb('Checkmate! You win! Magnificent play!', 'success');
-                this.snd.playSuccess(); this._confetti();
+                this.snd.playSuccess();
                 if (this.isFreeGame) this.markDone(this.currentLesson.id);
             } else {
                 this._fb("Stalemate — it's a draw.", 'info');
@@ -739,7 +739,7 @@ class ChessCourseApp {
             const winner = status.split('-')[1];
             const msg = winner === 'black' ? 'Checkmate! Computer wins. Try again!' : 'You win!';
             this._fb(msg, winner === 'black' ? 'error' : 'success');
-            if (winner === 'white') { this.snd.playSuccess(); this._confetti(); }
+            if (winner === 'white') { this.snd.playSuccess(); }
             g.gameOver = true;
         } else if (status === 'stalemate') {
             this._fb("Stalemate — it's a draw.", 'info'); g.gameOver = true;
@@ -844,7 +844,6 @@ class ChessCourseApp {
             }
             this.exerciseDone = true;
             this.snd.playSuccess();
-            this._confetti();
             const el = document.getElementById('exercise-instruction');
             if (el) {
                 el.innerHTML = `<strong>Exercise Complete!</strong> ${fbText}`;
@@ -942,81 +941,6 @@ class ChessCourseApp {
         }
         log.innerHTML = html;
         log.scrollTop = log.scrollHeight;
-    }
-
-    /* ══════════════════════════════════════════════════════════════
-       CONFETTI  (no const-reassignment bug)
-    ══════════════════════════════════════════════════════════════ */
-    _confetti() {
-        let canvas = document.getElementById('confetti-canvas');
-        if (!canvas) {
-            canvas = document.createElement('canvas');
-            canvas.id = 'confetti-canvas';
-            canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;';
-            document.body.appendChild(canvas);
-        }
-        canvas.width  = window.innerWidth;
-        canvas.height = window.innerHeight;
-        const ctx    = canvas.getContext('2d');
-        const colors = ['#10b981','#34d399','#fbbf24','#60a5fa','#f59e0b'];
-        const board = document.getElementById('chess-board-wrapper');
-        const rect = board?.getBoundingClientRect();
-        const originX = rect ? rect.left + rect.width / 2 : canvas.width / 2;
-        const originY = rect ? rect.top + rect.height / 2 : canvas.height / 2;
-        const parts  = Array.from({ length: 44 }, (_, i) => {
-            const angle = (Math.PI * 2 * i) / 44 + (Math.random() * 0.18);
-            const speed = 2.5 + Math.random() * 4.5;
-            return {
-                x: originX,
-                y: originY,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 1.2,
-                size: 3 + Math.random() * 4,
-                color: colors[Math.floor(Math.random() * colors.length)],
-                rot: Math.random() * Math.PI,
-                vr: (Math.random() - 0.5) * 0.2,
-                life: 1,
-                shape: Math.random() > 0.65 ? 'star' : (Math.random() > 0.5 ? 'dot' : 'spark')
-            };
-        });
-        let frame = 0;
-        const run = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.save();
-            parts.forEach(p => {
-                p.x += p.vx; p.y += p.vy; p.vy += 0.04; p.vx *= 0.992; p.vy *= 0.992; p.rot += p.vr; p.life -= 0.017;
-                const alpha = Math.max(0, p.life);
-                if (!alpha) return;
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = p.color;
-                ctx.shadowColor = p.color;
-                ctx.shadowBlur = 10;
-                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-                if (p.shape === 'dot') {
-                    ctx.beginPath();
-                    ctx.arc(0, 0, p.size * 0.55, 0, Math.PI * 2);
-                    ctx.fill();
-                } else if (p.shape === 'spark') {
-                    ctx.fillRect(-p.size * 0.9, -p.size * 0.12, p.size * 1.8, p.size * 0.24);
-                } else {
-                    ctx.beginPath();
-                    for (let i = 0; i < 5; i++) {
-                        const starAngle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
-                        const radius = i % 2 === 0 ? p.size : p.size * 0.4;
-                        const x = Math.cos(starAngle) * radius;
-                        const y = Math.sin(starAngle) * radius;
-                        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-                    }
-                    ctx.closePath();
-                    ctx.fill();
-                }
-                ctx.restore();
-            });
-            ctx.restore();
-            if (++frame < 48) requestAnimationFrame(run);
-            else { ctx.clearRect(0, 0, canvas.width, canvas.height); canvas.remove(); }
-        };
-        requestAnimationFrame(run);
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -1720,7 +1644,7 @@ class ChessCourseApp {
                 result, plies: s.engine.moveHistory.length, delta
             });
         }
-        if (result === 'win') { this.snd.playSuccess(); this._confetti(); }
+        if (result === 'win') { this.snd.playSuccess(); }
         else this.snd.playCheck();
         this._stopOnlineTick();
         this._drawOnline();
@@ -1965,9 +1889,13 @@ class ChessCourseApp {
                     html += `<div class="move-pair${pi === curPair ? ' cur' : ''}" data-pi="${pi}"><span class="move-num">${pi + 1}.</span><span class="move-item">${w.from}-${w.to}${w.promotion ? '=' + w.promotion.toUpperCase() : ''}</span>${b ? `<span class="move-item">${b.from}-${b.to}${b.promotion ? '=' + b.promotion.toUpperCase() : ''}</span>` : ''}</div>`;
                 }
                 log.innerHTML = html;
+                // Container-local scroll only: scrollIntoView() would also
+                // yank the whole page on phones with every move.
                 const cur = log.querySelector('.move-pair.cur');
-                if (cur) cur.scrollIntoView({ block: 'nearest' });
-                else log.scrollTop = log.scrollHeight;
+                if (cur) {
+                    const lr = log.getBoundingClientRect(), cr = cur.getBoundingClientRect();
+                    log.scrollTop += (cr.top - lr.top) - (lr.height / 2);
+                } else log.scrollTop = log.scrollHeight;
             }
         }
         this._paintOnlineNav(live, view, viewing);
