@@ -451,10 +451,10 @@ class ChessCourseApp {
                         </div>
                         <div class="turn-indicator" id="ti-opp">Waiting</div>
                     </div>
-                    <div class="speech-bubble" id="speech">Think carefully about your move.</div>
-                    <div id="chess-board-wrapper"><div id="chess-board"></div></div>
+                    <div class="speech-bubble" id="speech" role="status" aria-live="polite">Think carefully about your move.</div>
+                    <div id="chess-board-wrapper"><div id="chess-board" role="group" aria-label="Chess board"></div></div>
                     <div id="promotion-picker" class="promotion-picker hidden"></div>
-                    <div id="lesson-feedback" class="feedback info">
+                    <div id="lesson-feedback" class="feedback info" role="status" aria-live="polite">
                         Welcome to <strong>${esc(l.title)}</strong>! ${free ? 'You are White — make your first move!' : 'Follow the exercise above.'}
                     </div>
                     <div class="profile-card player" id="profile-you">
@@ -475,12 +475,12 @@ class ChessCourseApp {
                     </div>
                     <div class="dashboard-section">
                         <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Move Log</h4>
-                        <div class="move-log" id="move-log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
+                        <div class="move-log" id="move-log" role="log" aria-live="polite" aria-label="Move log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
                     </div>
-                    <div id="gameover-card" style="display:none"></div>
+                    <div id="gameover-card" style="display:none" role="dialog" aria-modal="false" aria-labelledby="gameover-title"></div>
                     <div class="lesson-actions">
                         <button class="btn-secondary" data-action="reset-board">Reset Board</button>
-                        <button class="btn-secondary" data-action="flip-board" title="Flip board">Flip</button>
+                        <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
                         ${this._muteBtnHTML()}
                         ${free ? `<label class="diff-label">Computer:
                             <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
@@ -1019,6 +1019,9 @@ class ChessCourseApp {
         if (!picker) return;
         picker.innerHTML = '';
         picker.classList.remove('hidden');
+        picker.setAttribute('role', 'dialog');
+        picker.setAttribute('aria-modal', 'true');
+        picker.setAttribute('aria-label', 'Choose promotion piece');
 
         const pieces = color === 'white' ? ['Q','R','B','N'] : ['q','r','b','n'];
         const names  = { Q:'Queen', R:'Rook', B:'Bishop', N:'Knight', q:'Queen', r:'Rook', b:'Bishop', n:'Knight' };
@@ -2114,30 +2117,30 @@ class ChessCourseApp {
                     <div class="profile-card opponent" id="oprofile-opp">
                         ${s.opp?.img ? `<img class="avatar" src="${esc(s.opp.img)}" width="52" height="52" alt="${esc(s.opp?.name || 'Opponent')}">` : `<div class="avatar-letter">${esc((s.opp?.name || 'F')[0].toUpperCase())}</div>`}
                         <div class="info"><span class="name">${esc(s.opp?.name || 'Opponent')}</span><span class="sub">${theirs} · ${s.opp?.rating || ''}</span><div class="captured-row" data-cap="opp"></div></div>
-                        <div class="clock" id="oclock-top">--:--</div>
+                        <div class="clock" id="oclock-top" role="timer" aria-label="Opponent clock">--:--</div>
                     </div>
-                    <div class="speech-bubble" id="online-status">Connecting…</div>
-                    <div id="online-board-wrapper"><div id="online-board"></div></div>
+                    <div class="speech-bubble" id="online-status" role="status" aria-live="polite">Connecting…</div>
+                    <div id="online-board-wrapper"><div id="online-board" role="group" aria-label="Online chess board"></div></div>
                     <div id="online-promo" class="promotion-picker hidden"></div>
-                    <div id="online-result">${resultLine}</div>
+                    <div id="online-result" role="status" aria-live="polite">${resultLine}</div>
                     <div class="profile-card player" id="oprofile-you">
                         <div class="avatar-letter you">${esc((this._meTag().name || 'Y')[0].toUpperCase())}</div>
                         <div class="info"><span class="name">You</span><span class="sub">${mine} · ${OnlineRatings.get(this.userId, s.control.id)}</span><div class="captured-row" data-cap="you"></div></div>
-                        <div class="clock" id="oclock-bottom">--:--</div>
+                        <div class="clock" id="oclock-bottom" role="timer" aria-label="Your clock">--:--</div>
                     </div>
                 </div>
                 <div class="lesson-dashboard">
                     <div class="dashboard-section">
                         <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">${s.control.name} ${s.control.label} · Rated</h4>
                         <div class="movenav" role="group" aria-label="Step through moves">
-                            <button class="icon-btn" id="mv-start" data-action="movenav" data-where="start" title="First move"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 5l-8 7 8 7"/></svg></button>
-                            <button class="icon-btn" id="mv-prev" data-action="movenav" data-where="prev" title="Previous move"><svg viewBox="0 0 24 24"><path d="M14 5l-7 7 7 7"/></svg></button>
-                            <button class="icon-btn live" id="mv-live" data-action="movenav" data-where="live" title="Back to live">Live</button>
-                            <button class="icon-btn" id="mv-next" data-action="movenav" data-where="next" title="Next move"><svg viewBox="0 0 24 24"><path d="M10 5l7 7-7 7"/></svg></button>
-                            <button class="icon-btn" id="mv-end" data-action="movenav" data-where="end" title="Latest move"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
-                            <button class="icon-btn" id="mv-flip" data-action="flip-online" title="Flip board"><svg viewBox="0 0 24 24"><path d="M7 4v13M7 20l-3-3M7 20l3-3M17 20V7M17 4l-3 3M17 4l3 3"/></svg></button>
+                            <button class="icon-btn" id="mv-start" data-action="movenav" data-where="start" title="First move" aria-label="First move"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 5l-8 7 8 7"/></svg></button>
+                            <button class="icon-btn" id="mv-prev" data-action="movenav" data-where="prev" title="Previous move" aria-label="Previous move"><svg viewBox="0 0 24 24"><path d="M14 5l-7 7 7 7"/></svg></button>
+                            <button class="icon-btn live" id="mv-live" data-action="movenav" data-where="live" title="Back to live" aria-label="Back to live">Live</button>
+                            <button class="icon-btn" id="mv-next" data-action="movenav" data-where="next" title="Next move" aria-label="Next move"><svg viewBox="0 0 24 24"><path d="M10 5l7 7-7 7"/></svg></button>
+                            <button class="icon-btn" id="mv-end" data-action="movenav" data-where="end" title="Latest move" aria-label="Latest move"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
+                            <button class="icon-btn" id="mv-flip" data-action="flip-online" title="Flip board" aria-label="Flip board"><svg viewBox="0 0 24 24"><path d="M7 4v13M7 20l-3-3M7 20l3-3M17 20V7M17 4l-3 3M17 4l3 3"/></svg></button>
                         </div>
-                        <div class="move-log" id="online-log"><span style="color:var(--text-muted-dim)">No moves yet.</span></div>
+                        <div class="move-log" id="online-log" role="log" aria-live="polite" aria-label="Online move log"><span style="color:var(--text-muted-dim)">No moves yet.</span></div>
                     </div>
                     <div class="lesson-actions" id="online-actions">
                         ${over
@@ -2161,15 +2164,18 @@ class ChessCourseApp {
     // Rating count-up: tween the displayed rating from old to new.
     toggleMute() {
         const muted = this.snd.toggleMute();
+        const label = muted ? 'Unmute sounds' : 'Mute sounds';
         document.querySelectorAll('.mute-btn').forEach(b => {
             b.setAttribute('aria-pressed', muted ? 'true' : 'false');
-            b.title = muted ? 'Unmute sounds' : 'Mute sounds';
+            b.title = label;
+            b.setAttribute('aria-label', label);
         });
         return muted;
     }
     _muteBtnHTML() {
         const m = this.snd.muted ? 'true' : 'false';
-        return `<button class="icon-btn mute-btn" data-action="mute" aria-pressed="${m}" title="${this.snd.muted ? 'Unmute sounds' : 'Mute sounds'}">
+        const label = this.snd.muted ? 'Unmute sounds' : 'Mute sounds';
+        return `<button class="icon-btn mute-btn" data-action="mute" aria-pressed="${m}" aria-label="${label}" title="${label}">
             <svg viewBox="0 0 24 24" class="spk-on"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8a5 5 0 0 1 0 8M18.5 5.5a9 9 0 0 1 0 13"/></svg>
             <svg viewBox="0 0 24 24" class="spk-off"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l6 6M22 9l-6 6"/></svg>
         </button>`;
@@ -2214,7 +2220,7 @@ class ChessCourseApp {
             title = 'Draw';
             body = { 'draw-insufficient': 'Neither side can possibly checkmate.', 'draw-repetition': 'Threefold repetition.', 'draw-fifty': 'Fifty-move rule.' }[status] || '';
         } else { card.style.display = 'none'; return; }
-        card.innerHTML = `<h3>${title}</h3><p>${body}</p>
+        card.innerHTML = `<h3 id="gameover-title">${title}</h3><p>${body}</p>
             <div class="lesson-actions">
                 <button class="btn-primary btn-glow-strong" data-action="reset-board">Rematch</button>
                 <button class="btn-secondary" data-action="gameover-hide">Review board</button>
@@ -2506,6 +2512,9 @@ class ChessCourseApp {
         if (!picker || !s?.pendingPromo) return;
         picker.innerHTML = '';
         picker.classList.remove('hidden');
+        picker.setAttribute('role', 'dialog');
+        picker.setAttribute('aria-modal', 'true');
+        picker.setAttribute('aria-label', 'Choose promotion piece');
         const white = s.myColor === 'white';
         const pieces = white ? ['Q', 'R', 'B', 'N'] : ['q', 'r', 'b', 'n'];
         const names = { Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
@@ -3023,6 +3032,12 @@ class ChessCourseApp {
         try { document.body.dataset.screen = id; } catch (_) {}
         ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen']
             .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
+        // A11y: move keyboard focus to the new screen so SR users land
+        // on the heading instead of staying on a now-hidden control.
+        try {
+            const scr = document.getElementById(id);
+            if (scr) { scr.focus({ preventScroll: true }); }
+        } catch (_) {}
         // Keep nav highlighted so users always know where they are
         const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen': 'online' };
         const active = navFor[id];

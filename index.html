@@ -7,10 +7,11 @@
     <meta name="description" content="DoChess: interactive chess course with 10 structured lessons. Learn moves, tactics, and strategy with a beautiful chess board.">
     <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=29">
+    <link rel="stylesheet" href="styles.css?v=30">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
 </head>
 <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="app">
 
         <!-- ── Header ── -->
@@ -26,7 +27,7 @@
                 <button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="main-nav" aria-label="Open menu">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></g></svg>
                 </button>
-                <nav class="nav" id="main-nav">
+                <nav class="nav" id="main-nav" aria-label="Primary">
                     <button class="nav-btn" id="nav-home" data-nav="home" type="button">Home</button>
                     <button class="nav-btn" id="nav-lessons" data-nav="lessons" type="button">Lessons</button>
                     <button class="nav-btn" id="nav-progress" data-nav="progress" type="button">Progress</button>
@@ -55,10 +56,10 @@
         </header>
 
         <!-- ── Main Content ── -->
-        <main class="main-content">
+        <main class="main-content" id="main-content">
 
             <!-- Home Screen -->
-            <div id="home-screen" class="screen active">
+            <div id="home-screen" class="screen active" tabindex="-1">
                 <div class="container">
 
                     <!-- Hero -->
@@ -107,7 +108,7 @@
             </div>
 
             <!-- Lessons Screen -->
-            <div id="lessons-screen" class="screen">
+            <div id="lessons-screen" class="screen" tabindex="-1">
                 <div class="container">
                     <h2>Chess Lessons</h2>
                     <div class="lessons-grid" id="lessons-grid">
@@ -117,7 +118,7 @@
             </div>
 
             <!-- Lesson Detail Screen -->
-            <div id="lesson-screen" class="screen">
+            <div id="lesson-screen" class="screen" tabindex="-1">
                 <div class="container">
                     <button class="btn-secondary" style="margin-bottom:1.5rem" data-action="back-lessons" type="button">← Back to Lessons</button>
                     <div id="lesson-content">
@@ -127,7 +128,7 @@
             </div>
 
             <!-- Progress Screen -->
-            <div id="progress-screen" class="screen">
+            <div id="progress-screen" class="screen" tabindex="-1">
                 <div class="container">
                     <h2>Your Learning Progress</h2>
 
@@ -152,7 +153,7 @@
             </div>
 
             <!-- Online Screen -->
-            <div id="online-screen" class="screen">
+            <div id="online-screen" class="screen" tabindex="-1">
                 <div class="container">
                     <h2>Play Online</h2>
                     <div id="online-content">
@@ -162,7 +163,7 @@
             </div>
 
             <!-- Profile Screen -->
-            <div id="profile-screen" class="screen">
+            <div id="profile-screen" class="screen" tabindex="-1">
                 <div class="container">
                     <h2>Profile</h2>
                     <div id="profile-content">
@@ -177,7 +178,7 @@
     <script src="chess.js?v=15"></script>
     <script src="clerk-config.js?v=18"></script>
     <script src="online.js?v=29"></script>
-    <script src="app.js?v=29"></script>
+    <script src="app.js?v=30"></script>
 
 </body>
 </html>

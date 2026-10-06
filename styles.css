@@ -72,6 +72,31 @@ body {
     outline-offset: 2px;
 }
 
+/* ── A11y: skip link + visually-hidden utility ─────────────────── */
+.skip-link {
+    position: absolute;
+    left: 12px;
+    top: -48px;
+    z-index: 9999;
+    background: var(--accent);
+    color: #fff;
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: top 0.15s ease-out;
+}
+
+.skip-link:focus-visible { top: 12px; }
+
+.visually-hidden {
+    position: absolute !important;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0; border: 0;
+    clip: rect(0 0 0 0); clip-path: inset(50%);
+    overflow: hidden; white-space: nowrap;
+}
+
 ::-webkit-scrollbar { width: 12px; height: 12px; }
 ::-webkit-scrollbar-track { background: var(--bg-main); }
 ::-webkit-scrollbar-thumb {
