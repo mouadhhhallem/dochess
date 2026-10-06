@@ -1,0 +1,2564 @@
+/**
+ * app.js — Chess Course Application  (fully fixed, no errors)
+ *
+ * ✓ Classic piece SVGs
+ * ✓ Computer auto-plays after every player move (all lessons)
+ * ✓ Promotion picker for player; auto-queen for computer
+ * ✓ Lesson 10 = unlimited free game
+ * ✓ Board locked after exercise done (lessons 1-9)
+ * ✓ Check / checkmate / stalemate detection & display
+ * ✓ Confetti on success (fixed const-reassignment bug)
+ * ✓ Move log, speech bubble, turn indicators
+ * ✓ Sound effects
+ */
+
+/* ── Tiny sound engine using Web Audio API ── */
+class SoundEngine {
+    _ctx() {
+        if (!this._audioCtx) {
+            const C = window.AudioContext || window.webkitAudioContext;
+            if (C) this._audioCtx = new C();
+        }
+        if (this._audioCtx && this._audioCtx.state === 'suspended') this._audioCtx.resume();
+        return this._audioCtx || null;
+    }
+    _beep(type, freqStart, freqEnd, dur, gain, delay = 0) {
+        const ctx = this._ctx(); if (!ctx) return;
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = type;
+        const start = ctx.currentTime + delay;
+        o.frequency.setValueAtTime(freqStart, start);
+        o.frequency.exponentialRampToValueAtTime(freqEnd, start + dur);
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(gain, start + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.001, start + dur);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(start); o.stop(start + dur);
+    }
+    playMove() {
+        this._beep('sine', 460, 240, 0.09, 0.085);
+        this._beep('triangle', 220, 160, 0.06, 0.05, 0.03);
+    }
+    playCapture() {
+        this._beep('sine', 210, 110, 0.11, 0.10);
+        this._beep('triangle', 140, 72, 0.08, 0.07, 0.02);
+    }
+    playCheck() {
+        this._beep('triangle', 680, 420, 0.12, 0.09);
+        this._beep('sine', 920, 640, 0.10, 0.05, 0.03);
+    }
+    playSuccess() {
+        const ctx = this._ctx(); if (!ctx) return;
+        [523, 659, 784, 988].forEach((f, i) => {
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            const t = ctx.currentTime + i * 0.12;
+            o.type = i === 0 ? 'triangle' : 'sine'; o.frequency.value = f;
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.33);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(t); o.stop(t + 0.34);
+        });
+    }
+}
+
+/* ── Main App ── */
+class ChessCourseApp {
+    constructor() {
+        this.game             = new ChessGame();
+        this.snd              = new SoundEngine();
+        this.lessons          = this._buildLessons();
+        this.teachers         = this._buildTeachers();
+        this.theme            = 'night';
+        this._themeBusy       = false;
+        this.userId           = null;
+        this._clerk           = null;
+        this.online           = null; // active/lobby online session (see online.js)
+        this._onlineTick      = null;
+        this.currentLesson    = null;
+        this.currentExercise  = null;
+        this.exerciseDone     = false;   // locks board after correct move (non-free lessons)
+        this.isFreeGame       = false;   // lesson 10
+        this.cpuBusy          = false;   // prevents double-clicks while computer thinks
+        this.progress         = this._loadProgress();
+        this._boot();
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       BOOT
+    ══════════════════════════════════════════════════════════════ */
+    _boot() {
+        window.showHome     = () => this.showHome();
+        window.showLessons  = () => this.showLessons();
+        window.showProgress = () => this.showProgress();
+        window.showLesson   = () => this.showLesson();
+        window.showOnline   = () => this.showOnline();
+        window.showProfile  = () => this.showProfile();
+        window.toggleTheme  = (el) => this.toggleTheme(el);
+        window.app          = this;
+        this._applyTheme(this._resolveTheme(), false);
+        this._initAuth();
+        this._bindMenu();
+        window.addEventListener('beforeunload', () => this._flushStudyTime());
+        document.addEventListener('visibilitychange', () => { if (document.hidden) this._flushStudyTime(); else this._studySince = Date.now(); });
+        this._renderHome();
+        this._bindNav();
+        this._bindGlobalButtons();
+        this._syncProgress();
+    }
+
+    // Redundant (non-inline) bindings so every button works even if
+    // inline onclick attributes are blocked or the event target differs.
+    _bindGlobalButtons() {
+        const start = document.getElementById('start-learning-btn');
+        if (start && !start.dataset.bound) {
+            start.dataset.bound = '1';
+            start.addEventListener('click', () => this.showLessons());
+        }
+        // Delegated handler for dynamically rendered lesson buttons
+        // and any element with [data-open-lesson].
+        if (!document.body.dataset.lessonDelegate) {
+            document.body.dataset.lessonDelegate = '1';
+            document.body.addEventListener('click', (e) => {
+                const opener = e.target.closest('[data-open-lesson]');
+                if (opener) {
+                    const id = parseInt(opener.dataset.openLesson, 10);
+                    if (!Number.isNaN(id)) this.openLesson(id);
+                    return;
+                }
+                const action = e.target.closest('[data-action]');
+                if (!action) return;
+                const a = action.dataset.action;
+                if (a === 'reset-board') this.resetBoard();
+                else if (a === 'mark-complete') this.markComplete();
+                else if (a === 'back-lessons') this.showLessons();
+            });
+        }
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       PIECE IMAGES — custom set in assets/pieces/ (SVG, transparent)
+       Files: white-king.svg … black-pawn.svg  (viewBox 0 0 45 45)
+       Falls back to inline SVG if an image is missing.
+    ══════════════════════════════════════════════════════════════ */
+    // Bump ASSET_V every release so edited artwork can never hide
+    // behind the browser image cache. Same rule as the ?v= tags.
+    static assetV() { return 'v22'; }
+    _pieceFile(piece) {
+        const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+        const white = piece === piece.toUpperCase();
+        const kind = names[piece.toLowerCase()] || 'pawn';
+        return `assets/pieces/${white ? 'white' : 'black'}-${kind}.svg?${ChessCourseApp.assetV()}`;
+    }
+    _svg(piece) {
+        const white = piece === piece.toUpperCase();
+        const src = this._pieceFile(piece);
+        const label = `${white ? 'White' : 'Black'} ${src.split('-').pop().split('.')[0]}`;
+        return `<img src="${src}" class="chess-piece ${white ? 'white' : 'black'}" alt="${label}" draggable="false" onerror="this.outerHTML=window.app._svgFallback('${piece}')">`;
+    }
+    // Minimal inline fallback (used only if an image file is missing)
+    _svgFallback(piece) {
+        const white = piece === piece.toUpperCase();
+        const t = piece.toLowerCase();
+        const glyph = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' }[t] || '♟';
+        const color = white ? '#fff' : '#000';
+        const stroke = white ? '#000' : '#fff';
+        return `<svg viewBox="0 0 45 45" class="chess-piece ${white ? 'white' : 'black'}"><text x="22.5" y="34" text-anchor="middle" font-size="32" fill="${color}" stroke="${stroke}" stroke-width="1">${glyph}</text></svg>`;
+    }
+
+    getPieceSVG(p) { return this._svg(p); }
+
+    // Small drawn stat icons, one consistent 24px stroke set.
+    _tileIcon(name) {
+        const paths = {
+            book: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20"/>',
+            layers: '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
+            target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+            clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+            board: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/>',
+            trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a3 3 0 0 0 3 5M17 6h3a3 3 0 0 1-3 5M12 14v4M8 21h8"/>',
+            medal: '<circle cx="12" cy="14" r="5"/><path d="M9 9L6 3h4l2 4 2-4h4l-3 6"/>',
+            list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>'
+        };
+        return `<span class="stat-ic"><svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.target}</svg></span>`;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       DATA
+    ══════════════════════════════════════════════════════════════ */
+    _buildTeachers() {
+        const v = ChessCourseApp.assetV();
+        return [
+            { id:1, name:'Grandmaster Elena', title:'Chess Master & Strategist',  desc:'A calm and patient grandmaster who teaches the fundamentals with wisdom and precision.',         img:`assets/teacher1.svg?${v}` },
+            { id:2, name:'Coach Marcus',      title:'Tactical Specialist',         desc:'An energetic coach who focuses on tactics, patterns, and aggressive play.',                     img:`assets/teacher2.svg?${v}` },
+            { id:3, name:'Professor Aris',    title:'Historical Chess Expert',     desc:'A scholarly teacher who brings chess history to life while teaching essential concepts.',       img:`assets/teacher3.svg?${v}` }
+        ];
+    }
+
+    _buildLessons() {
+        return [
+            { id:1,  teacherId:1, title:'Meet the Chessboard',      type:'exercise',
+              objective:'Learn the 8x8 grid, files and ranks.',
+              desc:'The chessboard is an 8x8 grid. Vertical columns are called <em>files</em> (a-h) and horizontal rows are called <em>ranks</em> (1-8). The bottom-right square is always light.',
+              exercise:{ instr:'Push any white pawn forward. Two squares on its first move — e2 to e4 is the classic!', freePiece:'p', fb:'Wonderful! Pawns control the center — the golden principle of chess openings.' },
+              fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' },
+
+            { id:2,  teacherId:1, title:'Pawn Movement & Captures',  type:'exercise',
+              objective:'Pawns push one or two squares, then capture diagonally.',
+              desc:'Pawns march <em>straight ahead</em> one square — or <em>two squares</em> on their very first move. They <em>capture</em> one square diagonally, never straight ahead. This lesson has two steps on one board: first push, then take!',
+              exercise:{ steps:[
+                { instr:'Push the e-pawn one square, or two since it has not moved. E2 to e4 grabs space!', from:'e2', fb:'Good push! A pawn may march one square — or two on its very first move.' },
+                { instr:'Now capture! Pawns take one square diagonally. Grab a black pawn!', freeCapture:true, fb:'Brilliant! That diagonal strike is how pawns fight.' }
+              ] },
+              fen:'4k3/8/8/3p4/3p4/8/4P3/4K3 w - - 0 1' },
+
+            { id:3,  teacherId:1, title:"The Rook's Power",           type:'exercise',
+              objective:'Rooks move horizontally or vertically.',
+              desc:'The Rook moves any number of empty squares horizontally or vertically. It is most powerful on <em>open files</em> with no pawns blocking the way.',
+              exercise:{ instr:'Move the white rook along any straight line. Sliding a1 to a4 is a great start!', freePiece:'r', fb:'Excellent! The rook dominates every open line it reaches.' },
+              fen:'3k4/8/8/8/8/8/8/R3K3 w - - 0 1' },
+
+            { id:4,  teacherId:1, title:"The Bishop's Diagonal",      type:'exercise',
+              objective:'Bishops glide diagonally.',
+              desc:'Bishops move diagonally any number of empty squares. Each bishop stays on its starting color forever. Use them to control long diagonals across the board.',
+              exercise:{ instr:'Slide the white bishop along any diagonal. Sweeping c1 to f4 shows its power!', freePiece:'b', fb:'Fantastic! The bishop sweeps across the diagonal.' },
+              fen:'b3k3/8/8/8/8/8/8/2B1K3 w - - 0 1' },
+
+            { id:5,  teacherId:1, title:"The Knight's L-Shape",       type:'exercise',
+              objective:'The knight jumps in an L-shape.',
+              desc:'Knights move in an <em>L-shape</em>: two squares in one direction, then one square perpendicular. They are the only pieces that <em>jump over</em> other pieces.',
+              exercise:{ instr:'Jump the white knight in any L-shape. Hopping g1 to f3 develops toward the center!', freePiece:'n', fb:"Outstanding! The knight's L-jump is completely unique." },
+              fen:'n3k3/8/8/8/8/8/8/4K1N1 w - - 0 1' },
+
+            { id:6,  teacherId:2, title:"The Queen's Dominion",       type:'exercise',
+              objective:'The queen is the most powerful piece.',
+              desc:'The Queen combines rook and bishop — she moves any number of squares horizontally, vertically, or diagonally. She is the most powerful piece on the board. <em>Protect her!</em>',
+              exercise:{ instr:'Move the white queen to any square she reaches. Sending d1 to h5 eyes the kingside!', freePiece:'q', fb:'Magnificent! The queen commands the whole board.' },
+              fen:'q7/7k/8/8/8/8/8/3QK3 w - - 0 1' },
+
+            { id:7,  teacherId:2, title:"The King's Safety",          type:'exercise',
+              objective:'The king moves one square in any direction.',
+              desc:'The King moves exactly <em>one square</em> in any direction. Losing your king means losing the game. Never move it into danger — protect it above all else!',
+              exercise:{ instr:'Step the white king to any neighboring square. E1 to e2 keeps it safe!', freePiece:'k', fb:'Good king move! Safety first.' },
+              fen:'k7/8/8/8/8/8/8/4K3 w - - 0 1' },
+
+            { id:8,  teacherId:2, title:'Castling',                   type:'exercise',
+              objective:'Castle to protect your king.',
+              desc:'Castling is a special two-piece move: the king slides <em>two squares</em> toward a rook, and the rook leaps to the other side. It is the best way to keep your king safe early in the game.',
+              exercise:{ instr:'Castle kingside — move your king from e1 to g1!', move:['e1','g1'], fb:'Superb! Your king is now safely castled behind the rook.' },
+              fen:'k7/8/8/8/8/8/8/4K2R w K - 0 1' },
+
+            { id:9,  teacherId:3, title:'Pawn Promotion',             type:'exercise',
+              objective:'A pawn reaching the 8th rank promotes.',
+              desc:'When a pawn reaches the opponent\'s back rank (rank 8 for White) it <em>promotes</em> — you choose a queen, rook, bishop, or knight to replace it. Almost always choose the queen!',
+              exercise:{ instr:'Push your pawn from a7 to a8, then choose your promotion piece!', move:['a7','a8'], fb:'Incredible! Now choose your promotion piece from the panel.' },
+              fen:'7k/P7/8/8/8/8/8/4K3 w - - 0 1' },
+
+            { id:10, teacherId:3, title:'Play a Full Game!',           type:'free-game',
+              objective:'Apply everything in a real game against the computer.',
+              desc:'You know all the pieces and rules — now play a <em>real game</em>! You are White, the computer plays Black. Try to checkmate the king. Control the center, develop your pieces, castle early, and attack!',
+              fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' }
+        ];
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       PROGRESS
+    ══════════════════════════════════════════════════════════════ */
+    // Progress is namespaced per signed-in Clerk user id; anonymous
+    // learners keep the legacy shared key, untouched by sign-in.
+    _progressKey() { return 'ccp_v4' + (this.userId ? '_' + this.userId : ''); }
+    _loadProgress() {
+        try { const s = localStorage.getItem(this._progressKey()); if (s) return JSON.parse(s); } catch (_) {}
+        return { done: [] };
+    }
+    _saveProgress() {
+        try { localStorage.setItem(this._progressKey(), JSON.stringify(this.progress)); } catch (_) {}
+    }
+    _setUser(userId) {
+        if (this.userId === (userId || null)) return;
+        this._flushStudyTime();
+        this._studySince = Date.now();
+        this.userId = userId || null;
+        this.progress = this._loadProgress();
+        this._syncProgress();
+        if (document.getElementById('lessons-screen')?.classList.contains('active')) this._renderLessons();
+        if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
+    }
+    isDone(id)  { return this.progress.done.includes(id); }
+    isOpen(id)  { return id === 1 || this.isDone(id - 1); }
+    markDone(id) {
+        if (!this.isDone(id)) { this.progress.done.push(id); this._saveProgress(); }
+        this._syncProgress();
+    }
+
+    _syncProgress() {
+        const n = this.progress.done.length, total = 10;
+        const pct = Math.round((n / total) * 100);
+        const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+        set('lessons-completed',   n);   set('lessons-completed-2',   n);
+        set('progress-percentage', pct + '%'); set('progress-percentage-2', pct + '%');
+        const bar = document.getElementById('overall-progress');
+        if (bar) bar.style.width = pct + '%';
+
+        const list = document.getElementById('completed-lessons-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!n) {
+            list.innerHTML = '<p style="text-align:center;color:var(--text-muted-dim);padding:2rem">No lessons completed yet. Start learning!</p>';
+            return;
+        }
+        this.progress.done.forEach(lid => {
+            const l = this.lessons.find(x => x.id === lid);
+            const t = this.teachers.find(x => x.id === l?.teacherId);
+            if (!l || !t) return;
+            const d = document.createElement('div'); d.className = 'completed-lesson-item';
+            d.innerHTML = `<div class="completed-lesson-info"><img src="${t.img}" alt="${t.name}"><div><h4>${l.title}</h4><p style="font-size:.82rem;color:var(--text-muted-dim)">Lesson ${l.id}</p></div></div><div class="completed-date">Done ✓</div>`;
+            list.appendChild(d);
+        });
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       SCREENS
+    ══════════════════════════════════════════════════════════════ */
+    _renderHome() {
+        const g = document.getElementById('teachers-grid');
+        if (!g) return;
+        g.innerHTML = '';
+        this.teachers.forEach(t => {
+            const c = document.createElement('div'); c.className = 'teacher-card';
+            c.innerHTML = `<img src="${t.img}" alt="${t.name}"><h4>${t.name}</h4><p style="font-weight:600;color:var(--accent);margin-bottom:.4rem">${t.title}</p><p>${t.desc}</p>`;
+            g.appendChild(c);
+        });
+        this._syncProgress();
+    }
+
+    _renderLessons() {
+        const g = document.getElementById('lessons-grid');
+        if (!g) return;
+        g.innerHTML = '';
+        this.lessons.forEach(l => {
+            const open = this.isOpen(l.id), done = this.isDone(l.id);
+            const badge = done
+                ? '<span class="completed-badge">Done ✓</span>'
+                : open ? '<span style="color:#34d399;font-size:.8rem">Unlocked</span>'
+                       : '<span style="color:var(--text-muted-dim);font-size:.8rem">Locked</span>';
+            const tag = l.type === 'free-game' ? ' <span class="free-game-tag">Full Game</span>' : '';
+            const card = document.createElement('div'); card.className = `lesson-card${open ? '' : ' locked'}`;
+            card.innerHTML = `
+                <div class="lesson-header"><h3>${l.title}${tag}</h3><div class="lesson-meta"><span>Lesson ${l.id}</span>${badge}</div></div>
+                <div class="lesson-body"><p>${l.desc.replace(/<[^>]+>/g, '')}</p></div>
+                <div class="lesson-footer"><button class="btn-primary" style="padding:.6rem 1.4rem;font-size:.92rem" data-open-lesson="${l.id}" onclick="app.openLesson(${l.id})" ${open ? '' : 'disabled'}>${done ? 'Review' : 'Start'}</button></div>`;
+            g.appendChild(card);
+        });
+    }
+
+    openLesson(id) {
+        const l = this.lessons.find(x => x.id === id);
+        if (!l || !this.isOpen(id)) return;
+        this.currentLesson = l;
+        this._buildLessonUI(l);
+        this._go('lesson-screen');
+        requestAnimationFrame(() => {
+            document.getElementById('chess-board-wrapper')?.scrollIntoView({ block: 'center' });
+        });
+    }
+
+    _buildLessonUI(l) {
+        const t    = this.teachers.find(x => x.id === l.teacherId);
+        const free = l.type === 'free-game';
+
+        const exBox = l.exercise
+            ? `<div class="exercise-instructions"><h4>Exercise</h4><p id="exercise-instruction">${this._stepText(l.exercise, 0)}</p></div>`
+            : `<div class="exercise-instructions free-game-box"><h4>Free Game Mode</h4><p>You are White. The computer plays Black. Play a full game — good luck!</p></div>`;
+
+        const btn = free
+            ? `<button class="btn-primary btn-glow-strong" id="complete-btn" data-action="mark-complete" onclick="app.markComplete()">Mark Complete</button>`
+            : `<button class="btn-primary btn-glow-strong" id="complete-btn" data-action="mark-complete" onclick="app.markComplete()" disabled title="Finish the exercise move first">Complete Lesson</button>`;
+
+        document.getElementById('lesson-content').innerHTML = `
+            <div class="lesson-detail-header">
+                <div class="lesson-title">
+                    <div class="lesson-number">${l.id}</div>
+                    <div><h2>${l.title}</h2><p>${l.objective}</p></div>
+                </div>
+                <div class="teacher-info"><img src="${t.img}" alt="${t.name}"><span>${t.name}</span></div>
+            </div>
+            <div class="lesson-content">
+                <div class="arena">
+                    <div class="profile-card opponent" id="profile-opp">
+                        <img class="avatar" src="${t.img}" alt="${t.name}">
+                        <div class="info">
+                            <span class="name">${t.name}</span>
+                            <span class="sub">${t.title} (Black)</span>
+                        </div>
+                        <div class="turn-indicator" id="ti-opp">Waiting</div>
+                    </div>
+                    <div class="speech-bubble" id="speech">Think carefully about your move.</div>
+                    <div id="chess-board-wrapper"><div id="chess-board"></div></div>
+                    <div id="promotion-picker" class="promotion-picker hidden"></div>
+                    <div id="lesson-feedback" class="feedback info">
+                        Welcome to <strong>${l.title}</strong>! ${free ? 'You are White — make your first move!' : 'Follow the exercise above.'}
+                    </div>
+                    <div class="profile-card player" id="profile-you">
+                        <img class="avatar" src="${this._pieceFile('P')}" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
+                        <div class="info">
+                            <span class="name">You</span>
+                            <span class="sub">White</span>
+                        </div>
+                        <div class="turn-indicator" id="ti-you">Your turn</div>
+                    </div>
+                </div>
+                <div class="lesson-dashboard">
+                    <div class="dashboard-section">
+                        <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Lecture Notes</h4>
+                        <div class="lesson-explanation"><h4>Explanation</h4><p>${l.desc}</p></div>
+                        ${exBox}
+                    </div>
+                    <div class="dashboard-section">
+                        <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Move Log</h4>
+                        <div class="move-log" id="move-log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
+                    </div>
+                    <div class="lesson-actions">
+                        <button class="btn-secondary" data-action="reset-board" onclick="app.resetBoard()">Reset Board</button>
+                        ${btn}
+                    </div>
+                </div>
+            </div>`;
+
+        this._initBoard(l);
+    }
+
+    _initBoard(l) {
+        this.exerciseDone    = false;
+        this.isFreeGame      = l.type === 'free-game';
+        this.cpuBusy         = false;
+        this.currentExercise = l.exercise || null;
+        this._stepIndex      = 0;
+        this.game.reset();
+        if (l.fen) this.game.loadFEN(l.fen);
+        this._draw();
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       BOARD RENDERING
+    ══════════════════════════════════════════════════════════════ */
+    _draw() {
+        const board = document.getElementById('chess-board');
+        if (!board) return;
+
+        // Flyover animation for moved pieces: snapshot the movers, rebuild,
+        // then glide overlay clones above the whole board (Web Animations).
+        // Immune to square paint order by construction. 240ms, transform-only,
+        // skipped entirely under prefers-reduced-motion and on re-renders
+        // without a new move.
+        const hlen = this.game.moveHistory.length;
+        const isNewMove = hlen > (this._drawnMoves || 0);
+        this._drawnMoves = hlen;
+        const lastHist = hlen ? this.game.moveHistory[hlen - 1] : null;
+        const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        let flyers = [];
+        if (isNewMove && !reduced && lastHist && board.isConnected) {
+            const brect = board.getBoundingClientRect();
+            const snap = (sq) => {
+                const el = board.querySelector(`[data-square="${sq}"] img.chess-piece`);
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return { src: el.getAttribute('src'), cls: el.getAttribute('class') || 'chess-piece', x: r.left - brect.left, y: r.top - brect.top, size: r.width };
+            };
+            const push = (from, to) => { const s = snap(from); if (s) flyers.push({ ...s, to }); };
+            push(lastHist.from, lastHist.to);
+            // Castling moves two pieces: glide the rook too, or it teleports.
+            if (lastHist.specialMove === 'castling') {
+                const rank = lastHist.to[1];
+                if (lastHist.to[0] === 'g') push('h' + rank, 'f' + rank);
+                else if (lastHist.to[0] === 'c') push('a' + rank, 'd' + rank);
+            }
+        }
+
+        board.innerHTML = '';
+
+        const sel      = this.game.selectedSquare;
+        const legal    = this.game.legalMoves;
+        const history  = this.game.moveHistory;
+        const last     = history.length > 0 ? history[history.length - 1] : null;
+        const lastFrom = last ? this.game.algebraicToCoords(last.from) : null;
+        const lastTo   = last ? this.game.algebraicToCoords(last.to)   : null;
+        const inCheck  = this.game._isKingInCheck(this.game.currentPlayer);
+        const kingPos  = inCheck ? this.game.findKing(this.game.currentPlayer) : null;
+
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const sq = document.createElement('div');
+                const light = (r + c) % 2 === 0;
+                sq.className = `chess-square ${light ? 'white' : 'black'}`;
+                // Test hooks + accessibility (also used by automated tests)
+                sq.dataset.row = String(r);
+                sq.dataset.col = String(c);
+                sq.dataset.square = this.game.coordsToAlgebraic([r, c]);
+                sq.setAttribute('role', 'button');
+                sq.setAttribute('tabindex', '0');
+                sq.setAttribute('aria-label', this.game.coordsToAlgebraic([r, c]));
+
+                if (sel      && sel[0]      === r && sel[1]      === c) sq.classList.add('selected');
+                if (lastFrom && lastFrom[0] === r && lastFrom[1] === c) sq.classList.add('last-move');
+                if (lastTo   && lastTo[0]   === r && lastTo[1]   === c) sq.classList.add('last-move');
+                if (kingPos  && kingPos[0]  === r && kingPos[1]  === c) sq.classList.add('in-check');
+
+                const piece = this.game.board[r][c];
+                if (piece) sq.innerHTML = this._svg(piece);
+
+                // Legal move indicators
+                if (sel && legal.some(m => m[0] === r && m[1] === c)) {
+                    const dot = document.createElement('div');
+                    dot.className = piece ? 'legal-ring' : 'legal-dot';
+                    sq.appendChild(dot);
+                }
+
+                // Coordinate labels (ink from CSS classes, not hard-coded JS colors)
+                if (r === 7) {
+                    const fl = document.createElement('span');
+                    fl.className = 'coord-file';
+                    fl.textContent = String.fromCharCode(97 + c);
+                    sq.appendChild(fl);
+                }
+                if (c === 0) {
+                    const rk = document.createElement('span');
+                    rk.className = 'coord-rank';
+                    rk.textContent = 8 - r;
+                    sq.appendChild(rk);
+                }
+
+                sq.addEventListener('click', () => this._click(r, c));
+                sq.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._click(r, c); }
+                });
+                board.appendChild(sq);
+            }
+        }
+
+        if (flyers.length) {
+            const brect = board.getBoundingClientRect();
+            flyers.forEach(f => {
+                const dest = board.querySelector(`[data-square="${f.to}"]`);
+                if (!dest) return;
+                const dr = dest.getBoundingClientRect();
+                const cx = dr.left - brect.left + (dr.width - f.size) / 2;
+                const cy = dr.top - brect.top + (dr.height - f.size) / 2;
+                const ghost = dest.querySelector('img.chess-piece');
+                if (ghost) ghost.style.visibility = 'hidden';
+                const img = document.createElement('img');
+                img.src = f.src;
+                img.className = (f.cls + ' fly-piece').trim();
+                img.alt = '';
+                img.style.left = f.x + 'px';
+                img.style.top = f.y + 'px';
+                img.style.width = f.size + 'px';
+                img.style.height = f.size + 'px';
+                board.appendChild(img);
+                const anim = img.animate(
+                    [{ transform: 'translate(0, 0)' }, { transform: `translate(${cx - f.x}px, ${cy - f.y}px)` }],
+                    { duration: 240, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' }
+                );
+                const land = () => { img.remove(); if (ghost) ghost.style.visibility = ''; };
+                anim.onfinish = land;
+                // Safety net: never leave a hidden piece or stray clone behind.
+                setTimeout(land, 600);
+            });
+        }
+
+        this._updateMoveLog();
+        this._updateTurnUI();
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       CLICK HANDLER
+    ══════════════════════════════════════════════════════════════ */
+    _click(r, c) {
+        if (this.cpuBusy) return;
+        if (this.game.pendingPromotion) return;
+        if (!this.isFreeGame && this.exerciseDone) {
+            this._fb('Exercise complete! Click "Complete Lesson" to continue.', 'success');
+            return;
+        }
+        if (this.game.currentPlayer !== 'white') return;
+        if (this.game.gameOver) return;
+
+        const g = this.game;
+
+        if (!g.selectedSquare) {
+            if (g.board[r][c] && g.isColor(r, c, 'white')) {
+                g.selectedSquare = [r, c];
+                g.legalMoves     = g.getLegalMoves([r, c]);
+                if (!g.legalMoves.length) {
+                    this._fb('That piece has no legal moves right now.', 'info');
+                    g.selectedSquare = null;
+                }
+                this._draw();
+            }
+        } else {
+            const isLegal = g.legalMoves.some(m => m[0] === r && m[1] === c);
+            if (isLegal) {
+                const from = g.selectedSquare;
+                g.selectedSquare = null; g.legalMoves = [];
+                this._doPlayerMove(from, [r, c]);
+            } else if (g.board[r][c] && g.isColor(r, c, 'white')) {
+                g.selectedSquare = [r, c];
+                g.legalMoves     = g.getLegalMoves([r, c]);
+                this._draw();
+            } else {
+                g.selectedSquare = null; g.legalMoves = [];
+                this._draw();
+            }
+        }
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       EXECUTE PLAYER MOVE
+    ══════════════════════════════════════════════════════════════ */
+    _doPlayerMove(from, to) {
+        const result = this.game.movePiece(from, to);
+        if (result === 'promotion-needed') {
+            this._draw();
+            this._showPromotion(from, to, 'white');
+            return;
+        }
+        this._playMoveSound(result);
+        this._draw();
+        if (!this.isFreeGame) this._checkExercise();
+        this._afterMove();
+    }
+
+    _playMoveSound(move) {
+        if (!move || typeof move !== 'object') return;
+        if (move.captured) this.snd.playCapture();
+        else this.snd.playMove();
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       AFTER MOVE — check status, trigger CPU (free game only)
+    ══════════════════════════════════════════════════════════════ */
+    _afterMove() {
+        // Exercise lessons (1-9): no computer opponent, no game-over
+        // detection. The board simply locks after the correct move.
+        // Only the free game (lesson 10) uses full win/draw/CPU logic.
+        if (!this.isFreeGame) {
+            this._updateTurnUI();
+            return;
+        }
+
+        const status = this.game.getGameStatus();
+
+        if (status.startsWith('checkmate')) {
+            const winner = status.split('-')[1];
+            const msg = winner === 'white'
+                ? 'Checkmate! You win! Magnificent play!'
+                : 'Checkmate! The computer wins. Study the position and try again!';
+            this._fb(msg, winner === 'white' ? 'success' : 'error');
+            this.game.gameOver = true;
+            if (winner === 'white') { this.snd.playSuccess(); this._confetti(); }
+            if (winner === 'white') this.markDone(this.currentLesson.id);
+            this._updateTurnUI();
+            return;
+        }
+        if (status === 'stalemate') {
+            this._fb("Stalemate! It's a draw — no legal moves.", 'info');
+            this.game.gameOver = true; this._updateTurnUI(); return;
+        }
+        if (status.startsWith('check-white')) {
+            this._fb('Your king is in check! You must defend it.', 'error');
+            this.snd.playCheck();
+            this._updateTurnUI();
+            return; // White is still to move — do NOT trigger CPU
+        }
+        if (status.startsWith('check-black')) {
+            this._fb('Check! The black king is under attack.', 'info');
+            this.snd.playCheck();
+        }
+
+        // Trigger CPU if it is now black's turn (free game only)
+        if (this.game.currentPlayer === 'black' && !this.game.gameOver) {
+            this.cpuBusy = true;
+            this._updateTurnUI();
+            this._setSpeech('Calculating...');
+            setTimeout(() => this._cpuMove(), 650);
+        }
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       COMPUTER MOVE
+    ══════════════════════════════════════════════════════════════ */
+    _cpuMove() {
+        if (this.game.gameOver) { this.cpuBusy = false; return; }
+        const g = this.game;
+        const moves = [];
+        for (let r = 0; r < 8; r++)
+            for (let c = 0; c < 8; c++)
+                if (g.isColor(r, c, 'black'))
+                    g.getLegalMoves([r, c]).forEach(to => moves.push({ from: [r, c], to }));
+
+        if (!moves.length) {
+            // No legal black moves — distinguish checkmate from stalemate
+            const st = g.getGameStatus();
+            if (st.startsWith('checkmate')) {
+                this._fb('Checkmate! You win! Magnificent play!', 'success');
+                this.snd.playSuccess(); this._confetti();
+                if (this.isFreeGame) this.markDone(this.currentLesson.id);
+            } else {
+                this._fb("Stalemate — it's a draw.", 'info');
+            }
+            g.gameOver = true;
+            this.cpuBusy = false;
+            this._draw();
+            this._updateTurnUI();
+            return;
+        }
+
+        // Score: capture value + center bonus + tiny random
+        const vals = { p:1, n:3, b:3.2, r:5, q:9, k:0 };
+        const scored = moves.map(mv => {
+            const target = g.board[mv.to[0]][mv.to[1]];
+            const cv = target ? (vals[target.toLowerCase()] || 0) * 10 : 0;
+            const cr = mv.to[0], cc = mv.to[1];
+            const center = (cr >= 3 && cr <= 4 && cc >= 3 && cc <= 4) ? 2 : 0;
+            return { ...mv, score: cv + center + Math.random() };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        const best = scored[0];
+
+        // Computer always promotes to queen
+        const piece = g.board[best.from[0]][best.from[1]];
+        const isPromo = piece && piece.toLowerCase() === 'p' && (best.to[0] === 0 || best.to[0] === 7);
+        const result = g.movePiece(best.from, best.to, isPromo ? 'q' : null);
+
+        this._playMoveSound(result);
+        this.cpuBusy = false;
+        this._draw();
+
+        const status = g.getGameStatus();
+        if (status.startsWith('checkmate')) {
+            const winner = status.split('-')[1];
+            const msg = winner === 'black' ? 'Checkmate! Computer wins. Try again!' : 'You win!';
+            this._fb(msg, winner === 'black' ? 'error' : 'success');
+            if (winner === 'white') { this.snd.playSuccess(); this._confetti(); }
+            g.gameOver = true;
+        } else if (status === 'stalemate') {
+            this._fb("Stalemate — it's a draw.", 'info'); g.gameOver = true;
+        } else if (status.startsWith('check-white')) {
+            this._fb('Your king is in check! Defend it.', 'error'); this.snd.playCheck();
+        } else {
+            const num = Math.ceil(g.moveHistory.length / 2);
+            this._fb(`Move ${num} — your turn (White)`, 'info');
+        }
+        this._updateTurnUI();
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       PROMOTION PICKER
+    ══════════════════════════════════════════════════════════════ */
+    _showPromotion(from, to, color) {
+        const picker = document.getElementById('promotion-picker');
+        if (!picker) return;
+        picker.innerHTML = '';
+        picker.classList.remove('hidden');
+
+        const pieces = color === 'white' ? ['Q','R','B','N'] : ['q','r','b','n'];
+        const names  = { Q:'Queen', R:'Rook', B:'Bishop', N:'Knight', q:'Queen', r:'Rook', b:'Bishop', n:'Knight' };
+
+        const label = document.createElement('p');
+        label.className = 'promotion-label';
+        label.textContent = 'Choose your promotion piece:';
+        picker.appendChild(label);
+
+        const row = document.createElement('div');
+        row.className = 'promotion-options';
+        pieces.forEach(p => {
+            const btn = document.createElement('button');
+            btn.className = 'promotion-btn';
+            btn.innerHTML = `${this._svg(p)}<span>${names[p]}</span>`;
+            btn.onclick = () => {
+                picker.innerHTML = ''; picker.classList.add('hidden');
+                const result = this.game.movePiece(from, to, p);
+                this._playMoveSound(result);
+                this._draw();
+                if (!this.isFreeGame) this._checkExercise();
+                this._afterMove();
+            };
+            row.appendChild(btn);
+        });
+        picker.appendChild(row);
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       EXERCISE CHECK
+    ══════════════════════════════════════════════════════════════ */
+    // Multi-step exercises (lesson 2: push, then capture) share one board:
+    // each step is checked in turn, the turn stays with White between steps.
+    _stepText(exercise, idx) {
+        const steps = exercise.steps || [exercise];
+        const i = Math.min(idx || 0, steps.length - 1);
+        if (steps.length > 1) return `<strong>Step ${i + 1} of ${steps.length}:</strong> ${steps[i].instr}`;
+        return steps[i].instr;
+    }
+    _renderStepInstruction() {
+        const el = document.getElementById('exercise-instruction');
+        if (el && this.currentExercise) {
+            el.innerHTML = this._stepText(this.currentExercise, this._stepIndex || 0);
+        }
+    }
+    _checkExercise() {
+        if (!this.currentExercise || this.exerciseDone) return;
+        const history = this.game.moveHistory;
+        const last = history.length > 0 ? history[history.length - 1] : null;
+        if (!last) return;
+
+        // Course-friendly acceptance: movement lessons accept ANY legal
+        // move by the featured piece, so exploration is rewarded instead
+        // of punished. Precision steps (castling, promotion square, a
+        // fixed from-square) still require their exact move.
+        const ex = this.currentExercise;
+        const steps = ex.steps || [ex];
+        const idx = Math.min(this._stepIndex || 0, steps.length - 1);
+        const step = steps[idx];
+        const moved = last.piece.toLowerCase();
+        let ok = false;
+        if (step.move) ok = last.from === step.move[0] && last.to === step.move[1];
+        else if (step.from) ok = last.from === step.from && moved === 'p';
+        else if (step.freeCapture) ok = moved === 'p' && !!last.captured;
+        else if (step.freePiece) ok = moved === step.freePiece;
+
+        const isLast = idx === steps.length - 1;
+        // Name the player's actual move: praise is never generic, so a
+        // different-but-legal choice still feels recognized, not wrong.
+        const played = `${last.from}→${last.to}`;
+        const fbText = step.move ? (step.fb || ex.fb) : `Nice — ${played}! ${step.fb || ex.fb}`;
+
+        if (ok) {
+            if (!isLast) {
+                // Advance on the same board; White to move again.
+                this._stepIndex = idx + 1;
+                this.game.currentPlayer = 'white';
+                this.snd.playSuccess();
+                this._renderStepInstruction();
+                this._fb(`${step.fb} ${steps[idx + 1].instr}`, 'success');
+                return;
+            }
+            this.exerciseDone = true;
+            this.snd.playSuccess();
+            this._confetti();
+            const el = document.getElementById('exercise-instruction');
+            if (el) {
+                el.innerHTML = `<strong>Exercise Complete!</strong> ${fbText}`;
+                el.style.color = 'var(--accent-bright)';
+                const box = el.closest('.exercise-instructions');
+                if (box) { box.style.background = 'rgba(16,185,129,0.12)'; box.style.borderColor = 'var(--accent)'; }
+            }
+            this._fb(fbText, 'success');
+            const doneBtn = document.getElementById('complete-btn');
+            if (doneBtn) { doneBtn.disabled = false; doneBtn.removeAttribute('title'); }
+        } else {
+            const names = { p: 'pawn', r: 'rook', b: 'bishop', n: 'knight', q: 'queen', k: 'king' };
+            const featured = step.freePiece || ((step.freeCapture || step.from) ? 'p' : null);
+            let hint;
+            if (step.from && last.from !== step.from) {
+                hint = `Not quite — start from ${step.from}! Move the pawn on ${step.from}.`;
+            } else if (featured && moved !== featured) {
+                hint = `Good move — but this lesson is about the ${names[featured]}! Move your ${names[featured]} instead.`;
+            } else if (step.freeCapture) {
+                hint = 'Not quite — pawns capture one square diagonally. Take the black pawn!';
+            } else {
+                const moves = {
+                    r: 'Rooks move straight — horizontally or vertically.',
+                    b: 'Bishops glide diagonally.',
+                    n: 'Knights jump in an L-shape.',
+                    q: 'The queen moves like a rook or bishop.',
+                    k: 'The king steps exactly one square.',
+                    p: 'Pawns march straight ahead.'
+                };
+                hint = (moves[moved] || 'Not quite!') + ' Try another square with it!';
+            }
+            this._fb(hint + ' Click "Reset Board" and try again.', 'error');
+        }
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       TURN UI / SPEECH / MOVE LOG
+    ══════════════════════════════════════════════════════════════ */
+    _updateTurnUI() {
+        // Exercise complete (lessons 1-9): board is locked, nobody's turn.
+        // Never show "Thinking..." in that state — it confused users into
+        // thinking a button was broken.
+        const lockedDone = !this.isFreeGame && this.exerciseDone && !this.game.gameOver;
+        const yourTurn = !lockedDone && this.game.currentPlayer === 'white' && !this.cpuBusy && !this.game.gameOver;
+        const cpuTurn  = !lockedDone && !yourTurn && !this.game.gameOver && this.isFreeGame;
+
+        const pYou  = document.getElementById('profile-you');
+        const pOpp  = document.getElementById('profile-opp');
+        const tiYou = document.getElementById('ti-you');
+        const tiOpp = document.getElementById('ti-opp');
+
+        if (pYou) pYou.classList.toggle('your-turn', yourTurn);
+        if (pOpp) pOpp.classList.toggle('your-turn', cpuTurn);
+        if (tiYou) tiYou.textContent = this.game.gameOver ? 'Game over' : lockedDone ? 'Done ✓' : yourTurn ? 'Your turn' : 'Waiting';
+        if (tiOpp) tiOpp.textContent = this.game.gameOver ? 'Game over' : lockedDone ? 'Well played!' : cpuTurn ? 'Thinking...' : 'Waiting';
+
+        // Speech bubble
+        if (lockedDone) { this._setSpeech('Well done! Click "Complete Lesson" to continue.'); return; }
+        if (this.cpuBusy) { this._setSpeech('The grandmaster is calculating...'); return; }
+        if (this.game.gameOver) return;
+        const status = this.game.getGameStatus();
+        if (status.startsWith('check-white'))      this._setSpeech('Your king is in check — defend it!');
+        else if (status.startsWith('check-black')) this._setSpeech('Check! The black king is under attack.');
+        else if (this.exerciseDone)                this._setSpeech('Well done! Click "Complete Lesson" to continue.');
+        else if (this.isFreeGame) {
+            const num = Math.ceil(this.game.moveHistory.length / 2) + 1;
+            this._setSpeech(`Move ${num}. ${yourTurn ? "Your turn." : "Computer is thinking..."}`);
+        } else {
+            this._setSpeech('Think carefully about your next move.');
+        }
+    }
+
+    _setSpeech(msg) {
+        const el = document.getElementById('speech');
+        if (el) el.textContent = msg;
+    }
+
+    _updateMoveLog() {
+        const log = document.getElementById('move-log');
+        if (!log) return;
+        const moves = this.game.moveHistory;
+        if (!moves.length) { log.innerHTML = '<span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span>'; return; }
+        let html = '';
+        for (let i = 0; i < moves.length; i += 2) {
+            const w = moves[i], b = moves[i + 1];
+            const num = Math.floor(i / 2) + 1;
+            const fmt = m => {
+                const cap = m.captured ? 'x' : '-';
+                const suf = m.specialMove === 'castling' ? ' O-O'
+                          : m.specialMove === 'enpassant' ? ' e.p.'
+                          : m.promotion   ? ('=' + m.promotion.toUpperCase()) : '';
+                return `<span class="move-item">${m.from}${cap}${m.to}${suf}</span>`;
+            };
+            html += `<div class="move-pair"><span class="move-num">${num}.</span>${fmt(w)}${b ? fmt(b) : ''}</div>`;
+        }
+        log.innerHTML = html;
+        log.scrollTop = log.scrollHeight;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       CONFETTI  (no const-reassignment bug)
+    ══════════════════════════════════════════════════════════════ */
+    _confetti() {
+        let canvas = document.getElementById('confetti-canvas');
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.id = 'confetti-canvas';
+            canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;';
+            document.body.appendChild(canvas);
+        }
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const ctx    = canvas.getContext('2d');
+        const colors = ['#10b981','#34d399','#fbbf24','#60a5fa','#f59e0b'];
+        const board = document.getElementById('chess-board-wrapper');
+        const rect = board?.getBoundingClientRect();
+        const originX = rect ? rect.left + rect.width / 2 : canvas.width / 2;
+        const originY = rect ? rect.top + rect.height / 2 : canvas.height / 2;
+        const parts  = Array.from({ length: 44 }, (_, i) => {
+            const angle = (Math.PI * 2 * i) / 44 + (Math.random() * 0.18);
+            const speed = 2.5 + Math.random() * 4.5;
+            return {
+                x: originX,
+                y: originY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 1.2,
+                size: 3 + Math.random() * 4,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                rot: Math.random() * Math.PI,
+                vr: (Math.random() - 0.5) * 0.2,
+                life: 1,
+                shape: Math.random() > 0.65 ? 'star' : (Math.random() > 0.5 ? 'dot' : 'spark')
+            };
+        });
+        let frame = 0;
+        const run = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            parts.forEach(p => {
+                p.x += p.vx; p.y += p.vy; p.vy += 0.04; p.vx *= 0.992; p.vy *= 0.992; p.rot += p.vr; p.life -= 0.017;
+                const alpha = Math.max(0, p.life);
+                if (!alpha) return;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 10;
+                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+                if (p.shape === 'dot') {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, p.size * 0.55, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (p.shape === 'spark') {
+                    ctx.fillRect(-p.size * 0.9, -p.size * 0.12, p.size * 1.8, p.size * 0.24);
+                } else {
+                    ctx.beginPath();
+                    for (let i = 0; i < 5; i++) {
+                        const starAngle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+                        const radius = i % 2 === 0 ? p.size : p.size * 0.4;
+                        const x = Math.cos(starAngle) * radius;
+                        const y = Math.sin(starAngle) * radius;
+                        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                ctx.restore();
+            });
+            ctx.restore();
+            if (++frame < 48) requestAnimationFrame(run);
+            else { ctx.clearRect(0, 0, canvas.width, canvas.height); canvas.remove(); }
+        };
+        requestAnimationFrame(run);
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       ACTIONS
+    ══════════════════════════════════════════════════════════════ */
+    resetBoard() {
+        if (!this.currentLesson) return;
+        this.cpuBusy = false;
+        this.game.pendingPromotion = null;
+        this._initBoard(this.currentLesson);
+        const picker = document.getElementById('promotion-picker');
+        if (picker) { picker.innerHTML = ''; picker.classList.add('hidden'); }
+        const el = document.getElementById('exercise-instruction');
+        const ex = this.currentLesson.exercise;
+        if (el && ex) {
+            el.innerHTML = this._stepText(ex, 0); el.style.color = '';
+            const box = el.closest('.exercise-instructions');
+            if (box) { box.style.background = ''; box.style.borderColor = ''; }
+        }
+        const doneBtn = document.getElementById('complete-btn');
+        if (doneBtn && !this.isFreeGame) { doneBtn.disabled = true; doneBtn.title = 'Finish the exercise move first'; }
+        this._fb(this.isFreeGame ? 'Board reset. You are White — make your first move!' : 'Board reset. Start fresh!', 'info');
+        this._updateTurnUI();
+    }
+
+    markComplete() {
+        if (!this.currentLesson) return;
+        // Exercise lessons (1-9) require the correct move first.
+        // The button is disabled until then, but guard here too for
+        // direct calls / keyboard / automation.
+        if (!this.isFreeGame && !this.exerciseDone) {
+            this._fb('Finish the exercise move first — then complete the lesson.', 'error');
+            return;
+        }
+        this.markDone(this.currentLesson.id);
+        this.snd.playSuccess();
+        this.showLessons();
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       NAVIGATION
+    ══════════════════════════════════════════════════════════════ */
+    /* ══════════════════════════════════════════════════════════════
+       ONLINE PLAY — lobby, host-authoritative P2P sessions, ratings
+       Playbook mapping (no backend here): host tab = pinned authority
+       (§6-D2), ply-tagged wire moves (§4), host-owned lazy clocks with
+       capped lag credit (§6-D3), idempotent per-game Elo writes (§6-D4).
+    ══════════════════════════════════════════════════════════════ */
+    static onlineControls() {
+        return [
+            { id: 'bullet', name: 'Bullet', label: '1+0', base: 60000, inc: 0 },
+            { id: 'blitz',  name: 'Blitz',  label: '5+0', base: 300000, inc: 0 },
+            { id: 'rapid',  name: 'Rapid',   label: '10+0', base: 600000, inc: 0 }
+        ];
+    }
+    _onlineControl() {
+        return ChessCourseApp.onlineControls().find(c => c.id === this._onlineControlId) || ChessCourseApp.onlineControls()[1];
+    }
+
+    showOnline() {
+        this._go('online-screen');
+        if (this.online && (this.online.phase === 'play' || this.online.phase === 'over')) this._renderOnlineGame();
+        else this._renderOnlineLobby();
+    }
+
+    _meTag() {
+        const u = this._clerk?.user;
+        const cat = (this._onlineControlId || 'blitz');
+        return {
+            id: this.userId || 'guest',
+            name: u ? (u.fullName || u.username || 'Player') : 'Guest',
+            img: u?.imageUrl || null,
+            rating: OnlineRatings.get(this.userId, cat)
+        };
+    }
+
+    /* ── Lobby ── */
+    _renderOnlineLobby() {
+        const box = document.getElementById('online-content');
+        if (!box) return;
+        this._stopOnlineTick();
+        if (typeof OnlineNet !== 'undefined' && !OnlineNet.available) {
+            box.innerHTML = `<div class="feedback error">Online play needs the PeerJS network library, which did not load. Check your connection and reload.</div>`;
+            return;
+        }
+        const signed = !!(this._clerk && this._clerk.user);
+        const controls = ChessCourseApp.onlineControls();
+        const sel = this._onlineControlId || 'blitz';
+        const tiles = controls.map(c => `
+            <button class="control-tile${c.id === sel ? ' sel' : ''}" data-control="${c.id}" onclick="app._pickControl('${c.id}')">
+                <span class="control-name">${c.name}</span>
+                <span class="control-label">${c.label}</span>
+                <span class="control-rating">${signed ? OnlineRatings.get(this.userId, c.id) : '–'}</span>
+            </button>`).join('');
+        const board = OnlineRatings.board(sel).map((p, i) =>
+            `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${p.name}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
+            || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
+        box.innerHTML = `
+            <div class="online-lobby">
+                ${signed ? '' : `<div class="exercise-instructions"><h4>Sign in to play online</h4><p>Online games are rated, so every player needs an identity. <button class="linklike" onclick="app._profileSignIn()">Sign in / Join</button></p></div>`}
+                <div class="dashboard-section">
+                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Time control</h4>
+                    <div class="control-grid">${tiles}</div>
+                </div>
+                <div class="dashboard-section">
+                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Play a friend</h4>
+                    <p class="lobby-hint">Share a 6-letter code. Your tabs connect directly; the host's tab validates every move and owns both clocks. Dropped connections auto-rejoin with the same code, and every move is saved so a dead tab can resume.</p>
+                    <div class="lobby-actions">
+                        <button class="btn-primary" onclick="app._onlineHost()" ${signed ? '' : 'disabled'}>Create game code</button>
+                        <div class="join-row">
+                            <input id="join-code" class="join-input" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false">
+                            <button class="btn-secondary" onclick="app._onlineJoin()" ${signed ? '' : 'disabled'}>Join</button>
+                        </div>
+                    </div>
+                    ${(() => {
+                        const lh = signed ? this._lastHosted() : null;
+                        const lj = signed ? this._lastJoined() : null;
+                        let h = '';
+                        if (lh) h += `<div class="lobby-actions"><button class="btn-secondary" onclick="app._onlineHost('${lh.code}')">Re-host ${lh.code} — restore where you left off</button></div>`;
+                        if (lj && (!lh || lj !== lh.code)) h += `<div class="lobby-actions"><button class="btn-secondary" onclick="app._onlineJoin('${lj}', true)">Rejoin ${lj}</button></div>`;
+                        return h;
+                    })()}
+                    <div id="online-lobby-status" class="feedback info" style="display:none"></div>
+                </div>
+                <div class="dashboard-section">
+                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Device leaderboard — ${controls.find(c => c.id === sel).name}</h4>
+                    <div class="board-list">${board}</div>
+                    <p class="lobby-hint">Every player this device has met, sorted by rating. A shared global board needs the backend from the system design; this one never leaves your browser.</p>
+                </div>
+            </div>`;
+    }
+
+    _pickControl(id) {
+        this._onlineControlId = id;
+        this._renderOnlineLobby();
+    }
+
+    _lastHosted() {
+        try {
+            const c = JSON.parse(localStorage.getItem('cclast') || 'null');
+            if (!c || !c.code || !c.gameId) return null;
+            const rec = (typeof OnlineStore !== 'undefined') ? OnlineStore.loadGame(c.gameId) : null;
+            if (rec && !rec.result && rec.moves) return { code: c.code, rec };
+        } catch (_) {}
+        return null;
+    }
+
+    async _onlineHost(fixedCode) {
+        if (!this._clerk?.user) return;
+        this._onlineCleanup();
+        const control = this._onlineControl();
+        // Re-hosting a code resumes its unfinished game (§6 recovery);
+        // a fresh code starts epoch 1 via nextEpoch below.
+        let resumeRec = null;
+        if (fixedCode) {
+            const lh = this._lastHosted();
+            if (lh && lh.code === fixedCode) resumeRec = lh.rec;
+        }
+        const code = fixedCode || OnlineNet.makeCode();
+        this.online = { phase: 'waiting', role: 'host', code, control, epoch: 0, resumed: false, net: new OnlineNet((t, m, c) => this._onNetMsg(t, m, c)) };
+        this._renderOnlineWaiting(code, resumeRec ? 'Session found — waiting for your opponent to rejoin…' : 'Waiting for your friend to join with this code…');
+        try {
+            await this.online.net.host(code);
+            this.online.epoch = OnlineStore.nextEpoch(code);
+            if (resumeRec) this._resumeOnlineSession(resumeRec);
+        } catch (e) {
+            if (e && e.message === 'taken' && !fixedCode) { this._onlineHost(); return; }
+            this._onlineLobbyMsg('Could not open a game. Check your connection and try again.', 'error');
+            this.online.phase = 'lobby'; this.online.net.destroy(); this.online.net = null;
+        }
+    }
+
+    // Rebuild a dead host tab from its durable log (§5/§6): replay moves,
+    // restore clocks with turn-start reset to now (outage pauses the clock —
+    // the documented fair policy), wait for the joiner on the same code.
+    _resumeOnlineSession(rec) {
+        const s = this.online;
+        try {
+            const control = ChessCourseApp.onlineControls().find(c => c.id === rec.control) || s.control;
+            s.control = control;
+            s.gameId = rec.gameId;
+            s.myColor = rec.myColor || 'white';
+            s.oppColor = s.myColor === 'white' ? 'black' : 'white';
+            s.opp = rec.opp || { id: 'guest', name: 'Friend' };
+            s.engine = new ChessGame();
+            (rec.moves || []).forEach(m => {
+                s.engine.movePiece(s.engine.algebraicToCoords(m.from), s.engine.algebraicToCoords(m.to), m.promo || null);
+            });
+            s.ply = s.engine.moveHistory.length;
+            s.sel = null; s.legal = []; s.pendingPromo = null;
+            s.result = null; s.reason = null; s.phase = 'waiting';
+            s.appliedMids = new Set(); s.pendingIntent = null;
+            s.rematchMe = false; s.rematchOpp = false; s.peerGone = false;
+            const c = rec.clocks || { w: control.base, b: control.base, side: s.engine.currentPlayer };
+            s.clock = { w: c.w, b: c.b, side: c.side, turnStarted: performance.now() };
+            s.resumed = true;
+            this._startOnlineTick();
+            this._startOnlinePing();
+            this._renderOnlineWaiting(s.code, `Restored at move ${Math.ceil(s.ply / 2)} — waiting for your opponent to rejoin…`);
+        } catch (_) { s.resumed = false; }
+    }
+
+    _waitFor(cond, ms) {
+        return new Promise((resolve, reject) => {
+            const t0 = Date.now();
+            const poll = () => {
+                let ok = false;
+                try { ok = !!cond(); } catch (_) {}
+                if (ok) return resolve(true);
+                if (Date.now() - t0 > ms) return reject(new Error('timeout'));
+                setTimeout(poll, 200);
+            };
+            poll();
+        });
+    }
+
+    async _onlineJoin(codeOverride, isRejoin) {
+        if (!this._clerk?.user) return;
+        if (this.online && this.online.phase === 'joining') return; // no double sessions
+        const code = codeOverride || OnlineNet.normalizeCode(document.getElementById('join-code')?.value);
+        if (code.length !== 6) { this._onlineLobbyMsg('Enter the 6-letter code from your friend.', 'error'); return; }
+        this._onlineCleanup();
+        const control = this._onlineControl();
+        this.online = { phase: 'joining', role: 'join', code, control, epoch: 0, net: new OnlineNet((t, m, c) => this._onNetMsg(t, m, c)) };
+        // Retry loop: public rendezvous can be slow or throttle bursts;
+        // each attempt gets a fresh peer, and the user sees the attempt.
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            if (!this.online || this.online.phase !== 'joining') return;
+            this._renderOnlineWaiting(code, attempt === 1 ? 'Calling the host…' : `Calling the host… (attempt ${attempt} of 3)`);
+            try {
+                const conn = await this.online.net.join(code);
+                if (!this.online || this.online.phase !== 'joining') return;
+                this.online.conn = conn;
+                this.online.net.send(conn, { type: 'hello', code, rejoin: !!isRejoin, user: this._meTag() });
+                await this._waitFor(() => this.online && this.online.phase === 'play', 10000);
+                return; // welcome handler moved us into the game
+            } catch (e) {
+                // Unknown code: fail fast every time — no host will
+                // ever appear for it, so retries only waste a minute.
+                if (e && e.message === 'not-found') {
+                    this._onlineLeave();
+                    this._onlineLobbyMsg('No game with that code is online.', 'error');
+                    return;
+                }
+            }
+        }
+        if (this.online && this.online.phase === 'joining') {
+            this._onlineLeave();
+            this._onlineLobbyMsg('Host is not answering. Check the code and your connection, then try again.', 'error');
+        }
+    }
+
+    _lastJoined() {
+        try {
+            const c = JSON.parse(localStorage.getItem('ccjoin') || 'null');
+            if (c && c.code && c.code.length === 6) return c.code;
+        } catch (_) {}
+        return null;
+    }
+
+    _renderOnlineWaiting(code, msg) {
+        const box = document.getElementById('online-content');
+        if (!box) return;
+        box.innerHTML = `
+            <div class="dashboard-section waiting-card">
+                <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Game code</h4>
+                <div class="game-code">${code}</div>
+                <p class="lobby-hint">${msg}</p>
+                <div class="lobby-actions"><button class="btn-secondary" onclick="app._onlineLeave()">Cancel</button></div>
+            </div>`;
+    }
+
+    _onlineLobbyMsg(msg, type = 'info') {
+        const el = document.getElementById('online-lobby-status');
+        if (el) { el.style.display = ''; el.textContent = msg; el.className = `feedback ${type}`; return; }
+        this._renderOnlineLobby();
+        const el2 = document.getElementById('online-lobby-status');
+        if (el2) { el2.style.display = ''; el2.textContent = msg; el2.className = `feedback ${type}`; }
+    }
+
+    _onlineLeave() {
+        const s = this.online;
+        // Host leaving a live game warns the peer first so it aborts
+        // cleanly instead of hanging on a dead session.
+        if (s && s.role === 'host' && s.phase === 'play' && !s.result && s.conn) {
+            try { s.net.send(s.conn, { type: 'host_left', epoch: s.epoch || 0 }); } catch (_) {}
+        }
+        this._clearRejoin();
+        this._onlineCleanup();
+        this.online = null;
+        this._renderOnlineLobby();
+    }
+
+    _onlineCleanup() {
+        this._stopOnlineTick();
+        try { if (this.online?.net) this.online.net.destroy(); } catch (_) {}
+        try { if (this.online?.pingTimer) clearInterval(this.online.pingTimer); } catch (_) {}
+    }
+    _stopOnlineTick() {
+        try { if (this._onlineTick) clearInterval(this._onlineTick); } catch (_) {}
+        this._onlineTick = null;
+    }
+
+    /* ── Clocks: host decides flags; everyone renders (§6-D3) ── */
+    _startOnlineTick() {
+        this._stopOnlineTick();
+        this._onlineTick = setInterval(() => {
+            const s = this.online;
+            if (!s || s.phase !== 'play' || s.result) return;
+            if (s.role === 'host') {
+                const side = s.clock.side, key = side === 'white' ? 'w' : 'b';
+                if (s.clock[key] - (performance.now() - s.clock.turnStarted) <= 0) {
+                    const foe = side === 'white' ? 'black' : 'white';
+                    if (this._onlyKing(s.engine, foe)) this._onlineFinish('draw', 'material');
+                    else { s.clock[key] = 0; this._onlineFinish(foe === s.myColor ? 'win' : 'loss', 'timeout'); }
+                    return;
+                }
+            }
+            this._paintOnlineClocks();
+        }, 100);
+    }
+    _onlyKing(engine, color) {
+        const want = color === 'white' ? 'K' : 'k';
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            const p = engine.board[r][c];
+            if (p && p !== want && engine.colorOf(p) === color) return false;
+        }
+        return true;
+    }
+    _paintOnlineClocks() {
+        const s = this.online;
+        if (!s) return;
+        const now = performance.now();
+        const left = (color) => {
+            const key = color === 'white' ? 'w' : 'b';
+            let ms = s.clock[key];
+            if (s.phase === 'play' && !s.result && s.clock.side === color) ms -= (now - s.clock.turnStarted);
+            return Math.max(0, ms);
+        };
+        const fmt = (ms) => { const t = Math.ceil(ms / 1000); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+        const top = document.getElementById('oclock-top'), bot = document.getElementById('oclock-bottom');
+        if (top) { top.textContent = fmt(left(s.oppColor)); top.classList.toggle('low', left(s.oppColor) < 20000); }
+        if (bot) { bot.textContent = fmt(left(s.myColor)); bot.classList.toggle('low', left(s.myColor) < 20000); }
+    }
+    _startOnlinePing() {
+        const s = this.online;
+        if (!s) return;
+        try { if (s.pingTimer) clearInterval(s.pingTimer); } catch (_) {}
+        const ping = () => { try { if (s.role === 'host' && s.conn) s.net.send(s.conn, { type: 'ping', t: performance.now() }); } catch (_) {} };
+        ping();
+        s.pingTimer = setInterval(ping, 5000);
+    }
+
+    /* ── Wire protocol (skill §4, adapted) ── */
+    _onNetMsg(type, msg, conn) {
+        const s = this.online;
+        if (!s) return;
+        if (type === '__closed') { this._onPeerGone(conn); return; }
+        if (type === 'ping') { s.net.send(conn, { type: 'pong', t: msg.t }); return; }
+        if (type === 'pong') {
+            if (s.role === 'host') s.rtt = Math.max(0, performance.now() - msg.t);
+            return;
+        }
+        if (s.role === 'host') this._hostOnMsg(type, msg, conn);
+        else this._joinOnMsg(type, msg, conn);
+    }
+
+    // Epoch fencing (§4): messages from a deposed (older-epoch) writer lose.
+    _epochOk(msg) {
+        const s = this.online;
+        if (!msg || typeof msg.epoch !== 'number') return true;
+        if (msg.epoch < (s.epoch || 0)) return false;
+        if (msg.epoch > (s.epoch || 0)) s.epoch = msg.epoch;
+        return true;
+    }
+    _hostOnMsg(type, msg, conn) {
+        const s = this.online;
+        if (type === 'hello') {
+            if (msg.code !== s.code || (s.phase !== 'waiting' && s.phase !== 'play')) { try { conn.close(); } catch (_) {} return; }
+            s.conn = conn;
+            s.opp = { id: msg.user?.id || 'guest', name: msg.user?.name || 'Friend', img: msg.user?.img || null, rating: msg.user?.rating || OnlineRatings.START };
+            if (s.resumed) {
+                // Rejoining joiner meets the restored session: same game,
+                // same colors, full snapshot. Epoch already bumped at re-host.
+                s.resumed = false; s.peerGone = false;
+                s.phase = 'play';
+                this._clearRejoin();
+                s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: s.control.id, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+                this._flushPending();
+                this._startOnlineTick();
+                this._startOnlinePing();
+                this._renderOnlineGame();
+                return;
+            }
+            // A hello during a LIVE game is a rejoin, not a new game —
+            // but only from the same player (no spectators on this path).
+            if (s.phase === 'play') {
+                const same = msg.user && msg.user.id && s.opp && msg.user.id === s.opp.id;
+                if (!same) { try { conn.close(); } catch (_) {} return; }
+                s.conn = conn; s.peerGone = false;
+                this._clearRejoin();
+                s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: s.control.id, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+                this._flushPending();
+                this._onlineStatus();
+                this._drawOnline();
+                return;
+            }
+            if (s.phase !== 'waiting') { try { conn.close(); } catch (_) {} return; }
+            const myColor = Math.random() < 0.5 ? 'white' : 'black';
+            this._startOnlineGame(myColor, s.opp);
+            try { localStorage.setItem('cclast', JSON.stringify({ code: s.code, gameId: s.gameId })); } catch (_) {}
+            s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: s.control.id, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+            this._renderOnlineGame();
+            return;
+        }
+        if (!s.conn || conn !== s.conn) return;
+        if (type === 'sync_request') { s.net.send(conn, { type: 'state', epoch: s.epoch || 0, state: this._buildOnlineState() }); return; }
+        if (type === 'resign') { this._onlineFinish('win', 'resignation'); return; }
+        if (type === 'draw_offer') { this._onlineDrawPrompt(); return; }
+        if (type === 'draw_accept') { this._onlineFinish('draw', 'agreement'); return; }
+        if (type === 'draw_decline') { this._onlineStatus('Draw declined. Your move!'); return; }
+        if (type === 'rematch_want') {
+            s.rematchOpp = true;
+            if (s.rematchMe) { this._rematchStart(); return; }
+            this._rematchPrompt(s.opp?.name || 'Your opponent');
+            this._drawOnline();
+            return;
+        }
+        if (type === 'rematch_decline') {
+            s.rematchMe = false; s.rematchOpp = false;
+            this._onlineStatus('Rematch declined.');
+            return;
+        }
+        if (type === 'move') this._hostApplyPeerMove(msg);
+    }
+
+    _joinOnMsg(type, msg) {
+        const s = this.online;
+        if (type === 'welcome') {
+            // Fresh join, or a rejoin meeting a live (possibly resumed) session.
+            if (s.phase !== 'joining' && !(s.phase === 'play' && s.peerGone)) return;
+            if (typeof msg.epoch === 'number') s.epoch = msg.epoch;
+            s.gameId = msg.game_id;
+            s.opp = { id: msg.user?.id || 'guest', name: msg.user?.name || 'Friend', img: msg.user?.img || null, rating: msg.user?.rating || OnlineRatings.START };
+            this._startOnlineGame(msg.color === 'white' ? 'white' : 'black', s.opp, msg.control, true);
+            this._applyOnlineState(msg.state);
+            s.peerGone = false;
+            this._clearRejoin();
+            this._flushPending();
+            this._renderOnlineGame();
+            return;
+        }
+        if (type === 'host_left') {
+            if (s.phase === 'play' && !s.result) this._onlineAbort('Host left the game.');
+            return;
+        }
+        if (!this._epochOk(msg)) return;
+        if (s.phase !== 'play' && s.phase !== 'over') return;
+        if (type === 'move') {
+            if (typeof msg.ply === 'number' && msg.ply <= s.ply) return; // idempotent: duplicate delivery = no-op
+            const ok = this._applyOnlineMove(msg.from, msg.to, msg.promo || null);
+            if (!ok) { s.net.send(s.conn, { type: 'sync_request' }); return; }
+            s.ply = msg.ply; s.viewPly = null;
+            if (msg.clocks) this._snapOnlineClocks(msg.clocks);
+            this._drawOnline();
+            this._onlineAfterMove(false);
+            return;
+        }
+        if (type === 'state') { this._applyOnlineState(msg.state); this._flushPending(); this._drawOnline(); this._onlineAfterMove(false); return; }
+        if (type === 'rejected') { this._applyOnlineState(msg.state); this._drawOnline(); this._onlineStatus('Illegal move — board resynced with the host.'); return; }
+        if (type === 'game_over') {
+            if (msg.reason === 'aborted') { this._onlineAbort('Game aborted — too short to rate.'); return; }
+            this._onlineFinish(msg.result, msg.reason, true); return;
+        }
+        if (type === 'draw_offer') { this._onlineDrawPrompt(); return; }
+        if (type === 'draw_accept') { this._onlineFinish('draw', 'agreement', true); return; }
+        if (type === 'draw_decline') { this._onlineStatus('Draw declined. Your move!'); return; }
+        if (type === 'rematch_want') {
+            s.rematchOpp = true;
+            this._rematchPrompt(s.opp?.name || 'Your opponent');
+            return;
+        }
+        if (type === 'rematch_decline') {
+            s.rematchMe = false; s.rematchOpp = false;
+            this._onlineStatus('Rematch declined.');
+            return;
+        }
+        if (type === 'rematch_accept') {
+            if (!this._epochOk(msg)) return;
+            s.gameId = msg.game_id;
+            try { localStorage.setItem('cclast', JSON.stringify({ code: s.code, gameId: s.gameId })); } catch (_) {}
+            this._startOnlineGame(msg.color, s.opp, msg.control, true);
+            this._applyOnlineState(msg.state);
+            this._renderOnlineGame();
+        }
+    }
+
+    _onPeerGone(conn) {
+        const s = this.online;
+        if (!s || (s.phase !== 'play' && s.phase !== 'over')) return;
+        if (s.phase === 'over') return;
+        // Stale duplicate connections dying must not disturb the live one.
+        if (conn && s.conn && conn !== s.conn) return;
+        s.peerGone = true;
+        if (s.role === 'host') this._onlineStatus(`Your opponent disconnected — they can rejoin with code ${s.code}.`);
+        else { this._onlineStatus('Connection lost — retrying…'); this._scheduleRejoin(); }
+        this._drawOnline();
+    }
+
+    /* ── Session lifecycle (host = pinned authority, §6-D2) ── */
+    _newGameId() { return 'g_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+    _startOnlineGame(myColor, opp, controlId, keepConn) {
+        const s = this.online;
+        const control = ChessCourseApp.onlineControls().find(c => c.id === (controlId || s.control.id)) || s.control;
+        Object.assign(s, {
+            phase: 'play', myColor, oppColor: myColor === 'white' ? 'black' : 'white',
+            control, opp, gameId: s.gameId && keepConn ? s.gameId : this._newGameId(),
+            engine: new ChessGame(), ply: 0, sel: null, legal: [],
+            pendingPromo: null, result: null, reason: null,
+            rematchMe: false, rematchOpp: false, peerGone: false,
+            appliedMids: new Set(), pendingIntent: null,
+            rtt: s.rtt || 0,
+            clock: { w: control.base, b: control.base, side: 'white', turnStarted: performance.now() }
+        });
+        if (!keepConn && s.role === 'host' && s.control.id !== control.id) s.control = control;
+        this._startOnlineTick();
+        this._startOnlinePing();
+    }
+
+    _buildOnlineState() {
+        const s = this.online;
+        return {
+            moves: s.engine.moveHistory.map(m => ({ from: m.from, to: m.to, promo: m.promotion || null })),
+            clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side },
+            side: s.engine.currentPlayer, ply: s.ply,
+            status: s.phase === 'over' ? 'over' : 'play', result: s.result, reason: s.reason
+        };
+    }
+
+    _applyOnlineState(st) {
+        const s = this.online;
+        if (!st) return;
+        s.engine.reset();
+        (st.moves || []).forEach(m => {
+            try {
+                s.engine.movePiece(s.engine.algebraicToCoords(m.from), s.engine.algebraicToCoords(m.to), m.promo || null);
+            } catch (_) {}
+        });
+        s.ply = st.moves ? st.moves.length : 0;
+        s.sel = null; s.legal = []; s.pendingPromo = null; s.viewPly = null;
+        if (st.clocks) this._snapOnlineClocks(st.clocks);
+        if (st.side) s.engine.currentPlayer = st.side;
+        if (st.status === 'over') { s.phase = 'over'; }
+    }
+
+    _snapOnlineClocks(c) {
+        const s = this.online;
+        s.clock.w = c.w; s.clock.b = c.b; s.clock.side = c.side;
+        s.clock.turnStarted = performance.now();
+    }
+
+    /* ── Moves: both sides validate with the shared engine; the host
+       additionally owns clocks and broadcasts (single writer). ── */
+    _applyOnlineMove(from, to, promo) {
+        const s = this.online;
+        try {
+            // Callers pass board coords (local clicks) or algebraic (wire);
+            // normalize before touching the engine.
+            const fc = typeof from === 'string' ? s.engine.algebraicToCoords(from) : from;
+            const tc = typeof to === 'string' ? s.engine.algebraicToCoords(to) : to;
+            const legal = s.engine.getLegalMoves(fc);
+            if (!legal.some(m => m[0] === tc[0] && m[1] === tc[1])) return false;
+            s.engine.movePiece(fc, tc, promo || null);
+            return true;
+        } catch (_) { return false; }
+    }
+
+    _onlinePlayMove(from, to, promo = null) {
+        const s = this.online;
+        if (!s || s.phase !== 'play' || s.result) return;
+        if (s.engine.currentPlayer !== s.myColor) return;
+        if (!this._applyOnlineMove(from, to, promo)) return;
+        const move = s.engine.moveHistory[s.engine.moveHistory.length - 1];
+        s.ply = s.engine.moveHistory.length;
+        s.sel = null; s.legal = []; s.viewPly = null;
+        this.snd.playMove();
+        this._drawOnline();
+        // Client intent id (§5): retries reuse ply + move_id, so the host
+        // can tell a retry from a new move. Durable append precedes any ack.
+        const mid = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        if (s.role === 'host' && !s.appliedMids) s.appliedMids = new Set();
+        if (s.role === 'host') s.appliedMids.add(mid);
+        const msg = { type: 'move', ply: s.ply, from: move.from, to: move.to, promo: move.promotion || null, mid, epoch: s.epoch || 0 };
+        this._saveOnlineSession();
+        if (s.role === 'host') {
+            this._hostChargeClock(s.myColor, 0);
+            msg.clocks = { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side };
+            s.net.send(s.conn, msg);
+            this._onlineAfterMove(true);
+        } else {
+            if (!s.net.send(s.conn, msg)) s.pendingIntent = msg; // flushed on reconnect
+            this._onlineAfterMove(false);
+        }
+    }
+
+    _hostApplyPeerMove(msg) {
+        const s = this.online;
+        if (s.phase !== 'play' || s.result) return;
+        if (!s.appliedMids) s.appliedMids = new Set();
+        if (msg.mid && s.appliedMids.has(msg.mid)) {
+            // Exact retry (§5): already applied — resend state, change nothing.
+            s.net.send(s.conn, { type: 'state', state: this._buildOnlineState(), epoch: s.epoch || 0 });
+            return;
+        }
+        if (typeof msg.ply === 'number' && msg.ply <= s.ply) {
+            s.net.send(s.conn, { type: 'move', ply: s.ply, from: msg.from, to: msg.to, promo: msg.promo || null, clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side }, epoch: s.epoch || 0 });
+            return; // idempotent duplicate: re-ack, change nothing
+        }
+        const mover = s.oppColor;
+        if (s.engine.currentPlayer !== mover) {
+            s.net.send(s.conn, { type: 'rejected', reason: 'not_your_turn', state: this._buildOnlineState() });
+            return;
+        }
+        if (!this._applyOnlineMove(msg.from, msg.to, msg.promo || null)) {
+            s.net.send(s.conn, { type: 'rejected', reason: 'illegal', state: this._buildOnlineState() });
+            return;
+        }
+        s.ply = s.engine.moveHistory.length;
+        if (msg.mid) s.appliedMids.add(msg.mid);
+        this._saveOnlineSession();
+        // Lag credit: refund measured one-way delay, capped so bad
+        // connections cannot farm thinking time (§6-D3). Never raises clocks.
+        const credit = Math.min((s.rtt || 0) / 2, 150);
+        this._hostChargeClock(mover, credit);
+        this.snd.playMove();
+        s.net.send(s.conn, { type: 'move', ply: s.ply, from: msg.from, to: msg.to, promo: msg.promo || null, clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side } });
+        this._drawOnline();
+        this._onlineAfterMove(true);
+    }
+
+    // Host-only clock math: lazy remaining + turn start on the monotonic
+    // clock (§6-D3). Charge = elapsed minus capped lag credit, floored at 0.
+    _hostChargeClock(mover, credit) {
+        const s = this.online;
+        const now = performance.now();
+        const elapsed = Math.max(0, now - s.clock.turnStarted);
+        const key = mover === 'white' ? 'w' : 'b';
+        const charge = Math.max(0, Math.min(elapsed - Math.min(credit, elapsed), s.clock[key]));
+        s.clock[key] = Math.max(0, s.clock[key] - charge) + s.control.inc;
+        s.clock.side = mover === 'white' ? 'black' : 'white';
+        s.clock.turnStarted = now;
+    }
+
+    _onlineAfterMove(fromHost) {
+        const s = this.online;
+        if (!s || s.result) return;
+        const status = s.engine.getGameStatus();
+        if (status.startsWith('checkmate')) {
+            const winner = status.split('-')[1];
+            this._onlineFinish(winner === s.myColor ? 'win' : 'loss', 'checkmate', !fromHost);
+        } else if (status === 'stalemate') {
+            this._onlineFinish('draw', 'stalemate', !fromHost);
+        } else {
+            if (status.startsWith('check-')) this.snd.playCheck();
+            this._onlineStatus();
+            this._drawOnline();
+        }
+    }
+
+    _onlineFinish(result, reason, remote) {
+        const s = this.online;
+        if (!s || s.result) return; // first writer wins; duplicates are no-ops
+        s.result = result; s.reason = reason; s.phase = 'over';
+        s.engine.gameOver = true;
+        if (s.engine.moveHistory.length < 2 && reason !== 'checkmate' && reason !== 'stalemate') {
+            reason = 'aborted'; // §11: too short to rate — no rating change.
+            s.reason = reason;
+        }
+        if (reason === 'aborted') {
+            if (s.role === 'host' && !remote) {
+                s.net.send(s.conn, { type: 'game_over', result: 'draw', reason: 'aborted', epoch: s.epoch || 0 });
+            }
+            this._onlineAbort('Game aborted — too short to rate. No rating change.');
+            return;
+        }
+        if (s.role === 'host' && !remote) {
+            s.net.send(s.conn, { type: 'game_over', result: result === 'win' ? 'loss' : result === 'loss' ? 'win' : 'draw', reason, epoch: s.epoch || 0 });
+        }
+        // Idempotent Elo write: same game_id twice changes nothing (§6-D4).
+        let delta = null, rating = null;
+        const score = result === 'win' ? 1 : result === 'draw' ? 0.5 : 0;
+        const r = OnlineRatings.applyGame({ uid: this.userId, cat: s.control.id, score, oppRating: s.opp?.rating, gameId: s.gameId });
+        if (r) { delta = r.delta; rating = r.rating; }
+        OnlineRatings.notePlayer(this.userId, this._meTag().name, s.control.id, OnlineRatings.get(this.userId, s.control.id));
+        if (s.opp?.id) OnlineRatings.notePlayer(s.opp.id, s.opp.name, s.control.id, s.opp.rating);
+        s.ratingDelta = delta; s.ratingAfter = rating;
+        if (result !== 'aborted' && s.gameId) {
+            OnlineRatings.pushHistory(this.userId, {
+                gameId: s.gameId, control: s.control.id, opp: s.opp?.name || 'Opponent',
+                result, plies: s.engine.moveHistory.length, delta
+            });
+        }
+        if (result === 'win') { this.snd.playSuccess(); this._confetti(); }
+        else this.snd.playCheck();
+        this._stopOnlineTick();
+        this._drawOnline();
+        this._onlineStatus();
+    }
+
+    /* ── Online game view ── */
+    _renderOnlineGame() {
+        const s = this.online;
+        const box = document.getElementById('online-content');
+        if (!box || !s) return;
+        const mine = s.myColor === 'white' ? 'White' : 'Black';
+        const theirs = s.myColor === 'white' ? 'Black' : 'White';
+        const over = s.phase === 'over';
+        const resultLine = !over ? '' : s.result === 'win'
+            ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${s.ratingDelta !== null && s.ratingDelta !== undefined ? ` Rating ${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}` : ''}</div>`
+            : s.result === 'loss'
+            ? `<div class="feedback error">You lose. ${this._reasonText(s.reason)}${s.ratingDelta !== null && s.ratingDelta !== undefined ? ` Rating ${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}` : ''}</div>`
+            : `<div class="feedback info">Draw. ${this._reasonText(s.reason)}</div>`;
+        box.innerHTML = `
+            <div class="lesson-content">
+                <div class="arena">
+                    <div class="profile-card opponent" id="oprofile-opp">
+                        ${s.opp?.img ? `<img class="avatar" src="${s.opp.img}" alt="${s.opp?.name || 'Opponent'}">` : `<div class="avatar-letter">${(s.opp?.name || 'F')[0].toUpperCase()}</div>`}
+                        <div class="info"><span class="name">${s.opp?.name || 'Opponent'}</span><span class="sub">${theirs} · ${s.opp?.rating || ''}</span></div>
+                        <div class="clock" id="oclock-top">--:--</div>
+                    </div>
+                    <div class="speech-bubble" id="online-status">Connecting…</div>
+                    <div id="online-board-wrapper"><div id="online-board"></div></div>
+                    <div id="online-promo" class="promotion-picker hidden"></div>
+                    <div id="online-result">${resultLine}</div>
+                    <div class="profile-card player" id="oprofile-you">
+                        <div class="avatar-letter you">${(this._meTag().name || 'Y')[0].toUpperCase()}</div>
+                        <div class="info"><span class="name">You</span><span class="sub">${mine} · ${OnlineRatings.get(this.userId, s.control.id)}</span></div>
+                        <div class="clock" id="oclock-bottom">--:--</div>
+                    </div>
+                </div>
+                <div class="lesson-dashboard">
+                    <div class="dashboard-section">
+                        <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">${s.control.name} ${s.control.label} · Rated</h4>
+                        <div class="movenav" role="group" aria-label="Step through moves">
+                            <button class="icon-btn" id="mv-start" onclick="app._onlineNavGo('start')" title="First move"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 5l-8 7 8 7"/></svg></button>
+                            <button class="icon-btn" id="mv-prev" onclick="app._onlineNavGo('prev')" title="Previous move"><svg viewBox="0 0 24 24"><path d="M14 5l-7 7 7 7"/></svg></button>
+                            <button class="icon-btn live" id="mv-live" onclick="app._onlineNavGo('live')" title="Back to live">Live</button>
+                            <button class="icon-btn" id="mv-next" onclick="app._onlineNavGo('next')" title="Next move"><svg viewBox="0 0 24 24"><path d="M10 5l7 7-7 7"/></svg></button>
+                            <button class="icon-btn" id="mv-end" onclick="app._onlineNavGo('end')" title="Latest move"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
+                        </div>
+                        <div class="move-log" id="online-log"><span style="color:var(--text-muted-dim)">No moves yet.</span></div>
+                    </div>
+                    <div class="lesson-actions" id="online-actions">
+                        ${over
+                            ? `<button class="btn-primary btn-glow-strong" onclick="app._onlineRematch()">Rematch</button>
+                               <button class="btn-secondary" onclick="app._onlineReview()">Review</button>
+                               <button class="btn-secondary" onclick="app._onlineLeave()">Lobby</button>`
+                            : `<button class="btn-secondary" onclick="app._onlineDrawOffer()">Draw</button>
+                               <button class="btn-secondary" onclick="app._onlineResignAsk()">Resign</button>
+                               <button class="btn-secondary" onclick="app._onlineLeaveAsk()">Leave</button>`}
+                    </div>
+                </div>
+            </div>`;
+        this._drawOnline();
+        this._onlineStatus();
+        this._paintOnlineClocks();
+    }
+
+    _reasonText(reason) {
+        return { checkmate: 'Checkmate on the board.', resignation: 'by resignation.', stalemate: 'Stalemate.', agreement: 'by mutual agreement.', timeout: 'on time.', material: 'Neither side can mate.', aborted: 'Too short to rate — no rating change.' }[reason] || '';
+    }
+
+    // Small promise modal: {title, body, okLabel, cancelLabel} -> true/false.
+    // Used before destructive acts (resign, leave) so a slip never ends a game.
+    _confirmModal({ title, body, okLabel = 'Confirm', cancelLabel = 'Cancel' }) {
+        document.getElementById('confirm-veil')?.remove();
+        return new Promise((resolve) => {
+            const veil = document.createElement('div');
+            veil.id = 'confirm-veil';
+            veil.className = 'confirm-veil';
+            veil.innerHTML = `
+                <div class="confirm-card" role="dialog" aria-modal="true" aria-label="${title}">
+                    <h3>${title}</h3>
+                    <p>${body}</p>
+                    <div class="confirm-actions">
+                        <button class="btn-secondary" data-x="no">${cancelLabel}</button>
+                        <button class="btn-primary" data-x="yes">${okLabel}</button>
+                    </div>
+                </div>`;
+            const done = (v) => { veil.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
+            const onKey = (e) => { if (e.key === 'Escape') done(false); };
+            document.addEventListener('keydown', onKey, true);
+            veil.addEventListener('click', (e) => {
+                if (e.target === veil) return done(false);
+                const b = e.target.closest('[data-x]');
+                if (b) done(b.dataset.x === 'yes');
+            });
+            document.body.appendChild(veil);
+            veil.querySelector('[data-x="yes"]')?.focus();
+        });
+    }
+
+    // Durable append of moves + portable clock (§5/§6) on both tabs.
+    _saveOnlineSession() {
+        const s = this.online;
+        if (!s || !s.gameId || typeof OnlineStore === 'undefined') return;
+        OnlineStore.saveGame({
+            gameId: s.gameId, code: s.code, control: s.control.id,
+            role: s.role, myColor: s.myColor, opp: s.opp,
+            moves: s.engine.moveHistory.map(m => ({ from: m.from, to: m.to, promo: m.promotion || null })),
+            clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side },
+            result: s.result || null, reason: s.reason || null
+        });
+    }
+
+    _flushPending() {
+        const s = this.online;
+        if (s?.pendingIntent && s.conn) {
+            const p = s.pendingIntent; s.pendingIntent = null;
+            s.net.send(s.conn, p);
+        }
+    }
+
+    // Joiner auto-reconnect with backoff + jitter (§7); ~60s of trying,
+    // then the game is aborted unrated rather than left hanging.
+    _scheduleRejoin() {
+        const s = this.online;
+        if (!s || s.role !== 'join') return;
+        this._clearRejoin();
+        const delays = [1000, 2000, 4000, 8000, 15000, 30000];
+        let attempt = 0;
+        const tick = () => {
+            const cur = this.online;
+            if (!cur || cur !== s || cur.phase !== 'play' || cur.result || !cur.peerGone) return;
+            if (attempt >= delays.length) { this._onlineAbort('Host is gone — game aborted. No rating change.'); return; }
+            const wait = delays[attempt++] * (0.8 + Math.random() * 0.4);
+            s.rejoinTimer = setTimeout(async () => {
+                const c2 = this.online;
+                if (!c2 || c2 !== s || c2.phase !== 'play' || c2.result || !c2.peerGone) return;
+                try {
+                    const conn = await s.net.join(s.code);
+                    s.conn = conn;
+                    s.net.send(conn, { type: 'hello', code: s.code, rejoin: true, lastPly: s.ply, user: this._meTag() });
+                } catch (_) { tick(); }
+            }, wait);
+        };
+        tick();
+    }
+    _clearRejoin() {
+        try { if (this.online?.rejoinTimer) clearTimeout(this.online.rejoinTimer); } catch (_) {}
+        if (this.online) this.online.rejoinTimer = null;
+    }
+
+    _onlineAbort(msg) {
+        const s = this.online;
+        if (!s) return;
+        this._clearRejoin();
+        s.result = 'draw'; s.reason = 'aborted'; s.phase = 'over';
+        s.engine.gameOver = true;
+        this._saveOnlineSession();
+        this._stopOnlineTick();
+        if (document.getElementById('online-content')) this._renderOnlineGame();
+        else { this._drawOnline(); }
+        this._onlineStatus(msg || 'Game aborted — no rating change.');
+    }
+
+    _onlineStatus(msg) {
+        const el = document.getElementById('online-status');
+        if (!el) return;
+        const s = this.online;
+        if (msg) { el.textContent = msg; return; }
+        if (!s) return;
+        if (s.phase === 'over') {
+            el.textContent = s.result === 'win' ? 'Victory! Start a rematch or head back.' : s.result === 'loss' ? 'Defeat. One more?' : 'Draw. Well fought!';
+            return;
+        }
+        if (s.peerGone) { el.textContent = s.role === 'host' ? `Opponent disconnected — they can rejoin with code ${s.code}.` : 'Reconnecting…'; return; }
+        el.textContent = s.engine.currentPlayer === s.myColor ? 'Your move!' : 'Opponent is thinking…';
+    }
+
+    /* ── Online board (orientation follows your color) ── */
+    _drawOnline() {
+        const s = this.online;
+        const board = document.getElementById('online-board');
+        if (!board || !s) return;
+        board.innerHTML = '';
+        const flip = s.myColor === 'black';
+        const at = (dr, dc) => [flip ? 7 - dr : dr, flip ? 7 - dc : dc];
+        // History view: null = live head; otherwise replay the first N plies
+        // into a scratch engine so ‹ › never touches the real game.
+        const history = s.engine.moveHistory;
+        const live = history.length;
+        const view = (s.viewPly == null) ? live : Math.max(0, Math.min(s.viewPly, live));
+        const viewing = view !== live;
+        let eng = s.engine;
+        let shown = history;
+        if (viewing) {
+            eng = new ChessGame();
+            shown = s.engine.moveHistory.slice(0, view);
+            shown.forEach(m => {
+                try { eng.movePiece(eng.algebraicToCoords(m.from), eng.algebraicToCoords(m.to), m.promotion || null); } catch (_) {}
+            });
+        }
+        const sel = viewing ? null : s.sel, legal = viewing ? [] : s.legal;
+        const last = shown.length ? shown[shown.length - 1] : null;
+        const lastFrom = last ? eng.algebraicToCoords(last.from) : null;
+        const lastTo = last ? eng.algebraicToCoords(last.to) : null;
+        const inCheck = eng._isKingInCheck(eng.currentPlayer);
+        const kingPos = inCheck ? eng.findKing(eng.currentPlayer) : null;
+        for (let dr = 0; dr < 8; dr++) {
+            for (let dc = 0; dc < 8; dc++) {
+                const [r, c] = at(dr, dc);
+                const sq = document.createElement('div');
+                sq.className = `chess-square ${(r + c) % 2 === 0 ? 'white' : 'black'}`;
+                const alg = eng.coordsToAlgebraic([r, c]);
+                sq.dataset.square = alg; sq.dataset.row = String(r); sq.dataset.col = String(c);
+                sq.setAttribute('role', 'button'); sq.setAttribute('tabindex', '0'); sq.setAttribute('aria-label', alg);
+                if (sel && sel[0] === r && sel[1] === c) sq.classList.add('selected');
+                if (lastFrom && lastFrom[0] === r && lastFrom[1] === c) sq.classList.add('last-move');
+                if (lastTo && lastTo[0] === r && lastTo[1] === c) sq.classList.add('last-move');
+                if (kingPos && kingPos[0] === r && kingPos[1] === c) sq.classList.add('in-check');
+                const piece = eng.board[r][c];
+                if (piece) { const w = document.createElement('div'); w.innerHTML = this._svg(piece); const img = w.firstChild; if (img) sq.appendChild(img); }
+                if (sel && legal.some(m => m[0] === r && m[1] === c)) {
+                    const dot = document.createElement('div');
+                    dot.className = piece ? 'legal-ring' : 'legal-dot';
+                    sq.appendChild(dot);
+                }
+                if (dr === 7) { const fl = document.createElement('span'); fl.className = 'coord-file'; fl.textContent = alg[0]; sq.appendChild(fl); }
+                if (dc === 0) { const rk = document.createElement('span'); rk.className = 'coord-rank'; rk.textContent = alg[1]; sq.appendChild(rk); }
+                sq.addEventListener('click', () => this._onlineClick(r, c));
+                sq.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._onlineClick(r, c); } });
+                board.appendChild(sq);
+            }
+        }
+        const log = document.getElementById('online-log');
+        if (log) {
+            if (!live) log.innerHTML = '<span style="color:var(--text-muted-dim)">No moves yet.</span>';
+            else {
+                const curPair = view === 0 ? -1 : Math.ceil(view / 2) - 1;
+                let html = '';
+                for (let i = 0; i < live; i += 2) {
+                    const w = history[i], b = history[i + 1];
+                    const pi = Math.floor(i / 2);
+                    html += `<div class="move-pair${pi === curPair ? ' cur' : ''}" data-pi="${pi}"><span class="move-num">${pi + 1}.</span><span class="move-item">${w.from}-${w.to}${w.promotion ? '=' + w.promotion.toUpperCase() : ''}</span>${b ? `<span class="move-item">${b.from}-${b.to}${b.promotion ? '=' + b.promotion.toUpperCase() : ''}</span>` : ''}</div>`;
+                }
+                log.innerHTML = html;
+                const cur = log.querySelector('.move-pair.cur');
+                if (cur) cur.scrollIntoView({ block: 'nearest' });
+                else log.scrollTop = log.scrollHeight;
+            }
+        }
+        this._paintOnlineNav(live, view, viewing);
+    }
+
+    /* ── Move navigator ‹ › : step through history, Live returns ── */
+    _onlineNavGo(where) {
+        const s = this.online;
+        if (!s) return;
+        const live = s.engine.moveHistory.length;
+        const view = (s.viewPly == null) ? live : s.viewPly;
+        if (where === 'start') s.viewPly = 0;
+        else if (where === 'prev') s.viewPly = Math.max(0, view - 1);
+        else if (where === 'next') s.viewPly = Math.min(live, view + 1);
+        else s.viewPly = null;
+        this._drawOnline();
+        if (s.viewPly == null) this._onlineStatus();
+        else this._onlineStatus(`Viewing move ${s.viewPly} of ${live} — press Live to return.`);
+    }
+
+    _paintOnlineNav(live, view, viewing) {
+        const set = (id, dis) => { const b = document.getElementById(id); if (b) { if (dis) b.setAttribute('disabled', ''); else b.removeAttribute('disabled'); } };
+        set('mv-start', !live || view <= 0);
+        set('mv-prev', !live || view <= 0);
+        set('mv-next', !live || !viewing);
+        set('mv-end', !live || !viewing);
+        const liveBtn = document.getElementById('mv-live');
+        if (liveBtn) liveBtn.classList.toggle('on', !!viewing);
+    }
+
+    _onlineClick(r, c) {
+        const s = this.online;
+        if (!s || s.phase !== 'play' || s.result || s.pendingPromo) return;
+        if (s.viewPly != null && s.viewPly < s.engine.moveHistory.length) {
+            s.viewPly = null; // first tap while reviewing returns to live
+            this._drawOnline(); this._onlineStatus();
+            return;
+        }
+        if (s.engine.currentPlayer !== s.myColor) return;
+        const g = s.engine;
+        const mine = (s.myColor === 'white');
+        if (!g.selectedSquare && !s.sel) {
+            if (g.board[r][c] && ((g.board[r][c] === g.board[r][c].toUpperCase()) === mine)) {
+                s.sel = [r, c]; s.legal = g.getLegalMoves([r, c]);
+                if (!s.legal.length) { s.sel = null; this._onlineStatus('That piece has no legal moves.'); }
+                this._drawOnline();
+            }
+            return;
+        }
+        const from = s.sel;
+        if (g.board[r][c] && ((g.board[r][c] === g.board[r][c].toUpperCase()) === mine) && !(from && from[0] === r && from[1] === c)) {
+            s.sel = [r, c]; s.legal = g.getLegalMoves([r, c]);
+            this._drawOnline();
+            return;
+        }
+        if (from && s.legal.some(m => m[0] === r && m[1] === c)) {
+            s.sel = null; s.legal = [];
+            const piece = g.board[from[0]][from[1]];
+            const needsPromo = piece && piece.toLowerCase() === 'p' && (r === 0 || r === 7);
+            if (needsPromo) { s.pendingPromo = { from, to: [r, c] }; this._drawOnline(); this._showOnlinePromotion(); return; }
+            this._onlinePlayMove(from, [r, c]);
+        } else {
+            s.sel = null; s.legal = [];
+            this._drawOnline();
+        }
+    }
+
+    _showOnlinePromotion() {
+        const s = this.online;
+        const picker = document.getElementById('online-promo');
+        if (!picker || !s?.pendingPromo) return;
+        picker.innerHTML = '';
+        picker.classList.remove('hidden');
+        const white = s.myColor === 'white';
+        const pieces = white ? ['Q', 'R', 'B', 'N'] : ['q', 'r', 'b', 'n'];
+        const names = { Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
+        const label = document.createElement('p');
+        label.className = 'promotion-label'; label.textContent = 'Promote to:';
+        picker.appendChild(label);
+        const row = document.createElement('div');
+        row.className = 'promotion-options';
+        pieces.forEach(p => {
+            const btn = document.createElement('button');
+            btn.className = 'promotion-btn';
+            btn.innerHTML = `${this._svg(p)}<span>${names[p]}</span>`;
+            btn.onclick = () => {
+                picker.innerHTML = ''; picker.classList.add('hidden');
+                const mv = s.pendingPromo; s.pendingPromo = null;
+                if (mv) this._onlinePlayMove(mv.from, mv.to, p);
+            };
+            row.appendChild(btn);
+        });
+        picker.appendChild(row);
+    }
+
+    /* ── Online actions ── */
+    async _onlineResignAsk() {
+        const s = this.online;
+        if (!s || s.phase !== 'play' || s.result) return;
+        const ok = await this._confirmModal({
+            title: 'Resign this game?',
+            body: `Your opponent takes the win${s.engine.moveHistory.length < 2 ? ' — and since barely anything was played, it will not be rated' : ''}.`,
+            okLabel: 'Resign', cancelLabel: 'Keep playing'
+        });
+        if (ok) this._onlineResign();
+    }
+    async _onlineLeaveAsk() {
+        const s = this.online;
+        if (!s) { this._onlineLeave(); return; }
+        if (s.phase !== 'play' || s.result) { this._onlineLeave(); return; }
+        const ok = await this._confirmModal({
+            title: 'Leave this game?',
+            body: 'Leaving counts as resigning — your opponent wins. Stay and fight instead?',
+            okLabel: 'Leave game', cancelLabel: 'Stay'
+        });
+        if (ok) { this._onlineResign(); this._onlineLeave(); }
+    }
+    _onlineReview() {
+        const s = this.online;
+        if (!s || s.phase !== 'over') return;
+        s.viewPly = 0;
+        this._drawOnline();
+        this._onlineStatus('Reviewing the game — step with ‹ ›, or jump back with Live.');
+    }
+    _onlineResign() {
+        const s = this.online;
+        if (!s || s.phase !== 'play' || s.result) return;
+        s.net.send(s.conn, { type: 'resign' });
+        // Resigning is always your own loss, whatever color you are.
+        this._onlineFinish('loss', 'resignation', s.role !== 'host');
+    }
+    _onlineDrawOffer() {
+        const s = this.online;
+        if (!s || s.phase !== 'play' || s.result) return;
+        s.net.send(s.conn, { type: 'draw_offer' });
+        this._onlineStatus('Draw offered. Waiting for your opponent…');
+    }
+    // Draw offers arrive as a popup (same as resign) so they are seen
+    // even on a phone with the sidebar scrolled away.
+    async _onlineDrawPrompt() {
+        const s = this.online;
+        if (!s || s.phase !== 'play' || s.result || s._drawOpen) return;
+        s._drawOpen = true;
+        this.snd.playCheck();
+        const accept = await this._confirmModal({
+            title: 'Draw offer',
+            body: `${s.opp?.name || 'Your opponent'} offers a draw. Accept and split the point?`,
+            okLabel: 'Accept draw', cancelLabel: 'Decline'
+        });
+        s._drawOpen = false;
+        const cur = this.online;
+        if (!cur || cur.phase !== 'play' || cur.result) return;
+        cur.net.send(cur.conn, { type: accept ? 'draw_accept' : 'draw_decline' });
+        if (accept) this._onlineFinish('draw', 'agreement', cur.role !== 'host');
+        else this._onlineStatus();
+    }
+    _onlineDrawAnswer(accept) {
+        const s = this.online;
+        document.getElementById('draw-decide')?.remove();
+        if (!s || s.phase !== 'play' || s.result) return;
+        s.net.send(s.conn, { type: accept ? 'draw_accept' : 'draw_decline' });
+        if (accept) this._onlineFinish('draw', 'agreement', s.role !== 'host');
+        else this._onlineStatus();
+    }
+    // Rematch needs BOTH players: asking sends a request, and the new
+    // game only starts after an explicit accept. Nobody is ever forced in.
+    _onlineRematch() {
+        const s = this.online;
+        if (!s || s.phase !== 'over' || s._rematchBusy) return;
+        s.rematchMe = true;
+        if (s.rematchOpp) {
+            if (s.role === 'host') { this._rematchStart(); return; }
+            this._onlineStatus('Both agreed! Waiting for the host to deal…');
+            return;
+        }
+        s.net.send(s.conn, { type: 'rematch_want', epoch: s.epoch || 0 });
+        this._onlineStatus(s.role === 'host'
+            ? 'Rematch offered — waiting for your opponent to accept…'
+            : 'Rematch requested! Waiting for the host to deal…');
+    }
+
+    _rematchStart() {
+        const s = this.online;
+        if (!s || s.role !== 'host') return;
+        const newColor = s.myColor === 'white' ? 'black' : 'white';
+        s.gameId = this._newGameId();
+        s.rematchMe = false; s.rematchOpp = false;
+        this._startOnlineGame(newColor, s.opp, s.control.id, true);
+        try { localStorage.setItem('cclast', JSON.stringify({ code: s.code, gameId: s.gameId })); } catch (_) {}
+        s.net.send(s.conn, { type: 'rematch_accept', epoch: s.epoch || 0, game_id: s.gameId, color: newColor === 'white' ? 'black' : 'white', control: s.control.id, state: this._buildOnlineState() });
+        this._renderOnlineGame();
+    }
+
+    async _rematchPrompt(who) {
+        const s = this.online;
+        if (!s || s.phase !== 'over' || s._rematchOpen) return;
+        s._rematchOpen = true;
+        const accept = await this._confirmModal({
+            title: 'Rematch?',
+            body: `${who} wants another game — colors swap. Accept?`,
+            okLabel: 'Accept', cancelLabel: 'Decline'
+        });
+        const cur = this.online;
+        s._rematchOpen = false;
+        if (!cur || cur.phase !== 'over') return;
+        if (accept) {
+            cur.rematchMe = true;
+            if (cur.role === 'host') {
+                if (cur.rematchOpp) this._rematchStart();
+            } else {
+                cur.net.send(cur.conn, { type: 'rematch_want', epoch: cur.epoch || 0 });
+                this._onlineStatus('Accepted! Waiting for the host to deal…');
+            }
+        } else {
+            cur.rematchMe = false;
+            cur.net.send(cur.conn, { type: 'rematch_decline', epoch: cur.epoch || 0 });
+            this._onlineStatus('Rematch declined.');
+        }
+    }
+
+    showHome()     { this._go('home-screen');     this._renderHome(); }
+    showLessons()  { this._go('lessons-screen');  this._renderLessons(); }
+    showLesson()   { this._go('lesson-screen'); }
+    showProgress() { this._go('progress-screen'); this._syncProgress(); }
+    showProfile()  { this._go('profile-screen');  this._renderProfile(); }
+
+    openUserProfile() {
+        if (this._clerk && this._clerk.user) {
+            try { this._clerk.openUserProfile({}); return; } catch (_) {}
+        }
+        this._fb('Sign in first to manage your account.', 'error');
+    }
+    async signOut() {
+        if (this._clerk) { try { await this._clerk.signOut(); } catch (_) {} }
+    }
+
+    /* ── Clerk authentication (optional, graceful without a key) ──── */
+    async _initAuth() {
+        const key = window.CHESS_CLERK_KEY;
+        if (!key || typeof key !== 'string' || !key.startsWith('pk_')) return; // no accounts configured
+        const loadScript = (src, keyAttr) => new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = src; s.async = true; s.crossOrigin = 'anonymous';
+            // The UMD bundle reads its key off its own script tag at
+            // evaluation time and aborts without it (per Clerk docs).
+            if (keyAttr) s.setAttribute('data-clerk-publishable-key', keyAttr);
+            s.onload = res; s.onerror = () => rej(new Error('auth unavailable'));
+            document.head.appendChild(s);
+        });
+        try {
+            // Pinned CDN bundles (the per-instance /npm path 307-redirects
+            // and never materializes window.Clerk under file://).
+            await loadScript('https://cdn.jsdelivr.net/npm/@clerk/ui@1/dist/ui.browser.js');
+            await loadScript('https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6/dist/clerk.browser.js', key);
+            if (!window.Clerk) throw new Error('auth unavailable');
+            await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
+            this._clerk = window.Clerk;
+            document.getElementById('auth-slot')?.removeAttribute('hidden');
+            document.getElementById('auth-btn')?.addEventListener('click', () => this._clerk.openSignIn({}));
+            document.getElementById('logout-btn')?.addEventListener('click', async () => { try { await this._clerk.signOut(); } catch (_) {} });
+            this._clerk.addListener(({ user }) => {
+                this._syncAuthUI();
+                this._setUser(user ? user.id : null);
+            });
+            this._syncAuthUI();
+            this._setUser(this._clerk.user ? this._clerk.user.id : null);
+        } catch (_) {
+            // Offline or blocked CDN: the course works fully without accounts.
+            document.getElementById('auth-slot')?.setAttribute('hidden', '');
+        }
+    }
+    _syncAuthUI() {
+        const slot = document.getElementById('userbutton-slot');
+        const cta = document.getElementById('auth-btn');
+        const logout = document.getElementById('logout-btn');
+        if (!slot || !cta || !this._clerk) return;
+        if (this._clerk.user) {
+            cta.setAttribute('hidden', '');
+            slot.removeAttribute('hidden');
+            logout?.removeAttribute('hidden');
+            if (!slot.dataset.mounted) {
+                slot.dataset.mounted = '1';
+                this._clerk.mountUserButton(slot);
+            }
+        } else {
+            delete slot.dataset.mounted;
+            slot.setAttribute('hidden', '');
+            slot.innerHTML = '';
+            logout?.setAttribute('hidden', '');
+            cta.removeAttribute('hidden');
+        }
+    }
+
+    /* ── Day / night mode ─────────────────────────────────────────── */
+    _resolveTheme() {
+        try {
+            const saved = localStorage.getItem('ccp_theme');
+            if (saved === 'day' || saved === 'night') return saved;
+        } catch (_) {}
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'day' : 'night';
+    }
+
+    _applyTheme(theme, persist = true) {
+        this.theme = theme === 'day' ? 'day' : 'night';
+        document.body.dataset.theme = this.theme;
+        // Theme-aware brand marks: white knight on dark chrome, black knight on light.
+        const v = ChessCourseApp.assetV();
+        const logo = document.getElementById('logo-img');
+        if (logo) logo.src = this.theme === 'day' ? `assets/logos/logo-for-light.png?${v}` : `assets/logos/logo-for-dark.png?${v}`;
+        const heroLogo = document.getElementById('hero-logo-img');
+        if (heroLogo) heroLogo.src = this.theme === 'day' ? `assets/logos/logo-for-light.png?${v}` : `assets/logos/logo-for-dark.png?${v}`;
+        if (persist) {
+            try { localStorage.setItem('ccp_theme', this.theme); } catch (_) {}
+        }
+        this._syncThemeButton();
+    }
+
+    toggleTheme(fromEl) {
+        if (this._themeBusy) return;
+        const next = this.theme === 'day' ? 'night' : 'day';
+        const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced) { this._applyTheme(next); return; }
+        // Creative wipe: a disc of the incoming sky blooms from the toggle,
+        // the theme swaps under cover, then the veil lifts.
+        let x = window.innerWidth - 120, y = 48;
+        if (fromEl && fromEl.getBoundingClientRect) {
+            const r = fromEl.getBoundingClientRect();
+            x = r.left + r.width / 2; y = r.top + r.height / 2;
+        }
+        this._themeBusy = true;
+        const veil = document.createElement('div');
+        veil.className = 'theme-wipe';
+        veil.style.setProperty('--wx', x + 'px');
+        veil.style.setProperty('--wy', y + 'px');
+        veil.dataset.incoming = next;
+        document.body.appendChild(veil);
+        requestAnimationFrame(() => requestAnimationFrame(() => veil.classList.add('cover')));
+        setTimeout(() => this._applyTheme(next), 200);
+        setTimeout(() => {
+            veil.classList.add('lift');
+            setTimeout(() => { veil.remove(); this._themeBusy = false; }, 450);
+        }, 420);
+    }
+
+    _syncThemeButton() {
+        const btn = document.getElementById('theme-toggle');
+        if (!btn) return;
+        const isDay = this.theme === 'day';
+        btn.querySelector('.theme-toggle-label').textContent = isDay ? 'Day' : 'Night';
+        btn.setAttribute('aria-pressed', isDay ? 'true' : 'false');
+        btn.title = isDay ? 'Switch to night mode' : 'Switch to day mode';
+    }
+
+    _renderProfile() {
+        const box = document.getElementById('profile-content');
+        if (!box) return;
+        const user = this._clerk?.user || null;
+        if (!user) {
+            box.innerHTML = `
+                <div class="profile-card profile-hero">
+                    <img class="profile-avatar" src="assets/pieces/white-king.svg" alt="Guest">
+                    <div class="profile-id">
+                        <h3>Guest learner</h3>
+                        <p>Sign in to track this course across devices — progress stays on this browser until then.</p>
+                        <p class="profile-joined"><span class="presence-dot"></span>${this._lastSeenText()}</p>
+                    </div>
+                </div>
+                ${this._profileStatsHTML('Guest learner')}
+                <div class="profile-card block">
+                    <h4 class="profile-sub">Lesson record</h4>
+                    <div class="profile-lessons">${this._profileLessonsHTML()}</div>
+                </div>
+                <div class="profile-actions">
+                    <button class="btn-primary btn-glow-strong" onclick="app._profileSignIn()">Sign in / Join</button>
+                </div>`;
+            return;
+        }
+        const name = user.fullName || user.username || (user.primaryEmailAddress?.emailAddress) || 'Player';
+        const email = user.primaryEmailAddress?.emailAddress || '';
+        const img = user.imageUrl || 'assets/pieces/white-king.svg';
+        let joined = '';
+        try { if (user.createdAt) joined = new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }); } catch (_) {}
+        box.innerHTML = `
+            <div class="profile-card profile-hero">
+                <img class="profile-avatar" src="${img}" alt="${name}">
+                <div class="profile-id">
+                    <h3>${name}</h3>
+                    ${email ? `<p>${email}</p>` : ''}
+                    ${joined ? `<p class="profile-joined">Playing since ${joined}</p>` : ''}
+                    <p class="profile-joined"><span class="presence-dot"></span>${this._lastSeenText()}</p>
+                </div>
+            </div>
+            ${this._profileStatsHTML(name)}
+            ${this._profileBattleHTML()}
+            <div class="profile-card block">
+                <h4 class="profile-sub">Online ratings</h4>
+                <div class="progress-stats">
+                    ${ChessCourseApp.onlineControls().map(c => `
+                        <div class="stat"><span class="stat-label">${c.name} ${c.label}</span><span class="stat-value" style="font-size:1.75rem">${OnlineRatings.get(this.userId, c.id)}</span></div>`).join('')}
+                </div>
+                <p style="font-size:.82rem;color:var(--text-muted-dim);margin-top:.75rem">Elo per time control, updated after every rated online game. Ratings live on this device.</p>
+            </div>
+            <div class="profile-card block">
+                <h4 class="profile-sub">Lesson record</h4>
+                <div class="profile-lessons">${this._profileLessonsHTML()}</div>
+            </div>
+            <div class="profile-actions">
+                <button class="btn-secondary" onclick="app.openUserProfile()">Manage account</button>
+                <button class="btn-secondary" onclick="app.signOut()">Log out</button>
+            </div>`;
+    }
+
+    _profileSignIn() {
+        if (this._clerk) { try { this._clerk.openSignIn({}); return; } catch (_) {} }
+        this._fb('Sign-in is unavailable right now.', 'error');
+    }
+
+    _profileStatsHTML(name) {
+        const n = this.progress.done.length, total = this.lessons.length;
+        const pct = Math.round((n / total) * 100);
+        return `
+            <div class="progress-overview profile-stats">
+                <h3>${name === 'Guest learner' ? 'Course stats' : 'Stats'}</h3>
+                <div class="progress-stats">
+                    <div class="stat">${this._tileIcon('book')}<span class="stat-label">Lessons Completed</span><span class="stat-value">${n}</span></div>
+                    <div class="stat">${this._tileIcon('layers')}<span class="stat-label">Total Lessons</span><span class="stat-value">${total}</span></div>
+                    <div class="stat">${this._tileIcon('target')}<span class="stat-label">Completion</span><span class="stat-value">${pct}%</span></div>
+                    <div class="stat">${this._tileIcon('clock')}<span class="stat-label">Time Studied</span><span class="stat-value" style="font-size:1.75rem">${this._fmtDuration(this._studyTotal())}</span></div>
+                </div>
+            </div>`;
+    }
+
+    _profileBattleHTML() {
+        const cats = ChessCourseApp.onlineControls();
+        const recs = cats.map(c => ({ c, r: OnlineRatings.record(this.userId, c.id) }));
+        const games = recs.reduce((a, x) => a + x.r.games, 0);
+        const blitz = recs.find(x => x.c.id === 'blitz').r;
+        const tiles = `
+            <div class="stat">${this._tileIcon('board')}<span class="stat-label">Games</span><span class="stat-value">${games}</span></div>
+            <div class="stat">${this._tileIcon('trophy')}<span class="stat-label">Win Rate</span><span class="stat-value">${blitz.games ? blitz.winRate + '%' : '—'}</span></div>
+            <div class="stat">${this._tileIcon('medal')}<span class="stat-label">Best Blitz</span><span class="stat-value" style="font-size:1.75rem">${blitz.games ? blitz.best : '—'}</span></div>
+            <div class="stat">${this._tileIcon('list')}<span class="stat-label">Record (B)</span><span class="stat-value" style="font-size:1.5rem">${blitz.games ? `${blitz.w}–${blitz.l}–${blitz.d}` : '—'}</span></div>`;
+        const hist = OnlineRatings.history(this.userId);
+        const rows = hist.length ? hist.map(g => {
+            const badge = g.result === 'win' ? '<span class="res-badge res-win">W</span>' : g.result === 'loss' ? '<span class="res-badge res-loss">L</span>' : '<span class="res-badge res-draw">D</span>';
+            const ctrl = (cats.find(c => c.id === g.control) || { name: g.control }).name;
+            const when = new Date(g.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const d = (g.delta === null || g.delta === undefined) ? '' : `<span class="delta ${g.delta >= 0 ? 'up' : 'down'}">${g.delta >= 0 ? '+' : ''}${g.delta}</span>`;
+            return `<div class="profile-lesson-row">${badge}<span class="profile-lesson-title">vs ${g.opp}</span><span class="recent-meta">${ctrl} · ${Math.ceil((g.plies || 0) / 2)} moves · ${when}</span>${d}</div>`;
+        }).join('') : '<p class="board-empty">No games yet — open the Online tab and take on a friend to start your record.</p>';
+        return `
+            <div class="profile-card block">
+                <h4 class="profile-sub">Battle record</h4>
+                <div class="progress-stats">${tiles}</div>
+            </div>
+            <div class="profile-card block">
+                <h4 class="profile-sub">Recent games</h4>
+                <div class="profile-lessons">${rows}</div>
+            </div>`;
+    }
+
+    _profileLessonsHTML() {
+        return this.lessons.map(l => {
+            const done = this.isDone(l.id), open = this.isOpen(l.id);
+            const badge = done ? '<span class="completed-badge">Done ✓</span>'
+                : open ? '<span class="profile-open">Ready to play</span>'
+                : '<span class="profile-locked">Locked</span>';
+            return `<div class="profile-lesson-row">
+                <span class="lesson-number sm">${l.id}</span>
+                <span class="profile-lesson-title">${l.title}</span>
+                ${badge}
+                <button class="btn-secondary sm" data-open-lesson="${l.id}" onclick="app.openLesson(${l.id})" ${open ? '' : 'disabled'}>${done ? 'Review' : 'Play'}</button>
+            </div>`;
+        }).join('');
+    }
+
+    _bindMenu() {
+        const btn = document.getElementById('menu-btn');
+        const nav = document.getElementById('main-nav');
+        if (!btn || !nav || btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        const close = () => this._closeMenu();
+        btn.addEventListener('click', () => {
+            const open = nav.classList.toggle('open');
+            btn.classList.toggle('open', open);
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+        document.addEventListener('click', (e) => {
+            if (nav.classList.contains('open') && !nav.contains(e.target) && !btn.contains(e.target)) close();
+        });
+        window.addEventListener('resize', () => { if (window.innerWidth > 900) close(); });
+    }
+    _closeMenu() {
+        const btn = document.getElementById('menu-btn');
+        const nav = document.getElementById('main-nav');
+        if (!btn || !nav) return;
+        nav.classList.remove('open');
+        btn.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-label', 'Open menu');
+    }
+
+    /* ── Study time + presence (real seconds on learning screens) ── */
+    _trackScreen(id) {
+        this._flushStudyTime();
+        this._studyOn = (id === 'lesson-screen' || id === 'online-screen');
+        this._studySince = Date.now();
+        try { localStorage.setItem('cc_seen_' + (this.userId || 'anon'), String(Date.now())); } catch (_) {}
+        try { if (this._studyTimer) clearInterval(this._studyTimer); } catch (_) {}
+        this._studyTimer = null;
+        if (this._studyOn) {
+            this._studyTimer = setInterval(() => this._flushStudyTime(), 30000);
+        }
+    }
+    _flushStudyTime() {
+        if (!this._studyOn || !this._studySince) return;
+        const secs = Math.round((Date.now() - this._studySince) / 1000);
+        this._studySince = Date.now();
+        if (secs <= 0) return;
+        const k = 'cc_time_' + (this.userId || 'anon');
+        try {
+            const d = JSON.parse(localStorage.getItem(k) || '{"total":0}');
+            d.total = (d.total || 0) + secs;
+            localStorage.setItem(k, JSON.stringify(d));
+        } catch (_) {}
+    }
+    _studyTotal() {
+        try { return JSON.parse(localStorage.getItem('cc_time_' + (this.userId || 'anon')) || '{"total":0}').total || 0; } catch (_) { return 0; }
+    }
+    _fmtDuration(secs) {
+        if (secs < 60) return '<1m';
+        const m = Math.floor(secs / 60), h = Math.floor(m / 60);
+        return h ? `${h}h ${m % 60}m` : `${m}m`;
+    }
+    _lastSeenText() {
+        let t = 0;
+        try { t = parseInt(localStorage.getItem('cc_seen_' + (this.userId || 'anon')) || '0', 10) || 0; } catch (_) {}
+        if (!t) return 'new here';
+        const mins = Math.floor((Date.now() - t) / 60000);
+        if (mins < 1) return 'active now';
+        if (mins < 60) return `active ${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `active ${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        return days === 1 ? 'active yesterday' : `active ${days}d ago`;
+    }
+
+    _go(id) {
+        this._trackScreen(id);
+        ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen']
+            .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
+        // Keep nav highlighted so users always know where they are
+        const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen': 'online' };
+        const active = navFor[id];
+        document.querySelectorAll('.nav-btn').forEach(b => {
+            const key = b.dataset.nav || b.textContent.trim().toLowerCase();
+            b.classList.toggle('active', key === active);
+        });
+        window.scrollTo(0, 0);
+    }
+
+    _bindNav() {
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            if (btn.dataset.navBound) return;
+            btn.dataset.navBound = '1';
+            btn.addEventListener('click', () => {
+                const key = (btn.dataset.nav || btn.textContent.trim()).toLowerCase();
+                if (key.startsWith('home')) this.showHome();
+                else if (key.startsWith('lesson')) this.showLessons();
+                else if (key.startsWith('theme')) this.toggleTheme(btn);
+                else if (key.startsWith('online')) this.showOnline();
+                else if (key.startsWith('profile')) this.showProfile();
+                else if (key.startsWith('progress')) this.showProgress();
+                this._closeMenu();
+            });
+        });
+        this._go(document.querySelector('.screen.active')?.id || 'home-screen');
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       FEEDBACK
+    ══════════════════════════════════════════════════════════════ */
+    _fb(msg, type = 'info') {
+        const el = document.getElementById('lesson-feedback');
+        if (!el) return;
+        el.textContent = msg; el.className = `feedback ${type}`;
+        el.style.animation = 'none';
+        requestAnimationFrame(() => { el.style.animation = ''; });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => { window.app = new ChessCourseApp(); });

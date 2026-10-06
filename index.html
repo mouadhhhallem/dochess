@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DoChess — Master the Game of Kings</title>
+    <meta name="description" content="DoChess: interactive chess course with 10 structured lessons. Learn moves, tactics, and strategy with a beautiful chess board.">
+    <link rel="icon" type="image/png" href="assets/logos/logo-for-light.png?v=22">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=26">
+</head>
+<body>
+    <div id="app">
+
+        <!-- ── Header ── -->
+        <header class="header">
+            <div class="container">
+                <div class="logo">
+                    <img class="logo-icon" id="logo-img" src="assets/logos/logo-for-dark.png?v=22" alt="DoChess">
+                    <div>
+                        <h1>DoChess</h1>
+                        <p>Learn Chess Academy</p>
+                    </div>
+                </div>
+                <button class="menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="main-nav" aria-label="Open menu">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></g></svg>
+                </button>
+                <nav class="nav" id="main-nav">
+                    <button class="nav-btn" id="nav-home" data-nav="home" onclick="showHome()" type="button">Home</button>
+                    <button class="nav-btn" id="nav-lessons" data-nav="lessons" onclick="showLessons()" type="button">Lessons</button>
+                    <button class="nav-btn" id="nav-progress" data-nav="progress" onclick="showProgress()" type="button">Progress</button>
+                    <button class="nav-btn" id="nav-profile" data-nav="profile" onclick="showProfile()" type="button">Profile</button>
+                    <button class="nav-btn" id="nav-online" data-nav="online" onclick="showOnline()" type="button">Online</button>
+                    <button class="nav-btn theme-toggle" id="theme-toggle" data-nav="theme" type="button" aria-pressed="false" title="Switch to day mode">
+                        <span class="theme-sky" aria-hidden="true">
+                            <svg class="theme-sun" viewBox="0 0 24 24"><g stroke-linecap="round"><circle cx="12" cy="12" r="4.6" fill="none" stroke-width="2"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M19.2 4.8l-1.8 1.8M6.6 17.4l-1.8 1.8" stroke-width="2"/></g></svg>
+                            <svg class="theme-moon" viewBox="0 0 24 24"><path d="M20.2 14.5A8.5 8.5 0 0 1 9.5 3.8a.7.7 0 0 0-.9-.9 10 10 0 1 0 12.5 12.5.7.7 0 0 0-.9-.9z"/><circle class="theme-star" cx="17.5" cy="5.5" r="1.1"/><circle class="theme-star s2" cx="20" cy="9" r=".8"/></svg>
+                        </span>
+                        <span class="theme-toggle-label">Night</span>
+                    </button>
+                    <span id="auth-slot" class="auth-slot" hidden>
+                        <button class="auth-cta" id="auth-btn" type="button">
+                            <svg class="auth-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></g></svg>
+                            <span>Sign in</span>
+                        </button>
+                        <span id="userbutton-slot" class="avatar-ring" hidden></span>
+                        <button class="nav-btn logout-btn" id="logout-btn" type="button" hidden>
+                            <svg class="logout-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4H6v16h8"/><path d="M10 12h11"/><path d="M18 8l3 4-3 4"/></g></svg>
+                            <span>Log out</span>
+                        </button>
+                    </span>
+                </nav>
+            </div>
+        </header>
+
+        <!-- ── Main Content ── -->
+        <main class="main-content">
+
+            <!-- Home Screen -->
+            <div id="home-screen" class="screen active">
+                <div class="container">
+
+                    <!-- Hero -->
+                    <div class="hero">
+                        <img class="hero-chess-icon" id="hero-logo-img" src="assets/logos/logo-for-dark.png?v=22" alt="DoChess">
+                        <h2>Master the <span>Game of Kings</span></h2>
+                        <p>Learn chess from scratch with 10 interactive lessons guided by expert teachers. Every move, every rule — made simple.</p>
+                        <button class="btn-primary btn-glow-strong" id="start-learning-btn" onclick="showLessons()" type="button">Start Learning →</button>
+                    </div>
+
+                    <!-- How it works: the real first-run path, nothing more -->
+                    <div class="how-strip" aria-label="How the course works">
+                        <div class="how-step"><span class="how-num">1</span><div><h4>Pick a lesson</h4><p>Ten lessons, in order — each unlocks the next.</p></div></div>
+                        <div class="how-step"><span class="how-num">2</span><div><h4>Make the move</h4><p>Play it on the real board. Feedback is instant.</p></div></div>
+                        <div class="how-step"><span class="how-num">3</span><div><h4>Complete &amp; unlock</h4><p>Finish the exercise, then take on the computer.</p></div></div>
+                    </div>
+
+                    <!-- Progress Overview -->
+                    <div class="progress-overview">
+                        <h3>Your Progress</h3>
+                        <div class="progress-stats">
+                            <div class="stat">
+                                <span class="stat-label">Lessons Completed</span>
+                                <span class="stat-value" id="lessons-completed">0</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Total Lessons</span>
+                                <span class="stat-value">10</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-label">Completion</span>
+                                <span class="stat-value" id="progress-percentage">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Teachers -->
+                    <div class="teachers-section">
+                        <h3>Meet Your Teachers</h3>
+                        <div class="teachers-grid" id="teachers-grid">
+                            <!-- Rendered by JS -->
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Lessons Screen -->
+            <div id="lessons-screen" class="screen">
+                <div class="container">
+                    <h2>Chess Lessons</h2>
+                    <div class="lessons-grid" id="lessons-grid">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lesson Detail Screen -->
+            <div id="lesson-screen" class="screen">
+                <div class="container">
+                    <button class="btn-secondary" style="margin-bottom:1.5rem" data-action="back-lessons" onclick="showLessons()" type="button">← Back to Lessons</button>
+                    <div id="lesson-content">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Screen -->
+            <div id="progress-screen" class="screen">
+                <div class="container">
+                    <h2>Your Learning Progress</h2>
+
+                    <div class="progress-chart">
+                        <p>Overall Completion</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="overall-progress"></div>
+                        </div>
+                        <p class="progress-label">
+                            <span id="lessons-completed-2">0</span> / 10 lessons complete —
+                            <span id="progress-percentage-2">0%</span>
+                        </p>
+                    </div>
+
+                    <div class="completed-lessons">
+                        <h3>Completed Lessons</h3>
+                        <div id="completed-lessons-list">
+                            <!-- Rendered by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Online Screen -->
+            <div id="online-screen" class="screen">
+                <div class="container">
+                    <h2>Play Online</h2>
+                    <div id="online-content">
+                        <!-- Rendered by JS: lobby, live game, or result -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Screen -->
+            <div id="profile-screen" class="screen">
+                <div class="container">
+                    <h2>Profile</h2>
+                    <div id="profile-content">
+                        <!-- Rendered by JS -->
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script src="chess.js?v=15"></script>
+    <script src="clerk-config.js?v=18"></script>
+    <script src="online.js?v=25"></script>
+    <script src="app.js?v=26"></script>
+    <script defer crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/peerjs@1/dist/peerjs.min.js"></script>
+</body>
+</html>

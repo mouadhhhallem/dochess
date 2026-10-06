@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Skill tooling + CLIs (reference material, not the app)
+skills/
+.playwright-cli/
+
+# Local logs and screenshots
+server.log
+*.png
+!assets/**/*.png
+
+# Scratch verify scripts + detector dumps
+_*_tmp.js
+detect.json
+detect2.json
+
+# Old debug/test helpers (not part of the app)
+debug.js
+debug2.js
+debug3.js
+test-chess.js
+test-chess2.js
+test-dom.js
+testcastling.js
+testempty.js
+testisempty.js
+testking.js
+testking2.js
+test_castling_fen.js
+after.png
+home.png
+board.png
+lesson-screen.png
