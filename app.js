@@ -141,7 +141,6 @@ class ChessCourseApp {
                 if (a === 'reset-board') this.resetBoard();
                 else if (a === 'mark-complete') this.markComplete();
                 else if (a === 'back-lessons') this.showLessons();
-                else if (a === 'pick-control') this._pickControl(action.dataset.id);
                 else if (a === 'online-host') this._onlineHost();
                 else if (a === 'online-host-code') this._onlineHost(action.dataset.code);
                 else if (a === 'online-join') this._onlineJoin();
@@ -1170,8 +1169,42 @@ class ChessCourseApp {
             { id: 'rapid',  name: 'Rapid',   label: '10+0', base: 600000, inc: 0 }
         ];
     }
+    // Rating bucket from estimated duration: base + 40×increment.
+    static _catFor(base, inc) {
+        const dur = base / 60000 + 40 * (inc / 60000);
+        return dur < 3 ? 'bullet' : dur < 8 ? 'blitz' : 'rapid';
+    }
+    static _classic(id) {
+        return { bullet: { base: 60000, inc: 0 }, blitz: { base: 300000, inc: 0 }, rapid: { base: 600000, inc: 0 } }[id] || null;
+    }
+    // Sanitize any control (lobby wheels, wire, old saves): only listed
+    // base/increment values survive; the category is always RECOMPUTED
+    // from duration so a wrong bucket can never smuggle through.
+    _cleanControl(o) {
+        let base = 300000, inc = 0;
+        if (typeof o === 'string') {
+            const c = ChessCourseApp._classic(o);
+            if (c) { base = c.base; inc = c.inc; }
+        } else if (o && typeof o === 'object') {
+            if ([60000, 120000, 180000, 300000, 600000, 900000, 1800000].includes(o.base)) base = o.base;
+            if ([0, 1000, 2000, 3000, 5000, 10000].includes(o.inc)) inc = o.inc;
+        }
+        const id = ChessCourseApp._catFor(base, inc);
+        return { id, name: id[0].toUpperCase() + id.slice(1), label: `${Math.round(base / 60000)}+${Math.round(inc / 1000)}`, base, inc };
+    }
+    _controlFor(minutes, sec) {
+        const m = [1, 2, 3, 5, 10, 15, 30].includes(minutes) ? minutes : 5;
+        const s = [0, 1, 2, 3, 5, 10].includes(sec) ? sec : 0;
+        return { ...this._cleanControl({ base: m * 60000, inc: s * 1000 }), minutes: m, incSec: s };
+    }
+    _wheelSummaryHTML(cur, signed) {
+        const rating = signed ? OnlineRatings.get(this.userId, cur.id) : '–';
+        return `<span class="ws-cat">${cur.name}</span><span class="ws-label">${cur.label}</span><span class="ws-rating">${rating}</span>`;
+    }
     _onlineControl() {
-        return ChessCourseApp.onlineControls().find(c => c.id === this._onlineControlId) || ChessCourseApp.onlineControls()[1];
+        let m = 5, s = 0;
+        try { const c = JSON.parse(localStorage.getItem('cc_control') || 'null'); if (c) { m = c.m; s = c.s; } } catch (_) {}
+        return this._controlFor(m, s);
     }
 
     showOnline() {
@@ -1189,7 +1222,7 @@ class ChessCourseApp {
             name: u ? (u.fullName || u.username || 'Player') : 'Guest',
             img: u?.imageUrl || null,
             ratings: cats,
-            rating: cats[this._onlineControlId || 'blitz']
+            rating: cats[this._onlineControl().id]
         };
     }
     // Opponent's rating for THIS game's control (never the lobby's).
@@ -1219,15 +1252,21 @@ class ChessCourseApp {
             return;
         }
         const signed = !!(this._clerk && this._clerk.user);
-        const controls = ChessCourseApp.onlineControls();
-        const sel = this._onlineControlId || 'blitz';
-        const tiles = controls.map(c => `
-            <button class="control-tile${c.id === sel ? ' sel' : ''}" data-action="pick-control" data-id="${c.id}">
-                <span class="control-name">${c.name}</span>
-                <span class="control-label">${c.label}</span>
-                <span class="control-rating">${signed ? OnlineRatings.get(this.userId, c.id) : '–'}</span>
-            </button>`).join('');
-        const board = OnlineRatings.board(sel).map((p, i) =>
+        let stored = { m: 5, s: 0 };
+        try { const c = JSON.parse(localStorage.getItem('cc_control') || 'null'); if (c) stored = c; } catch (_) {}
+        const cur = this._controlFor(stored.m, stored.s);
+        const mins = [1, 2, 3, 5, 10, 15, 30], secs = [0, 1, 2, 3, 5, 10];
+        const wheel = (kind, values, current, fmt) => `
+            <div class="wheel-col">
+                <span class="wheel-cap">${kind === 'min' ? 'Minutes' : 'Increment (sec)'}</span>
+                <div class="wheel-frame">
+                    <div class="wheel" id="wheel-${kind}" role="listbox" tabindex="0" aria-label="${kind === 'min' ? 'Base minutes' : 'Increment seconds'}">
+                        ${values.map((v, i) => `<button role="option" id="w${kind}-${i}" data-wheel="${kind}" data-val="${v}" aria-selected="${v === current}">${fmt(v)}</button>`).join('')}
+                    </div>
+                    <div class="wheel-band" aria-hidden="true"></div>
+                </div>
+            </div>`;
+        const board = OnlineRatings.board(cur.id).map((p, i) =>
             `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
             || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
         box.innerHTML = `
@@ -1236,7 +1275,11 @@ class ChessCourseApp {
            data-action="profile-signin">Sign in / Join</button></p></div>`}
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Time control</h4>
-                    <div class="control-grid">${tiles}</div>
+                    <div class="wheel-wrap">
+                        ${wheel('min', mins, cur.minutes ?? 5, (v) => v)}
+                        ${wheel('inc', secs, cur.incSec ?? 0, (v) => v)}
+                        <div class="wheel-summary" id="wheel-summary">${this._wheelSummaryHTML(cur, signed)}</div>
+                    </div>
                 </div>
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Play a friend</h4>
@@ -1261,16 +1304,104 @@ class ChessCourseApp {
                     <div id="online-lobby-status" class="feedback info" style="display:none"></div>
                 </div>
                 <div class="dashboard-section">
-                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Device leaderboard — ${controls.find(c => c.id === sel).name}</h4>
-                    <div class="board-list">${board}</div>
+                    <h4 id="wheel-board-head" style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Device leaderboard — ${cur.name}</h4>
+                    <div class="board-list" id="wheel-board-list">${board}</div>
                     <p class="lobby-hint">Every player this device has met, sorted by rating. A shared global board needs the backend from the system design; this one never leaves your browser.</p>
                 </div>
             </div>`;
+        this._bindWheels();
     }
 
-    _pickControl(id) {
-        this._onlineControlId = id;
-        this._renderOnlineLobby();
+    /* ── iPhone-style wheel picker: two snap columns ── */
+    _bindWheels() {
+        ['min', 'inc'].forEach(kind => {
+            const el = document.getElementById('wheel-' + kind);
+            if (!el || el.dataset.bound) return;
+            el.dataset.bound = '1';
+            const values = kind === 'min' ? [1, 2, 3, 5, 10, 15, 30] : [0, 1, 2, 3, 5, 10];
+            const opts = [...el.querySelectorAll('[role="option"]')];
+            const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const centerOn = (opt, smooth) => {
+                el.scrollTo({ top: opt.offsetTop - el.clientHeight / 2 + opt.clientHeight / 2, behavior: smooth && !reduced ? 'smooth' : 'auto' });
+            };
+            const paint = () => {
+                const mid = el.scrollTop + el.clientHeight / 2;
+                opts.forEach(o => {
+                    const t = (o.offsetTop + o.clientHeight / 2 - mid) / el.clientHeight;
+                    if (!reduced) o.style.transform = `rotateX(${(-t * 32).toFixed(1)}deg) scale(${(1 - Math.min(0.22, Math.abs(t) * 0.3)).toFixed(3)})`;
+                    o.style.opacity = (1 - Math.min(0.55, Math.abs(t) * 0.9)).toFixed(2);
+                });
+            };
+            const select = (val, fromUser) => {
+                const cur = el.querySelector('[aria-selected="true"]');
+                if (cur && cur.dataset.val === String(val)) { paint(); return; }
+                opts.forEach(o => o.setAttribute('aria-selected', o.dataset.val === String(val) ? 'true' : 'false'));
+                el.setAttribute('aria-activedescendant', `w${kind}-${values.indexOf(val)}`);
+                this._saveWheelSelection();
+                if (fromUser) { try { navigator.vibrate && navigator.vibrate(5); } catch (_) {} }
+                paint();
+            };
+            // Init: center stored value instantly, then paint once.
+            const init = opts.find(o => o.getAttribute('aria-selected') === 'true') || opts[0];
+            el.scrollTop = init.offsetTop - el.clientHeight / 2 + init.clientHeight / 2;
+            paint();
+            let raf = 0;
+            el.addEventListener('scroll', () => {
+                if (raf) return;
+                raf = requestAnimationFrame(() => {
+                    raf = 0;
+                    const mid = el.scrollTop + el.clientHeight / 2;
+                    let best = opts[0], bd = Infinity;
+                    opts.forEach(o => {
+                        const d = Math.abs(o.offsetTop + o.clientHeight / 2 - mid);
+                        if (d < bd) { bd = d; best = o; }
+                    });
+                    select(parseInt(best.dataset.val, 10), true);
+                });
+            }, { passive: true });
+            el.addEventListener('click', (e) => {
+                const o = e.target.closest('[role="option"]');
+                if (o) { centerOn(o, true); select(parseInt(o.dataset.val, 10), true); }
+            });
+            el.addEventListener('keydown', (e) => {
+                const cur = values.indexOf(parseInt((el.querySelector('[aria-selected="true"]') || {}).dataset?.val, 10));
+                const at = cur < 0 ? 0 : cur;
+                let to = null;
+                if (e.key === 'ArrowUp') to = Math.max(0, at - 1);
+                else if (e.key === 'ArrowDown') to = Math.min(values.length - 1, at + 1);
+                else if (e.key === 'PageUp') to = Math.max(0, at - 3);
+                else if (e.key === 'PageDown') to = Math.min(values.length - 1, at + 3);
+                else if (e.key === 'Home') to = 0;
+                else if (e.key === 'End') to = values.length - 1;
+                if (to !== null) { e.preventDefault(); centerOn(opts[to], true); select(values[to], true); }
+            });
+            // Pointer drag-to-scroll for desktop mice. (No setPointerCapture:
+            // capturing retargets the click to the wheel itself, which would
+            // break option taps. Touch scrolling is native and needs no help.)
+            let drag = null;
+            el.addEventListener('pointerdown', (e) => { drag = { y: e.clientY, top: el.scrollTop }; });
+            el.addEventListener('pointermove', (e) => { if (drag) el.scrollTop = drag.top - (e.clientY - drag.y); });
+            ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => el.addEventListener(ev, () => { drag = null; }));
+        });
+    }
+    _saveWheelSelection() {
+        const min = document.querySelector('#wheel-min [aria-selected="true"]');
+        const inc = document.querySelector('#wheel-inc [aria-selected="true"]');
+        if (!min || !inc) return;
+        const m = parseInt(min.dataset.val, 10), s = parseInt(inc.dataset.val, 10);
+        try { localStorage.setItem('cc_control', JSON.stringify({ m, s })); } catch (_) {}
+        const cur = this._controlFor(m, s);
+        const sum = document.getElementById('wheel-summary');
+        if (sum) sum.innerHTML = this._wheelSummaryHTML(cur, !!(this._clerk && this._clerk.user));
+        const head = document.getElementById('wheel-board-head');
+        if (head) head.textContent = `Device leaderboard — ${cur.name}`;
+        const list = document.getElementById('wheel-board-list');
+        if (list) {
+            const rows = OnlineRatings.board(cur.id).map((p, i) =>
+                `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
+                || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
+            list.innerHTML = rows;
+        }
     }
 
     _lastHosted() {
@@ -1314,7 +1445,7 @@ class ChessCourseApp {
     _resumeOnlineSession(rec) {
         const s = this.online;
         try {
-            const control = ChessCourseApp.onlineControls().find(c => c.id === rec.control) || s.control;
+            const control = this._cleanControl(rec.control && rec.control.base ? rec.control : rec.control);
             s.control = control;
             s.gameId = rec.gameId;
             s.myColor = rec.myColor || 'white';
@@ -1532,7 +1663,7 @@ class ChessCourseApp {
                 s.resumed = false; s.peerGone = false;
                 s.phase = 'play';
                 this._clearRejoin();
-                s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: s.control.id, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+                s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
                 this._flushPending();
                 this._startOnlineTick();
                 this._startOnlinePing();
@@ -1546,7 +1677,7 @@ class ChessCourseApp {
                 if (!same) { try { conn.close(); } catch (_) {} return; }
                 s.conn = conn; s.peerGone = false;
                 this._clearRejoin();
-                s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: s.control.id, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+                s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
                 this._flushPending();
                 this._onlineStatus();
                 this._drawOnline();
@@ -1565,7 +1696,7 @@ class ChessCourseApp {
             const myColor = Math.random() < 0.5 ? 'white' : 'black';
             this._startOnlineGame(myColor, s.opp);
             try { localStorage.setItem('cclast', JSON.stringify({ code: s.code, gameId: s.gameId })); } catch (_) {}
-            s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: s.control.id, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+            s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
             this._renderOnlineGame();
             return;
         }
@@ -1598,7 +1729,7 @@ class ChessCourseApp {
             if (typeof msg.epoch === 'number') s.epoch = msg.epoch;
             s.gameId = msg.game_id;
             s.opp = sanitizePeerUser(msg.user);
-            this._startOnlineGame(msg.color === 'white' ? 'white' : 'black', s.opp, msg.control, true);
+            this._startOnlineGame(msg.color === 'white' ? 'white' : 'black', s.opp, this._cleanControl(msg.control), true);
             this._applyOnlineState(msg.state);
             s.peerGone = false;
             this._clearRejoin();
@@ -1645,7 +1776,7 @@ class ChessCourseApp {
             if (!this._epochOk(msg)) return;
             s.gameId = msg.game_id;
             try { localStorage.setItem('cclast', JSON.stringify({ code: s.code, gameId: s.gameId })); } catch (_) {}
-            this._startOnlineGame(msg.color, s.opp, msg.control, true);
+            this._startOnlineGame(msg.color, s.opp, this._cleanControl(msg.control), true);
             this._applyOnlineState(msg.state);
             this._renderOnlineGame();
         }
@@ -1667,9 +1798,9 @@ class ChessCourseApp {
     /* ── Session lifecycle (host = pinned authority, §6-D2) ── */
     _newGameId() { return 'g_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
-    _startOnlineGame(myColor, opp, controlId, keepConn) {
+    _startOnlineGame(myColor, opp, controlOrId, keepConn) {
         const s = this.online;
-        const control = ChessCourseApp.onlineControls().find(c => c.id === (controlId || s.control.id)) || s.control;
+        const control = this._cleanControl(controlOrId !== undefined ? controlOrId : s.control);
         const selfPlay = !!(this.userId && this.userId !== 'guest' && opp && opp.id && opp.id !== 'guest' && opp.id === this.userId);
         Object.assign(s, {
             phase: 'play', myColor, oppColor: myColor === 'white' ? 'black' : 'white',
@@ -1861,7 +1992,7 @@ class ChessCourseApp {
         s.ratingDelta = delta; s.ratingAfter = rating;
         if (result !== 'aborted' && s.gameId) {
             OnlineRatings.pushHistory(this.userId, {
-                gameId: s.gameId, control: s.control.id, opp: s.opp?.name || 'Opponent',
+                gameId: s.gameId, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, opp: s.opp?.name || 'Opponent',
                 result, plies: s.engine.moveHistory.length, delta
             });
         }
@@ -1995,7 +2126,7 @@ class ChessCourseApp {
         const s = this.online;
         if (!s || !s.gameId || typeof OnlineStore === 'undefined') return;
         OnlineStore.saveGame({
-            gameId: s.gameId, code: s.code, control: s.control.id,
+            gameId: s.gameId, code: s.code, control: { id: s.control.id, base: s.control.base, inc: s.control.inc },
             role: s.role, myColor: s.myColor, opp: s.opp,
             moves: s.engine.moveHistory.map(m => ({ from: m.from, to: m.to, promo: m.promotion || null })),
             clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side },
@@ -2331,9 +2462,9 @@ class ChessCourseApp {
         const newColor = s.myColor === 'white' ? 'black' : 'white';
         s.gameId = this._newGameId();
         s.rematchMe = false; s.rematchOpp = false;
-        this._startOnlineGame(newColor, s.opp, s.control.id, true);
+            this._startOnlineGame(newColor, s.opp, s.control, true);
         try { localStorage.setItem('cclast', JSON.stringify({ code: s.code, gameId: s.gameId })); } catch (_) {}
-        s.net.send(s.conn, { type: 'rematch_accept', epoch: s.epoch || 0, game_id: s.gameId, color: newColor === 'white' ? 'black' : 'white', control: s.control.id, state: this._buildOnlineState() });
+        s.net.send(s.conn, { type: 'rematch_accept', epoch: s.epoch || 0, game_id: s.gameId, color: newColor === 'white' ? 'black' : 'white', control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, state: this._buildOnlineState() });
         this._renderOnlineGame();
     }
 

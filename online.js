@@ -110,16 +110,18 @@ class OnlineNet {
         const sq = (v) => isStr(v) && /^[a-h][1-8]$/.test(v);
         const promo = (v) => v === null || v === undefined || (isStr(v) && /^[QRBNqrbn]$/.test(v));
         const user = (v) => v === undefined || (v && typeof v === 'object');
+        const ctrl = (v) => v === undefined || (v && typeof v === 'object' && (v.id === undefined || isStr(v.id)) && (v.base === undefined || isNum(v.base)) && (v.inc === undefined || isNum(v.inc)));
         switch (msg.type) {
             case 'hello': return isStr(msg.code) && user(msg.user) && (msg.rejoin === undefined || isBool(msg.rejoin)) && (msg.lastPly === undefined || isNum(msg.lastPly));
-            case 'welcome': return isStr(msg.game_id) && (msg.color === 'white' || msg.color === 'black') && isStr(msg.control) && user(msg.user) && (!msg.state || typeof msg.state === 'object');
+            case 'welcome': return isStr(msg.game_id) && (msg.color === 'white' || msg.color === 'black') && ctrl(msg.control) && user(msg.user) && (!msg.state || typeof msg.state === 'object');
             case 'move': return sq(msg.from) && sq(msg.to) && promo(msg.promo) && (msg.ply === undefined || isNum(msg.ply)) && (msg.mid === undefined || isStr(msg.mid));
             case 'state': return !msg.state || typeof msg.state === 'object';
             case 'rejected': return true;
             case 'game_over': return isStr(msg.result) && (msg.reason === undefined || isStr(msg.reason));
             case 'resign': case 'draw_offer': case 'draw_accept': case 'draw_decline':
-            case 'rematch_want': case 'rematch_accept': case 'rematch_decline': case 'sync_request':
+            case 'rematch_want': case 'rematch_decline': case 'sync_request':
                 return true;
+            case 'rematch_accept': return ctrl(msg.control);
             case 'host_left': return true;
             case 'ping': case 'pong': return true;
             default: return false;
