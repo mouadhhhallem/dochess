@@ -20,6 +20,11 @@ class ChessGame {
         // When a pawn reaches the back rank we store the pending move here
         // and wait for the player to choose a piece before finalising.
         this.pendingPromotion = null; // { from:[r,c], to:[r,c] }
+        // Draw-rule state (Phase 4): reversible-halfmove clock and a count
+        // of each reached position key for threefold repetition.
+        this.halfmoveClock = 0;
+        this.positionCounts = {};
+        this._recordPosition();
     }
 
     _startBoard() {
@@ -56,6 +61,68 @@ class ChessGame {
         this.gameOver = false;
         this.result = null;
         this.pendingPromotion = null;
+        this.halfmoveClock = parts[4] !== undefined ? Math.max(0, parseInt(parts[4], 10) || 0) : 0;
+        this.positionCounts = {};
+        this._recordPosition();
+    }
+
+    // ── Draw-rule helpers ──────────────────────────────────────────────
+    // Position key: board + side to move + castling rights + en-passant file.
+    _positionKey() {
+        let s = '';
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) s += this.board[r][c] || '.';
+        const cr = (this.castlingRights.K ? 'K' : '') + (this.castlingRights.Q ? 'Q' : '') + (this.castlingRights.k ? 'k' : '') + (this.castlingRights.q ? 'q' : '') || '-';
+        const ep = this.enPassantTarget ? this._rcToAlg(this.enPassantTarget[0], this.enPassantTarget[1]) : '-';
+        return s + ' ' + this.currentPlayer[0] + ' ' + cr + ' ' + ep;
+    }
+    _recordPosition() {
+        const k = this._positionKey();
+        this.positionCounts[k] = (this.positionCounts[k] || 0) + 1;
+    }
+    repetitionCount() {
+        return this.positionCounts[this._positionKey()] || 0;
+    }
+    // Automatic-draw material: bare kings, one minor piece total, or two
+    // same-colour bishops and nothing else. Everything else can mate.
+    _insufficientMaterial() {
+        const rest = [];
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            const p = this.board[r][c];
+            if (p && p.toLowerCase() !== 'k') rest.push({ t: p.toLowerCase(), dark: (r + c) % 2 === 1 });
+        }
+        if (rest.length === 0) return true;
+        if (rest.length === 1 && (rest[0].t === 'b' || rest[0].t === 'n')) return true;
+        if (rest.length === 2 && rest[0].t === 'b' && rest[1].t === 'b' && rest[0].dark === rest[1].dark) return true;
+        return false;
+    }
+    // Save/restore everything a search (or perft) mutates.
+    snapshot() {
+        return {
+            board: this.board.map(r => r.slice()),
+            castling: { ...this.castlingRights },
+            ep: this.enPassantTarget ? this.enPassantTarget.slice() : null,
+            half: this.halfmoveClock,
+            counts: { ...this.positionCounts },
+            histLen: this.moveHistory.length,
+            player: this.currentPlayer,
+            pending: this.pendingPromotion,
+            over: this.gameOver,
+            result: this.result
+        };
+    }
+    restore(s) {
+        this.board = s.board.map(r => r.slice());
+        this.castlingRights = { ...s.castling };
+        this.enPassantTarget = s.ep ? s.ep.slice() : null;
+        this.halfmoveClock = s.half;
+        this.positionCounts = { ...s.counts };
+        this.moveHistory.length = s.histLen;
+        this.currentPlayer = s.player;
+        this.pendingPromotion = s.pending;
+        this.gameOver = s.over;
+        this.result = s.result;
+        this.selectedSquare = null;
+        this.legalMoves = [];
     }
 
     // ── Coordinate helpers ───────────────────────────────────────────────
@@ -278,7 +345,9 @@ class ChessGame {
                 this.pendingPromotion={from, to};
                 return 'promotion-needed';
             }
-            promotion = promotionPiece;
+            // Coerce the promotion piece to the mover's color so a wrong-case
+            // caller can never smuggle an enemy piece onto the board.
+            promotion = color === 'white' ? promotionPiece.toUpperCase() : promotionPiece.toLowerCase();
             this.board[tr][tc] = promotion;
             specialMove = specialMove||'promotion';
         }
@@ -302,10 +371,15 @@ class ChessGame {
         if (tr===0&&tc===0) this.castlingRights.q=false;
         if (tr===0&&tc===7) this.castlingRights.k=false;
 
+        // Halfmove clock: pawn moves and captures reset it.
+        if (type === 'p' || captured) this.halfmoveClock = 0;
+        else this.halfmoveClock = (this.halfmoveClock || 0) + 1;
+
         const move={from:this._rcToAlg(fr,fc), to:this._rcToAlg(tr,tc), piece, captured, promotion, specialMove};
         this.moveHistory.push(move);
         this.currentPlayer=this.enemy(this.currentPlayer);
         this.pendingPromotion=null;
+        this._recordPosition();
         return move;
     }
 
@@ -332,10 +406,16 @@ class ChessGame {
         return !this._isKingInCheck(this.currentPlayer)&&!this.hasAnyLegalMoves(this.currentPlayer);
     }
     isKingInCheckDirect(c) { return this._isKingInCheck(c); }
+    isInsufficientMaterial() { return this._insufficientMaterial(); }
+    isThreefold() { return this.repetitionCount() >= 3; }
+    isFiftyMove() { return (this.halfmoveClock || 0) >= 100; }
     getGameStatus() {
         const cp=this.currentPlayer;
         if (this.isCheckmate()) return `checkmate-${this.enemy(cp)}`;
         if (this.isStalemate()) return 'stalemate';
+        if (this._insufficientMaterial()) return 'draw-insufficient';
+        if ((this.halfmoveClock || 0) >= 100) return 'draw-fifty';
+        if (this.repetitionCount() >= 3) return 'draw-repetition';
         if (this._isKingInCheck(cp)) return `check-${cp}`;
         return 'ongoing';
     }

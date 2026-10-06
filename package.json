@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
-    "test": "node test-elo.js && playwright test --reporter=list"
+    "test": "node test-elo.js && node test-draws.js && node perft.js && playwright test --reporter=list"
   },
   "keywords": [],
   "author": "",

@@ -1129,10 +1129,35 @@ body {
 .lesson-actions {
     display: flex;
     justify-content: center;
+    align-items: center;
     gap: 1rem;
     margin-top: 2rem;
     flex-wrap: wrap;
 }
+
+.diff-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.diff-select {
+    background: var(--bg-main);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 0.55rem 0.8rem;
+    min-height: 44px;
+    cursor: pointer;
+}
+
+.diff-select:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
 
 .feedback {
     margin-top: 1.75rem;

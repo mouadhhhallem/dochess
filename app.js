@@ -87,6 +87,7 @@ class ChessCourseApp {
         this.exerciseDone     = false;   // locks board after correct move (non-free lessons)
         this.isFreeGame       = false;   // lesson 10
         this.cpuBusy          = false;   // prevents double-clicks while computer thinks
+        this._cpuDifficulty   = 'easy';   // lesson-10 selector: easy (depth 2, blunders) or medium (depth 3)
         this.progress         = this._loadProgress();
         this._boot();
     }
@@ -463,15 +464,26 @@ class ChessCourseApp {
                     </div>
                     <div class="lesson-actions">
                         <button class="btn-secondary" data-action="reset-board">Reset Board</button>
+                        ${free ? `<label class="diff-label">Computer:
+                            <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
+                                <option value="easy" selected>Easy</option>
+                                <option value="medium">Medium</option>
+                            </select></label>` : ''}
                         ${btn}
                     </div>
                 </div>
             </div>`;
 
         this._initBoard(l);
+        const diff = document.getElementById('cpu-diff');
+        if (diff) {
+            diff.value = this._cpuDifficulty || 'easy';
+            diff.addEventListener('change', () => { this._cpuDifficulty = diff.value; });
+        }
     }
 
     _initBoard(l) {
+        this._searchEpoch = (this._searchEpoch || 0) + 1;
         this.exerciseDone    = false;
         this.isFreeGame      = l.type === 'free-game';
         this.cpuBusy         = false;
@@ -707,6 +719,15 @@ class ChessCourseApp {
             this._fb("Stalemate! It's a draw — no legal moves.", 'info');
             this.game.gameOver = true; this._updateTurnUI(); return;
         }
+        if (status.startsWith('draw-')) {
+            const msgs = {
+                'draw-insufficient': 'Draw — neither side can possibly checkmate.',
+                'draw-repetition': 'Draw by threefold repetition — same position three times.',
+                'draw-fifty': 'Draw by the fifty-move rule — 50 moves with no pawn move or capture.'
+            };
+            this._fb(msgs[status] || "It's a draw.", 'info');
+            this.game.gameOver = true; this._updateTurnUI(); return;
+        }
         if (status.startsWith('check-white')) {
             this._fb('Your king is in check! You must defend it.', 'error');
             this.snd.playCheck();
@@ -722,22 +743,95 @@ class ChessCourseApp {
         if (this.game.currentPlayer === 'black' && !this.game.gameOver) {
             this.cpuBusy = true;
             this._updateTurnUI();
-            this._setSpeech('Calculating...');
+            this._setSpeech((this._cpuDifficulty || 'easy') === 'medium' ? 'Thinking a few moves deep…' : 'Playing a casual move…');
             setTimeout(() => this._cpuMove(), 650);
         }
     }
 
     /* ══════════════════════════════════════════════════════════════
-       COMPUTER MOVE
+       COMPUTER MOVE — alpha-beta over material + piece-square tables.
+       Scores are centipawns from Black's (the computer's) perspective.
     ══════════════════════════════════════════════════════════════ */
+    static _pst() {
+        if (ChessCourseApp._pstCache) return ChessCourseApp._pstCache;
+        const T = (rows) => rows;
+        ChessCourseApp._pstCache = {
+            p: T([[0,0,0,0,0,0,0,0],[50,50,50,50,50,50,50,50],[10,10,20,30,30,20,10,10],[5,5,10,25,25,10,5,5],[0,0,0,20,20,0,0,0],[5,-5,-10,0,0,-10,-5,5],[5,10,10,-20,-20,10,10,5],[0,0,0,0,0,0,0,0]]),
+            n: T([[-50,-40,-30,-30,-30,-30,-40,-50],[-40,-20,0,0,0,0,-20,-40],[-30,0,10,15,15,10,0,-30],[-30,5,15,20,20,15,5,-30],[-30,0,15,20,20,15,0,-30],[-30,5,10,15,15,10,5,-30],[-40,-20,0,5,5,0,-20,-40],[-50,-40,-30,-30,-30,-30,-40,-50]]),
+            b: T([[-20,-10,-10,-10,-10,-10,-10,-20],[-10,0,0,0,0,0,0,-10],[-10,0,5,10,10,5,0,-10],[-10,5,5,10,10,5,5,-10],[-10,0,10,10,10,10,0,-10],[-10,10,10,10,10,10,10,-10],[-10,5,0,0,0,0,5,-10],[-20,-10,-10,-10,-10,-10,-10,-20]]),
+            r: T([[0,0,0,0,0,0,0,0],[5,10,10,10,10,10,10,5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[-5,0,0,0,0,0,0,-5],[0,0,0,5,5,0,0,0]]),
+            q: T([[-20,-10,-10,-5,-5,-10,-10,-20],[-10,0,0,0,0,0,0,-10],[-10,0,5,5,5,5,0,-10],[-5,0,5,5,5,5,0,-5],[0,0,5,5,5,5,0,-5],[-10,5,5,5,5,5,0,-10],[-10,0,5,0,0,0,0,-10],[-20,-10,-10,-5,-5,-10,-10,-20]]),
+            k: T([[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-30,-40,-40,-50,-50,-40,-40,-30],[-20,-30,-30,-40,-40,-30,-30,-20],[-10,-20,-20,-20,-20,-20,-20,-10],[20,20,0,0,0,0,20,20],[20,30,10,0,0,10,30,20]])
+        };
+        return ChessCourseApp._pstCache;
+    }
+    static _mat() { return { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 }; }
+
+    _allMoves(g, color) {
+        const out = [];
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            if (!g.isColor(r, c, color)) continue;
+            const piece = g.board[r][c];
+            g.getLegalMoves([r, c]).forEach(([tr, tc]) => {
+                const promo = (piece.toLowerCase() === 'p' && (tr === 0 || tr === 7)) ? 'q' : null;
+                const target = g.board[tr][tc];
+                out.push({ from: [r, c], to: [tr, tc], promo, cap: target ? (ChessCourseApp._mat()[target.toLowerCase()] || 0) : 0 });
+            });
+        }
+        return out;
+    }
+    _orderMoves(g, moves) {
+        return moves.slice().sort((a, b) => b.cap - a.cap);
+    }
+    _evaluate(g) {
+        const pst = ChessCourseApp._pst(), mat = ChessCourseApp._mat();
+        let black = 0, white = 0;
+        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+            const p = g.board[r][c];
+            if (!p) continue;
+            const t = p.toLowerCase(), v = (mat[t] || 0) + ((pst[t] || [])[p === p.toUpperCase() ? r : 7 - r]?.[c] || 0);
+            if (p === p.toUpperCase()) white += v; else black += v;
+        }
+        return black - white;
+    }
+    _search(g, depth, alpha, beta, maxBlack) {
+        if (g._insufficientMaterial() || g.repetitionCount() >= 3 || (g.halfmoveClock || 0) >= 100) return 0;
+        const color = maxBlack ? 'black' : 'white';
+        const moves = this._orderMoves(g, this._allMoves(g, color));
+        if (!moves.length) {
+            if (!g.findKing(color)) return 0;
+            return g._isKingInCheck(color) ? (maxBlack ? -100000 - depth : 100000 + depth) : 0;
+        }
+        if (depth === 0) return this._evaluate(g);
+        if (maxBlack) {
+            let best = -Infinity;
+            for (const mv of moves) {
+                const snap = g.snapshot();
+                g.movePiece(mv.from, mv.to, mv.promo || null);
+                const v = this._search(g, depth - 1, alpha, beta, false);
+                g.restore(snap);
+                if (v > best) best = v;
+                if (best > alpha) alpha = best;
+                if (alpha >= beta) break;
+            }
+            return best;
+        }
+        let best = Infinity;
+        for (const mv of moves) {
+            const snap = g.snapshot();
+            g.movePiece(mv.from, mv.to, mv.promo || null);
+            const v = this._search(g, depth - 1, alpha, beta, true);
+            g.restore(snap);
+            if (v < best) best = v;
+            if (best < beta) beta = best;
+            if (alpha >= beta) break;
+        }
+        return best;
+    }
     _cpuMove() {
         if (this.game.gameOver) { this.cpuBusy = false; return; }
         const g = this.game;
-        const moves = [];
-        for (let r = 0; r < 8; r++)
-            for (let c = 0; c < 8; c++)
-                if (g.isColor(r, c, 'black'))
-                    g.getLegalMoves([r, c]).forEach(to => moves.push({ from: [r, c], to }));
+        const moves = this._allMoves(g, 'black');
 
         if (!moves.length) {
             // No legal black moves — distinguish checkmate from stalemate
@@ -756,18 +850,48 @@ class ChessCourseApp {
             return;
         }
 
-        // Score: capture value + center bonus + tiny random
-        const vals = { p:1, n:3, b:3.2, r:5, q:9, k:0 };
-        const scored = moves.map(mv => {
-            const target = g.board[mv.to[0]][mv.to[1]];
-            const cv = target ? (vals[target.toLowerCase()] || 0) * 10 : 0;
-            const cr = mv.to[0], cc = mv.to[1];
-            const center = (cr >= 3 && cr <= 4 && cc >= 3 && cc <= 4) ? 2 : 0;
-            return { ...mv, score: cv + center + Math.random() };
-        });
-        scored.sort((a, b) => b.score - a.score);
-        const best = scored[0];
+        const diff = this._cpuDifficulty || 'easy';
+        const depth = diff === 'medium' ? 3 : 2;
+        this._setSpeech(diff === 'medium' ? 'Thinking three moves deep…' : 'Playing a casual move…');
+        // Chunked root search so the UI never freezes: a few root moves per
+        // macrotask, best-so-far kept throughout. The epoch aborts a stale
+        // search if the board was reset mid-think.
+        const epoch = this._searchEpoch || 0;
+        const ordered = this._orderMoves(g, moves);
+        let i = 0, alpha = -Infinity, scored = [];
+        const step = () => {
+            if (this.game !== g || epoch !== this._searchEpoch || g.gameOver) { this.cpuBusy = false; this._updateTurnUI(); return; }
+            const t0 = Date.now();
+            while (i < ordered.length && Date.now() - t0 < 40) {
+                const mv = ordered[i++];
+                const snap = g.snapshot();
+                g.movePiece(mv.from, mv.to, mv.promo || null);
+                // _search scores from Black's perspective; after Black's
+                // move it is White (minimizer) to move.
+                const sc = this._search(g, depth - 1, alpha, Infinity, false);
+                g.restore(snap);
+                scored.push({ ...mv, score: sc });
+                if (sc > alpha) alpha = sc;
+            }
+            if (i < ordered.length) { setTimeout(step, 0); return; }
+            scored.sort((a, b) => b.score - a.score);
+            let best = scored[0];
+            if (diff !== 'medium' && scored.length > 1) {
+                // Easy blunders like a beginner: mostly near-best, sometimes wild.
+                if (Math.random() < 0.15) best = scored[Math.floor(Math.random() * scored.length)];
+                else {
+                    const pool = scored.filter(m => best.score - m.score <= 60);
+                    best = pool[Math.floor(Math.random() * pool.length)];
+                }
+            }
+            this._commitCpuMove(best);
+        };
+        setTimeout(step, 0);
+        return; // commit happens async below
+    }
 
+    _commitCpuMove(best) {
+        const g = this.game;
         // Computer always promotes to queen
         const piece = g.board[best.from[0]][best.from[1]];
         const isPromo = piece && piece.toLowerCase() === 'p' && (best.to[0] === 0 || best.to[0] === 7);
@@ -786,6 +910,13 @@ class ChessCourseApp {
             g.gameOver = true;
         } else if (status === 'stalemate') {
             this._fb("Stalemate — it's a draw.", 'info'); g.gameOver = true;
+        } else if (status.startsWith('draw-')) {
+            const msgs = {
+                'draw-insufficient': 'Draw — neither side can possibly checkmate.',
+                'draw-repetition': 'Draw by threefold repetition.',
+                'draw-fifty': 'Draw by the fifty-move rule.'
+            };
+            this._fb(msgs[status] || "It's a draw.", 'info'); g.gameOver = true;
         } else if (status.startsWith('check-white')) {
             this._fb('Your king is in check! Defend it.', 'error'); this.snd.playCheck();
         } else {
@@ -945,7 +1076,7 @@ class ChessCourseApp {
 
         // Speech bubble
         if (lockedDone) { this._setSpeech('Well done! Click "Complete Lesson" to continue.'); return; }
-        if (this.cpuBusy) { this._setSpeech('The grandmaster is calculating...'); return; }
+        if (this.cpuBusy) { this._setSpeech((this._cpuDifficulty || 'easy') === 'medium' ? 'Thinking a few moves deep…' : 'Playing a casual move…'); return; }
         if (this.game.gameOver) return;
         const status = this.game.getGameStatus();
         if (status.startsWith('check-white'))      this._setSpeech('Your king is in check — defend it!');
@@ -1689,6 +1820,8 @@ class ChessCourseApp {
             this._onlineFinish(winner === s.myColor ? 'win' : 'loss', 'checkmate', !fromHost);
         } else if (status === 'stalemate') {
             this._onlineFinish('draw', 'stalemate', !fromHost);
+        } else if (status.startsWith('draw-')) {
+            this._onlineFinish('draw', status, !fromHost);
         } else {
             if (status.startsWith('check-')) this.snd.playCheck();
             this._onlineStatus();
@@ -1824,7 +1957,7 @@ class ChessCourseApp {
     }
 
     _reasonText(reason) {
-        return { checkmate: 'Checkmate on the board.', resignation: 'by resignation.', stalemate: 'Stalemate.', agreement: 'by mutual agreement.', timeout: 'on time.', material: 'Neither side can mate.', aborted: 'Too short to rate — no rating change.', forfeit: 'by forfeit — opponent disconnected.' }[reason] || '';
+        return { checkmate: 'Checkmate on the board.', resignation: 'by resignation.', stalemate: 'Stalemate.', agreement: 'by mutual agreement.', timeout: 'on time.', material: 'Neither side can mate.', aborted: 'Too short to rate — no rating change.', forfeit: 'by forfeit — opponent disconnected.', 'draw-insufficient': 'Neither side can mate.', 'draw-repetition': 'Threefold repetition.', 'draw-fifty': 'Fifty-move rule.' }[reason] || '';
     }
 
     // Small promise modal: {title, body, okLabel, cancelLabel} -> true/false.
