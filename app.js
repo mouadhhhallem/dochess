@@ -1030,13 +1030,24 @@ class ChessCourseApp {
 
     _meTag() {
         const u = this._clerk?.user;
-        const cat = (this._onlineControlId || 'blitz');
+        const cats = {};
+        ChessCourseApp.onlineControls().forEach(c => { cats[c.id] = OnlineRatings.get(this.userId, c.id); });
         return {
             id: this.userId || 'guest',
             name: u ? (u.fullName || u.username || 'Player') : 'Guest',
             img: u?.imageUrl || null,
-            rating: OnlineRatings.get(this.userId, cat)
+            ratings: cats,
+            rating: cats[this._onlineControlId || 'blitz']
         };
+    }
+    // Opponent's rating for THIS game's control (never the lobby's).
+    _oppRatingFor() {
+        const s = this.online;
+        const cat = s?.control.id || 'blitz';
+        const o = s?.opp || {};
+        if (o.ratings && typeof o.ratings[cat] === 'number') return o.ratings[cat];
+        if (typeof o.rating === 'number' && isFinite(o.rating)) return o.rating;
+        return OnlineRatings.START;
     }
 
     /* ── Lobby ── */
@@ -1150,6 +1161,7 @@ class ChessCourseApp {
             s.myColor = rec.myColor || 'white';
             s.oppColor = s.myColor === 'white' ? 'black' : 'white';
             s.opp = rec.opp || { id: 'guest', name: 'Friend' };
+            s.unrated = !!(this.userId && this.userId !== 'guest' && s.opp.id && s.opp.id !== 'guest' && s.opp.id === this.userId);
             s.engine = new ChessGame();
             (rec.moves || []).forEach(m => {
                 s.engine.movePiece(s.engine.algebraicToCoords(m.from), s.engine.algebraicToCoords(m.to), m.promo || null);
@@ -1284,6 +1296,13 @@ class ChessCourseApp {
                     else { s.clock[key] = 0; this._onlineFinish(foe === s.myColor ? 'win' : 'loss', 'timeout'); }
                     return;
                 }
+                // Forfeit: opponent gone past the grace window with the game
+                // undecided — the survivor takes the win (unrated if <2 plies
+                // via the abort rule in _onlineFinish).
+                if (s.peerGone && s.dcSince && performance.now() - s.dcSince > 45000) {
+                    this._onlineFinish('win', 'forfeit');
+                    return;
+                }
             }
             this._paintOnlineClocks();
         }, 100);
@@ -1372,6 +1391,15 @@ class ChessCourseApp {
                 this._flushPending();
                 this._onlineStatus();
                 this._drawOnline();
+                return;
+            }
+            if (s.phase === 'over') {
+                // Late hello after the game ended: converge the peer on the
+                // final verdict instead of leaving them retrying forever.
+                const pr = s.result === 'win' ? 'loss' : s.result === 'loss' ? 'win' : 'draw';
+                s.net.send(conn, { type: 'game_over', result: pr, reason: s.reason, epoch: s.epoch || 0 });
+                s.net.send(conn, { type: 'state', epoch: s.epoch || 0, state: this._buildOnlineState() });
+                try { conn.close(); } catch (_) {}
                 return;
             }
             if (s.phase !== 'waiting') { try { conn.close(); } catch (_) {} return; }
@@ -1471,6 +1499,7 @@ class ChessCourseApp {
         // Stale duplicate connections dying must not disturb the live one.
         if (conn && s.conn && conn !== s.conn) return;
         s.peerGone = true;
+        s.dcSince = performance.now();
         if (s.role === 'host') this._onlineStatus(`Your opponent disconnected — they can rejoin with code ${s.code}.`);
         else { this._onlineStatus('Connection lost — retrying…'); this._scheduleRejoin(); }
         this._drawOnline();
@@ -1482,9 +1511,11 @@ class ChessCourseApp {
     _startOnlineGame(myColor, opp, controlId, keepConn) {
         const s = this.online;
         const control = ChessCourseApp.onlineControls().find(c => c.id === (controlId || s.control.id)) || s.control;
+        const selfPlay = !!(this.userId && this.userId !== 'guest' && opp && opp.id && opp.id !== 'guest' && opp.id === this.userId);
         Object.assign(s, {
             phase: 'play', myColor, oppColor: myColor === 'white' ? 'black' : 'white',
-            control, opp, gameId: s.gameId && keepConn ? s.gameId : this._newGameId(),
+            control, opp, unrated: selfPlay,
+            gameId: s.gameId && keepConn ? s.gameId : this._newGameId(),
             engine: new ChessGame(), ply: 0, sel: null, legal: [],
             pendingPromo: null, result: null, reason: null,
             rematchMe: false, rematchOpp: false, peerGone: false,
@@ -1657,10 +1688,13 @@ class ChessCourseApp {
             s.net.send(s.conn, { type: 'game_over', result: result === 'win' ? 'loss' : result === 'loss' ? 'win' : 'draw', reason, epoch: s.epoch || 0 });
         }
         // Idempotent Elo write: same game_id twice changes nothing (§6-D4).
+        // Self-play is never rated: same account on both tabs.
         let delta = null, rating = null;
         const score = result === 'win' ? 1 : result === 'draw' ? 0.5 : 0;
-        const r = OnlineRatings.applyGame({ uid: this.userId, cat: s.control.id, score, oppRating: s.opp?.rating, gameId: s.gameId });
-        if (r) { delta = r.delta; rating = r.rating; }
+        if (!s.unrated) {
+            const r = OnlineRatings.applyGame({ uid: this.userId, cat: s.control.id, score, oppRating: this._oppRatingFor(), gameId: s.gameId });
+            if (r) { delta = r.delta; rating = r.rating; }
+        }
         OnlineRatings.notePlayer(this.userId, this._meTag().name, s.control.id, OnlineRatings.get(this.userId, s.control.id));
         if (s.opp?.id) OnlineRatings.notePlayer(s.opp.id, s.opp.name, s.control.id, s.opp.rating);
         s.ratingDelta = delta; s.ratingAfter = rating;
@@ -1685,11 +1719,15 @@ class ChessCourseApp {
         const mine = s.myColor === 'white' ? 'White' : 'Black';
         const theirs = s.myColor === 'white' ? 'Black' : 'White';
         const over = s.phase === 'over';
+        const rateBit = (s.ratingDelta !== null && s.ratingDelta !== undefined)
+            ? ` <span class="rate-count" data-from="${s.ratingAfter - s.ratingDelta}" data-to="${s.ratingAfter}">Rating ${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}</span>`
+            : '';
+        const unratedBit = (over && s.unrated) ? `<div class="feedback info">Unrated game — you are playing yourself.</div>` : '';
         const resultLine = !over ? '' : s.result === 'win'
-            ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${s.ratingDelta !== null && s.ratingDelta !== undefined ? ` Rating ${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}` : ''}</div>`
+            ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}`
             : s.result === 'loss'
-            ? `<div class="feedback error">You lose. ${this._reasonText(s.reason)}${s.ratingDelta !== null && s.ratingDelta !== undefined ? ` Rating ${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}` : ''}</div>`
-            : `<div class="feedback info">Draw. ${this._reasonText(s.reason)}</div>`;
+            ? `<div class="feedback error">You lose. ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}`
+            : `<div class="feedback info">Draw. ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}`;
         box.innerHTML = `
             <div class="lesson-content">
                 <div class="arena">
@@ -1734,10 +1772,31 @@ class ChessCourseApp {
         this._drawOnline();
         this._onlineStatus();
         this._paintOnlineClocks();
+        this._animateRate();
+    }
+
+    // Rating count-up: tween the displayed rating from old to new.
+    _animateRate() {
+        const el = document.querySelector('#online-result .rate-count');
+        if (!el) return;
+        const from = parseInt(el.dataset.from, 10), to = parseInt(el.dataset.to, 10);
+        if (!isFinite(from) || !isFinite(to) || from === to) return;
+        const sign = to >= from ? '+' : '';
+        const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced) return;
+        const t0 = performance.now(), dur = 700;
+        const step = (t) => {
+            if (!el.isConnected) return;
+            const k = Math.min(1, (t - t0) / dur);
+            const v = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+            el.textContent = `Rating ${sign}${v - from} → ${v}`;
+            if (k < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
     }
 
     _reasonText(reason) {
-        return { checkmate: 'Checkmate on the board.', resignation: 'by resignation.', stalemate: 'Stalemate.', agreement: 'by mutual agreement.', timeout: 'on time.', material: 'Neither side can mate.', aborted: 'Too short to rate — no rating change.' }[reason] || '';
+        return { checkmate: 'Checkmate on the board.', resignation: 'by resignation.', stalemate: 'Stalemate.', agreement: 'by mutual agreement.', timeout: 'on time.', material: 'Neither side can mate.', aborted: 'Too short to rate — no rating change.', forfeit: 'by forfeit — opponent disconnected.' }[reason] || '';
     }
 
     // Small promise modal: {title, body, okLabel, cancelLabel} -> true/false.
@@ -1792,7 +1851,8 @@ class ChessCourseApp {
     }
 
     // Joiner auto-reconnect with backoff + jitter (§7); ~60s of trying,
-    // then the game is aborted unrated rather than left hanging.
+    // then the joiner claims the forfeit win (unrated if <2 plies via the
+    // abort rule — same as the host side).
     _scheduleRejoin() {
         const s = this.online;
         if (!s || s.role !== 'join') return;
@@ -1802,7 +1862,7 @@ class ChessCourseApp {
         const tick = () => {
             const cur = this.online;
             if (!cur || cur !== s || cur.phase !== 'play' || cur.result || !cur.peerGone) return;
-            if (attempt >= delays.length) { this._onlineAbort('Host is gone — game aborted. No rating change.'); return; }
+            if (attempt >= delays.length) { this._onlineFinish('win', 'forfeit'); return; }
             const wait = delays[attempt++] * (0.8 + Math.random() * 0.4);
             s.rejoinTimer = setTimeout(async () => {
                 const c2 = this.online;
@@ -1841,6 +1901,7 @@ class ChessCourseApp {
         if (msg) { el.textContent = msg; return; }
         if (!s) return;
         if (s.phase === 'over') {
+            if (s.unrated) { el.textContent = 'Unrated game — you are playing yourself. No rating change.'; return; }
             el.textContent = s.result === 'win' ? 'Victory! Start a rematch or head back.' : s.result === 'loss' ? 'Defeat. One more?' : 'Draw. Well fought!';
             return;
         }
@@ -2197,6 +2258,12 @@ class ChessCourseApp {
         const slot = document.getElementById('userbutton-slot');
         const cta = document.getElementById('auth-btn');
         const logout = document.getElementById('logout-btn');
+        // Slow auth resolving after first paint must not leave the lobby
+        // frozen signed-out: refresh it, but never clobber a live session view.
+        if (!this.online && document.getElementById('online-content')
+            && document.getElementById('online-screen')?.classList.contains('active')) {
+            this._renderOnlineLobby();
+        }
         if (!slot || !cta || !this._clerk) return;
         if (this._clerk.user) {
             cta.setAttribute('hidden', '');

@@ -137,9 +137,15 @@ class OnlineNet {
     }
 }
 
-/* ── Ratings: Elo per time control, idempotent per game ── */
+/* ── Ratings: Elo per time control, idempotent per game ──
+   K is provisional: 40 for a category's first 10 games (visible early
+   progress), 20 after. Guests (null uid) are never rated — online play
+   requires sign-in, so guest games stay unrated by construction. */
 const OnlineRatings = {
     START: 800,
+    K_PROVISIONAL: 40,
+    K_ESTABLISHED: 20,
+    PROVISIONAL_GAMES: 10,
     K: 32,
     key(uid) { return 'ccr_' + (uid || 'anon'); },
     _read(uid) {
@@ -165,8 +171,9 @@ const OnlineRatings = {
         if (d.processed.includes(gameId)) return null; // idempotent: same game twice = no-op
         const prev = d.cats[cat] || { rating: this.START, games: 0, w: 0, l: 0, d: 0, best: this.START };
         const opp = (typeof oppRating === 'number' && isFinite(oppRating)) ? oppRating : this.START;
+        const K = (prev.games || 0) < this.PROVISIONAL_GAMES ? this.K_PROVISIONAL : this.K_ESTABLISHED;
         const expected = 1 / (1 + Math.pow(10, (opp - prev.rating) / 400));
-        const next = Math.max(100, Math.round(prev.rating + this.K * (score - expected)));
+        const next = Math.max(100, Math.round(prev.rating + K * (score - expected)));
         d.cats[cat] = {
             rating: next, games: (prev.games || 0) + 1,
             w: (prev.w || 0) + (score === 1 ? 1 : 0),
