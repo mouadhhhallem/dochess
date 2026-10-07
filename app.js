@@ -51,11 +51,35 @@ class SoundEngine {
         o.connect(g); g.connect(ctx.destination);
         o.start(start); o.stop(start + dur);
     }
+    // Real move recording (assets/sounds/move.mp3) — played on every move;
+    // the classic beeps remain as the fallback if the clip cannot load.
+    _clip() {
+        if (this._clipBroken) return null;
+        if (!this._clipEl) {
+            try {
+                const a = new Audio(`assets/sounds/move.mp3?v=${ChessCourseApp.APP_VERSION}`);
+                a.preload = 'auto';
+                a.addEventListener('error', () => { this._clipBroken = true; });
+                this._clipEl = a;
+            } catch (_) { this._clipBroken = true; }
+        }
+        return this._clipBroken ? null : this._clipEl;
+    }
+    _playClip() {
+        if (this.muted) return false;
+        const a = this._clip();
+        if (!a) return false;
+        try { a.currentTime = 0; } catch (_) {}
+        try { const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (_) { return false; }
+        return true;
+    }
     playMove() {
+        if (this._playClip()) return;
         this._beep('sine', 460, 240, 0.09, 0.085);
         this._beep('triangle', 220, 160, 0.06, 0.05, 0.03);
     }
     playCapture() {
+        if (this._playClip()) return;
         this._beep('sine', 210, 110, 0.11, 0.10);
         this._beep('triangle', 140, 72, 0.08, 0.07, 0.02);
     }
@@ -180,10 +204,10 @@ class ChessCourseApp {
     ══════════════════════════════════════════════════════════════ */
     // Bump ASSET_V every release so edited artwork can never hide
     // behind the browser image cache. Same rule as the ?v= tags.
-    static assetV() { return 'v23'; }
+    static assetV() { return 'v24'; }
     // App release tag (?v= on scripts). Sent on identity messages so two
     // sides on different releases warn instead of silently misbehaving.
-    static APP_VERSION = 'v35';
+    static APP_VERSION = 'v37';
     _pieceFile(piece) {
         const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
         const white = piece === piece.toUpperCase();
