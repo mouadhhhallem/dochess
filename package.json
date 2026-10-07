@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "app.js",
   "scripts": {
-    "test": "node test-elo.js && node test-draws.js && node perft.js && playwright test --reporter=list"
+    "build": "node tools/build-learn.mjs",
+    "test": "node tools/build-learn.mjs --check && node tools/check-batch1.mjs && node test-elo.js && node test-draws.js && node perft.js && playwright test --reporter=list"
   },
   "keywords": [],
   "author": "",

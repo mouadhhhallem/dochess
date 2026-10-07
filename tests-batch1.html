@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!-- tests-batch1.html — Batch 1 browser harness (temporary, removed at the end).
+     Runs from file:// (no server): everything comes from js/learn.bundle.js,
+     the same classic script index.html loads. Shows storage tests + curriculum
+     schema checks. Engine checks run in node:  node tools/check-batch1.mjs -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DoChess — Batch 1 tests</title>
+<style>
+body { font-family: system-ui, sans-serif; background: #0f172a; color: #f1f5f9; margin: 0; padding: 24px; }
+h1 { font-size: 1.3rem; }
+table { border-collapse: collapse; width: 100%; max-width: 760px; }
+td, th { border: 1px solid #2c3c5a; padding: 6px 10px; text-align: left; font-size: .9rem; }
+.pass { color: #34d399; } .fail { color: #f87171; } .warn { color: #fbbf24; }
+#sum { font-weight: 800; margin: 12px 0; }
+</style>
+</head>
+<body>
+<h1>Batch 1 — storage + curriculum schema</h1>
+<p id="sum">running…</p>
+<table id="t"><tr><th>check</th><th>result</th></tr></table>
+<script src="js/learn.bundle.js?v=1"></script>
+<script>
+const { defaultState, loadProgress, saveProgress, exportProgress, importProgress, touchDay } = DoChessLearn.storage;
+const { validateSchema } = DoChessLearn.lessons;
+
+const rows = [];
+const row = (name, okk, note = '') => rows.push({ name, okk, note });
+
+try {
+    // storage with an isolated in-memory backend (never touches your real save)
+    const mem = new Map();
+    const mock = { blocked: false, get: (k) => (mem.has(k) ? mem.get(k) : null), set: (k, v) => mem.set(k, v), del: (k) => mem.delete(k) };
+    const s0 = loadProgress(mock).state;
+    row('blank default on empty backend', s0.version === 1 && s0.xp === 0);
+    s0.stars['s1-rook'] = 3;
+    row('save + reload round-trip', saveProgress(s0, mock) && loadProgress(mock).state.stars['s1-rook'] === 3);
+    mock.set('dochess:v1', '{broken');
+    row('corrupt JSON falls back to default', loadProgress(mock).state.stars['s1-rook'] === undefined);
+    const mock2 = { ...mock, _m: new Map() };
+    const mem2 = new Map([['ccp_v4', JSON.stringify({ done: [1, 2] })]]);
+    mock2.get = (k) => (mem2.has(k) ? mem2.get(k) : null);
+    row('legacy ccp_v4 preserved', JSON.stringify(loadProgress(mock2).state.legacy.v4done) === '[1,2]');
+    row('export/import round-trip', importProgress(exportProgress(defaultState())).ok === true);
+    row('import refuses bad payloads', !importProgress('x').ok && !importProgress('{"version":9}').ok);
+    const d = defaultState(); touchDay(d, '2026-10-01'); touchDay(d, '2026-10-02');
+    row('streak counts consecutive days', d.streak.count === 2);
+    row('real localStorage available', (() => { try { localStorage.getItem('x'); return true; } catch (_) { return false; } })(), 'false = memory fallback active, still fine');
+
+    // curriculum (inlined in js/learn.bundle.js, so this works from file://)
+    const data = DoChessLearn.curriculum;
+    const { errors, warnings } = validateSchema(data);
+    row('lessons.json schema: 0 errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+    row('levels present (stage 1 = 36)', data.levels.length === 36, `${data.levels.length} levels`);
+    row('free-move pars', true, 'BFS-verified in node: node tools/check-batch1.mjs');
+    row('engine checks', true, 'run in node: node tools/check-batch1.mjs (chess.js lands batch 2)');
+    if (warnings.length) row(`missing fr/ar fallbacks`, true, `${warnings.length} warnings in console (ok — en used)`);
+    console.log('[batch1] schema warnings:', warnings);
+} catch (e) {
+    row('harness exception: ' + String(e && e.message || e), false);
+}
+
+let p = 0, f = 0;
+const t = document.getElementById('t');
+for (const r of rows) {
+    (r.okk ? p++ : f++);
+    t.insertAdjacentHTML('beforeend', `<tr><td>${r.name}</td><td class="${r.okk ? 'pass' : 'fail'}">${r.okk ? 'PASS' : 'FAIL'}${r.note ? ` — ${r.note}` : ''}</td></tr>`);
+}
+document.getElementById('sum').textContent = `${p} passed, ${f} failed`;
+console.log(`[batch1] ${p} passed, ${f} failed`);
+</script>
+</body>
+</html>

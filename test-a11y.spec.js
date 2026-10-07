@@ -19,14 +19,26 @@ test('a11y: skip link, live regions, named controls, keyboard board', async ({ p
   await expect(squares).toHaveCount(64);
   const first = squares.first();
   await expect(first).toHaveAttribute('role', 'button');
-  await expect(first).toHaveAttribute('tabindex', '0');
+  // Roving tabindex: exactly one Tab stop on the board (not 64).
+  const tabbed = page.locator('#chess-board .chess-square[tabindex="0"]');
+  await expect(tabbed).toHaveCount(1);
   const label = await first.getAttribute('aria-label');
-  expect(label).toMatch(/^[a-h][1-8]$/);
+  // Square names carry piece info for screen readers: "a8, black rook".
+  // Bare coordinates ("a8") are the legacy minimum — accept both.
+  expect(label).toMatch(/^[a-h][1-8](,|$)/);
 
   // Keyboard: focus e2 and press Enter — legal hints appear, same as click.
   await page.focus('.chess-square[data-square="e2"]');
   await page.keyboard.press('Enter');
   await expect(page.locator('#chess-board .legal-dot, #chess-board .legal-ring').first()).toBeVisible();
+  // Arrow keys move the roving Tab stop without rebuilding the board.
+  const before = await page.evaluate(() => document.querySelectorAll('#chess-board .chess-square').length);
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('#chess-board .chess-square[tabindex="0"]')).toHaveCount(1);
+  const after = await page.evaluate(() => document.querySelectorAll('#chess-board .chess-square').length);
+  expect(after).toBe(before);
+  const roverNow = await page.locator('#chess-board .chess-square[tabindex="0"]').getAttribute('data-square');
+  expect(roverNow).toMatch(/^[a-h][1-8]$/);
 
   // Live regions announce feedback without moving focus.
   await expect(page.locator('#lesson-feedback')).toHaveAttribute('aria-live', 'polite');

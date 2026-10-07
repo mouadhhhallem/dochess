@@ -37,6 +37,18 @@ class SoundEngine {
         if (this._audioCtx && this._audioCtx.state === 'suspended') this._audioCtx.resume();
         return this._audioCtx || null;
     }
+    // Idle warmup: preload the move clip and create the (suspended)
+    // AudioContext early. Autoplay policy keeps it suspended until a real
+    // gesture; _ctx() resumes it then. Never plays here — no sound on load.
+    warm() {
+        try { this._clip(); } catch (_) {}
+        try {
+            if (!this._audioCtx) {
+                const C = window.AudioContext || window.webkitAudioContext;
+                if (C) this._audioCtx = new C();
+            }
+        } catch (_) {}
+    }
     _beep(type, freqStart, freqEnd, dur, gain, delay = 0) {
         if (this.muted) return;
         const ctx = this._ctx(); if (!ctx) return;
@@ -109,6 +121,7 @@ class ChessCourseApp {
         this.game             = new ChessGame();
         this.snd              = new SoundEngine();
         this.lessons          = this._buildLessons();
+        this._validateLessons(this.lessons);
         this.teachers         = this._buildTeachers();
         this.theme            = 'night';
         this._themeBusy       = false;
@@ -148,6 +161,42 @@ class ChessCourseApp {
         this._bindNav();
         this._bindGlobalButtons();
         this._syncProgress();
+        this._preloadPieces();
+    }
+
+    /* ── Piece preload: decode the 12 SVGs once at boot (idle) so the
+       first _draw() never pays image-decode cost mid-interaction. Also warms
+       the move sound (element + suspended AudioContext) so the first move
+       doesn't pay audio-setup cost inside the interaction handler. ── */
+    _preloadPieces() {
+        const run = () => {
+            ['K','Q','R','B','N','P','k','q','r','b','n','p'].forEach(p => {
+                try {
+                    const img = new Image();
+                    img.decoding = 'async';
+                    img.src = this._pieceFile(p);
+                } catch (_) {}
+            });
+            try { this.snd.warm(); } catch (_) {}
+        };
+        try {
+            if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 2000 });
+            else setTimeout(run, 800);
+        } catch (_) {}
+    }
+
+    /* ── Accessible square names: "e4, white pawn" / "e4, empty" / check suffix.
+       Screen-reader users get piece + state, not just coordinates. ── */
+    _squareLabel(alg, piece, isCheckSquare) {
+        let base = alg;
+        if (piece) {
+            const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
+            const white = piece === piece.toUpperCase();
+            base = `${alg}, ${white ? 'white' : 'black'} ${names[piece.toLowerCase()] || 'piece'}`;
+        } else {
+            base = `${alg}, empty`;
+        }
+        return isCheckSquare ? `${base}, check` : base;
     }
 
     // Redundant (non-inline) bindings so every button works even if
@@ -343,6 +392,34 @@ class ChessCourseApp {
         ];
     }
 
+    /* ── Lesson validation (spec §25): fail loudly in dev, never silently
+       break the course. Checks id/title/teacher/difficulty-ish/type/fen. ── */
+    _validateLessons(lessons) {
+        const issues = [];
+        const ids = new Set();
+        (lessons || []).forEach((l, i) => {
+            const where = `lessons[${i}]`;
+            if (!l || typeof l !== 'object') { issues.push(`${where}: not an object`); return; }
+            if (!Number.isInteger(l.id)) issues.push(`${where}: missing numeric id`);
+            else if (ids.has(l.id)) issues.push(`${where}: duplicate id ${l.id}`);
+            else ids.add(l.id);
+            if (!l.title) issues.push(`lesson ${l.id}: missing title`);
+            if (!l.teacherId) issues.push(`lesson ${l.id}: missing teacher`);
+            if (!['exercise', 'free-game'].includes(l.type)) issues.push(`lesson ${l.id}: bad type ${l.type}`);
+            if (!l.fen || typeof l.fen !== 'string' || l.fen.split(' ').length < 2) issues.push(`lesson ${l.id}: bad FEN`);
+            if (l.type === 'exercise' && !l.exercise) issues.push(`lesson ${l.id}: exercise lesson without exercise`);
+        });
+        if (issues.length && typeof console !== 'undefined' && console.warn) {
+            console.warn('[dochess] lesson validation:\n' + issues.map(s => '  - ' + s).join('\n'));
+        }
+        return issues;
+    }
+
+    /* First open-but-incomplete lesson = "current". Null when all done. */
+    _currentLesson() {
+        return this.lessons.find(l => this.isOpen(l.id) && !this.isDone(l.id)) || null;
+    }
+
     /* ══════════════════════════════════════════════════════════════
        PROGRESS
     ══════════════════════════════════════════════════════════════ */
@@ -350,7 +427,29 @@ class ChessCourseApp {
     // learners keep the legacy shared key, untouched by sign-in.
     _progressKey() { return 'ccp_v4' + (this.userId ? '_' + this.userId : ''); }
     _loadProgress() {
-        try { const s = localStorage.getItem(this._progressKey()); if (s) return JSON.parse(s); } catch (_) {}
+        // Safe parse + shape validation: malformed / old-version data must
+        // never break the course. Unknown ids are dropped, order preserved.
+        try {
+            const s = localStorage.getItem(this._progressKey());
+            if (s) {
+                const p = JSON.parse(s);
+                if (p && Array.isArray(p.done)) {
+                    const valid = p.done.filter(n => Number.isInteger(n) && n >= 1 && n <= 10);
+                    return { done: [...new Set(valid)] };
+                }
+            }
+            // One-time best-effort migration from legacy unversioned key.
+            const legacy = localStorage.getItem('ccp_v3' + (this.userId ? '_' + this.userId : ''));
+            if (legacy) {
+                const p = JSON.parse(legacy);
+                if (p && Array.isArray(p.done)) {
+                    const valid = p.done.filter(n => Number.isInteger(n) && n >= 1 && n <= 10);
+                    const migrated = { done: [...new Set(valid)] };
+                    try { localStorage.setItem(this._progressKey(), JSON.stringify(migrated)); } catch (_) {}
+                    return migrated;
+                }
+            }
+        } catch (_) {}
         return { done: [] };
     }
     _saveProgress() {
@@ -390,7 +489,18 @@ class ChessCourseApp {
         set('lessons-completed',   n);   set('lessons-completed-2',   n);
         set('progress-percentage', pct + '%'); set('progress-percentage-2', pct + '%');
         const bar = document.getElementById('overall-progress');
-        if (bar) bar.style.width = pct + '%';
+        if (bar) {
+            bar.style.width = pct + '%';
+            bar.setAttribute('role', 'progressbar');
+            bar.setAttribute('aria-valuenow', String(pct));
+            bar.setAttribute('aria-valuemin', '0');
+            bar.setAttribute('aria-valuemax', '100');
+        }
+        // Keep the Continue card truthful when progress changes while home
+        // is visible (markDone → _syncProgress without a re-render).
+        if (document.getElementById('home-screen')?.classList.contains('active')) {
+            try { this._paintContinue(); } catch (_) {}
+        }
 
         const list = document.getElementById('completed-lessons-list');
         if (!list) return;
@@ -422,25 +532,65 @@ class ChessCourseApp {
             c.innerHTML = `<img src="${t.img}" width="88" height="88" loading="lazy" alt="${esc(t.name)}"><h4>${esc(t.name)}</h4><p style="font-weight:600;color:var(--accent);margin-bottom:.4rem">${esc(t.title)}</p><p>${esc(t.desc)}</p>`;
             g.appendChild(c);
         });
+        this._paintContinue();
         this._syncProgress();
+    }
+
+    /* ── Continue Learning (spec §31): real progress only, never faked.
+       Points at the first open-but-incomplete lesson; hidden when all done. ── */
+    _paintContinue() {
+        const heroBtn = document.getElementById('start-learning-btn');
+        const cur = this._currentLesson();
+        // Remove any previous continue card (re-render safe).
+        document.getElementById('continue-card')?.remove();
+        if (!cur) {
+            if (heroBtn) heroBtn.textContent = 'Play a Full Game →';
+            return;
+        }
+        const doneCount = this.progress.done.length;
+        if (heroBtn) {
+            heroBtn.textContent = doneCount === 0
+                ? 'Start Learning →'
+                : `Continue Lesson ${cur.id} →`;
+        }
+        if (doneCount === 0) return; // fresh learners get the plain hero
+        const overview = document.querySelector('#home-screen .progress-overview');
+        if (!overview || document.getElementById('continue-card')) return;
+        const card = document.createElement('div');
+        card.id = 'continue-card';
+        card.className = 'continue-card';
+        card.innerHTML = `
+            <div><p class="continue-kicker">Continue Learning</p>
+            <h3>Lesson ${cur.id} — ${esc(cur.title)}</h3>
+            <p>${esc(cur.objective || '')}</p></div>
+            <button class="btn-primary" data-open-lesson="${cur.id}" type="button">Continue →</button>`;
+        overview.before(card);
     }
 
     _renderLessons() {
         const g = document.getElementById('lessons-grid');
         if (!g) return;
         g.innerHTML = '';
+        const cur = this._currentLesson();
+        const hasProgress = this.progress.done.length > 0;
         this.lessons.forEach(l => {
             const open = this.isOpen(l.id), done = this.isDone(l.id);
+            const isCurrent = !!(cur && cur.id === l.id);
             const badge = done
                 ? '<span class="completed-badge">Done ✓</span>'
+                : isCurrent && hasProgress ? '<span class="current-badge">Up next</span>'
                 : open ? '<span style="color:#34d399;font-size:.8rem">Unlocked</span>'
                        : '<span style="color:var(--text-muted-dim);font-size:.8rem">Locked</span>';
             const tag = l.type === 'free-game' ? ' <span class="free-game-tag">Full Game</span>' : '';
-            const card = document.createElement('div'); card.className = `lesson-card${open ? '' : ' locked'}`;
+            const card = document.createElement('div');
+            card.className = `lesson-card${open ? '' : ' locked'}${isCurrent && hasProgress ? ' current' : ''}${done ? ' done' : ''}`;
+            // Fresh learners see "Start" (existing test + first-run copy);
+            // returning learners see "Continue" on the up-next lesson.
+            const cta = done ? 'Review' : (isCurrent && hasProgress ? 'Continue' : 'Start');
             card.innerHTML = `
                 <div class="lesson-header"><h3>${esc(l.title)}${tag}</h3><div class="lesson-meta"><span>Lesson ${l.id}</span>${badge}</div></div>
                 <div class="lesson-body"><p>${esc(l.desc.replace(/<[^>]+>/g, ''))}</p></div>
-                <div class="lesson-footer"><button class="btn-primary" style="padding:.6rem 1.4rem;font-size:.92rem" data-open-lesson="${l.id}" ${open ? '' : 'disabled'}>${done ? 'Review' : 'Start'}</button></div>`;
+                <div class="lesson-footer"><button class="btn-primary" style="padding:.6rem 1.4rem;font-size:.92rem" data-open-lesson="${l.id}" ${open ? '' : 'disabled'}>${cta}</button></div>`;
             g.appendChild(card);
         });
     }
@@ -544,40 +694,154 @@ class ChessCourseApp {
         this.cpuBusy         = false;
         this.currentExercise = l.exercise || null;
         this._stepIndex      = 0;
+        this._loggedMoves    = 0;
+        this._lessonRover    = null;
+        this._statusCache    = null;
         this.game.reset();
         if (l.fen) this.game.loadFEN(l.fen);
+        // New lesson = new position: drop the synced marker so squares are
+        // rebuilt once for the fresh board, then synced in place after.
+        const b = document.getElementById('chess-board');
+        if (b) b.dataset.synced = '';
         this._draw();
     }
 
     /* ══════════════════════════════════════════════════════════════
-       BOARD RENDERING
+       BOARD RENDERING — incremental, no 64-node rebuild
+       Squares are created ONCE per board element and then synced in place:
+       only classes, piece <img>, indicators and labels change per move.
+       This preserves focus, avoids image re-decode churn, and keeps the
+       interaction at a few DOM writes instead of 64 createElement + innerHTML.
     ══════════════════════════════════════════════════════════════ */
-    _draw() {
+    _ensureLessonSquares(board) {
+        if (board.dataset.synced === 'lesson' && board.querySelectorAll(':scope > .chess-square').length === 64) return;
+        board.innerHTML = '';
+        for (let dr = 0; dr < 8; dr++) {
+            for (let dc = 0; dc < 8; dc++) {
+                const sq = document.createElement('div');
+                sq.className = 'chess-square white';
+                sq.dataset.dr = String(dr);
+                sq.dataset.dc = String(dc);
+                sq.setAttribute('role', 'button');
+                sq.setAttribute('tabindex', '-1');
+                board.appendChild(sq);
+            }
+        }
+        board.dataset.synced = 'lesson';
+        this._bindBoard(board, 'lesson');
+    }
+    _syncLessonSquares(board) {
+        const sel      = this.game.selectedSquare;
+        const legal    = this.game.legalMoves || [];
+        const history  = this.game.moveHistory;
+        const last     = history.length > 0 ? history[history.length - 1] : null;
+        const lastFrom = last ? this.game.algebraicToCoords(last.from) : null;
+        const lastTo   = last ? this.game.algebraicToCoords(last.to)   : null;
+        const inCheck  = this.game._isKingInCheck(this.game.currentPlayer);
+        const kingPos  = inCheck ? this.game.findKing(this.game.currentPlayer) : null;
+        const flip = !!this.boardFlip;
+        const at = (dr, dc) => [flip ? 7 - dr : dr, flip ? 7 - dc : dc];
+        const legalSet = new Set(legal.map(m => m[0] + ',' + m[1]));
+        // Roving tabindex: selected square is the tab stop, else the rover
+        // (last move target, else e2, else first). All others are -1.
+        let rover = this._lessonRover;
+        if (sel) rover = this.game.coordsToAlgebraic(sel);
+        else if (last) rover = last.to;
+        if (!rover) rover = 'e2';
+        // Scope to squares only: fly-piece <img> clones are transient direct
+        // children of the board during the 240ms glide and must be skipped.
+        const kids = board.querySelectorAll(':scope > .chess-square');
+        for (let i = 0; i < kids.length; i++) {
+            const sq = kids[i];
+            const dr = +sq.dataset.dr, dc = +sq.dataset.dc;
+            const [r, c] = at(dr, dc);
+            const light = (r + c) % 2 === 0;
+            sq.className = `chess-square ${light ? 'white' : 'black'}`;
+            sq.dataset.row = String(r);
+            sq.dataset.col = String(c);
+            const alg = this.game.coordsToAlgebraic([r, c]);
+            sq.dataset.square = alg;
+            const piece = this.game.board[r][c];
+            const isKingInCheck = !!(kingPos && kingPos[0] === r && kingPos[1] === c);
+            sq.setAttribute('aria-label', this._squareLabel(alg, piece, isKingInCheck));
+            if (sel && sel[0] === r && sel[1] === c) { sq.classList.add('selected'); sq.setAttribute('aria-selected', 'true'); }
+            else sq.removeAttribute('aria-selected');
+            if ((lastFrom && lastFrom[0] === r && lastFrom[1] === c) || (lastTo && lastTo[0] === r && lastTo[1] === c)) sq.classList.add('last-move');
+            if (isKingInCheck) sq.classList.add('in-check');
+            // Piece <img>: reuse the node, only swap src when the piece changed.
+            let img = sq.querySelector('img.chess-piece, svg.chess-piece');
+            if (piece) {
+                const wantSrc = this._pieceFile(piece);
+                if (img && img.tagName === 'IMG' && img.dataset.fallbackPiece === piece && img.getAttribute('src') === wantSrc) {
+                    // unchanged — keep node (no re-decode)
+                } else {
+                    const w = document.createElement('div');
+                    w.innerHTML = this._svg(piece);
+                    const fresh = w.firstChild;
+                    if (img) img.replaceWith(fresh);
+                    else sq.prepend(fresh);
+                }
+            } else if (img) img.remove();
+            // Legal indicators: single small node per square.
+            const wantDot = !!(sel && legalSet.has(r + ',' + c));
+            let dot = sq.querySelector('.legal-dot, .legal-ring');
+            if (wantDot && !dot) {
+                dot = document.createElement('div');
+                dot.className = piece ? 'legal-ring' : 'legal-dot';
+                dot.setAttribute('aria-hidden', 'true');
+                sq.appendChild(dot);
+            } else if (wantDot && dot) {
+                const wantCls = piece ? 'legal-ring' : 'legal-dot';
+                if (dot.className !== wantCls) dot.className = wantCls;
+            } else if (!wantDot && dot) dot.remove();
+            // Coordinates live on fixed display edges (dr==7 file, dc==0 rank).
+            let fl = sq.querySelector('.coord-file');
+            let rk = sq.querySelector('.coord-rank');
+            if (dr === 7) {
+                if (!fl) { fl = document.createElement('span'); fl.className = 'coord-file'; sq.appendChild(fl); }
+                const want = String.fromCharCode(97 + c);
+                if (fl.textContent !== want) fl.textContent = want;
+            } else if (fl) fl.remove();
+            if (dc === 0) {
+                if (!rk) { rk = document.createElement('span'); rk.className = 'coord-rank'; sq.appendChild(rk); }
+                const want = String(8 - r);
+                if (rk.textContent !== want) rk.textContent = want;
+            } else if (rk) rk.remove();
+            // Roving tabindex.
+            sq.setAttribute('tabindex', alg === rover ? '0' : '-1');
+        }
+        this._lessonRover = rover;
+    }
+    _draw(opts) {
+        const light = !!(opts && opts.light);
         const board = document.getElementById('chess-board');
         if (!board) return;
 
-        // Flyover animation for moved pieces: snapshot the movers, rebuild,
-        // then glide overlay clones above the whole board (Web Animations).
-        // Immune to square paint order by construction. 240ms, transform-only,
-        // skipped entirely under prefers-reduced-motion and on re-renders
-        // without a new move.
+        // Flyover animation: snapshot BEFORE the in-place sync (old DOM is
+        // still live, so rects are valid), glide overlay clones after sync.
+        // 240ms, transform-only, skipped under prefers-reduced-motion.
         const hlen = this.game.moveHistory.length;
         const isNewMove = hlen > (this._drawnMoves || 0);
         this._drawnMoves = hlen;
         const lastHist = hlen ? this.game.moveHistory[hlen - 1] : null;
         const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         let flyers = [];
-        if (isNewMove && !reduced && lastHist && board.isConnected) {
+        if (isNewMove && !reduced && lastHist && board.isConnected && board.querySelectorAll(':scope > .chess-square').length === 64) {
+            // One layout read for the board; piece rects come from the same
+            // frame so no interleaved writes (no thrash by construction).
             const brect = board.getBoundingClientRect();
-            const snap = (sq) => {
-                const el = board.querySelector(`[data-square="${sq}"] img.chess-piece`);
+            const snap = (sqName) => {
+                const el = board.querySelector(`[data-square="${sqName}"] img.chess-piece`);
                 if (!el) return null;
                 const r = el.getBoundingClientRect();
+                // Zero-area / non-finite rects (rapid successive draws, hidden
+                // board) must not animate: fall back to the instant synced
+                // state instead of gliding from a bogus origin.
+                if (!(r.width > 0 && r.height > 0) || !isFinite(r.left + r.top + brect.left + brect.top)) return null;
                 return { src: el.getAttribute('src'), cls: el.getAttribute('class') || 'chess-piece', x: r.left - brect.left, y: r.top - brect.top, size: r.width };
             };
             const push = (from, to) => { const s = snap(from); if (s) flyers.push({ ...s, to }); };
             push(lastHist.from, lastHist.to);
-            // Castling moves two pieces: glide the rook too, or it teleports.
             if (lastHist.specialMove === 'castling') {
                 const rank = lastHist.to[1];
                 if (lastHist.to[0] === 'g') push('h' + rank, 'f' + rank);
@@ -585,70 +849,9 @@ class ChessCourseApp {
             }
         }
 
-        board.innerHTML = '';
-        // One listener set per board (delegated) — re-attaching 6 listeners
-        // to all 64 squares on every redraw was the main move-time jank.
+        this._ensureLessonSquares(board);
         this._bindBoard(board, 'lesson');
-
-        const sel      = this.game.selectedSquare;
-        const legal    = this.game.legalMoves;
-        const history  = this.game.moveHistory;
-        const last     = history.length > 0 ? history[history.length - 1] : null;
-        const lastFrom = last ? this.game.algebraicToCoords(last.from) : null;
-        const lastTo   = last ? this.game.algebraicToCoords(last.to)   : null;
-        const inCheck  = this.game._isKingInCheck(this.game.currentPlayer);
-        const kingPos  = inCheck ? this.game.findKing(this.game.currentPlayer) : null;
-
-        const flip = !!this.boardFlip;
-        const at = (dr, dc) => [flip ? 7 - dr : dr, flip ? 7 - dc : dc];
-        const frag = document.createDocumentFragment();
-        for (let dr = 0; dr < 8; dr++) {
-            for (let dc = 0; dc < 8; dc++) {
-                const [r, c] = at(dr, dc);
-                const sq = document.createElement('div');
-                const light = (r + c) % 2 === 0;
-                sq.className = `chess-square ${light ? 'white' : 'black'}`;
-                // Test hooks + accessibility (also used by automated tests)
-                sq.dataset.row = String(r);
-                sq.dataset.col = String(c);
-                sq.dataset.square = this.game.coordsToAlgebraic([r, c]);
-                sq.setAttribute('role', 'button');
-                sq.setAttribute('tabindex', '0');
-                sq.setAttribute('aria-label', this.game.coordsToAlgebraic([r, c]));
-
-                if (sel      && sel[0]      === r && sel[1]      === c) sq.classList.add('selected');
-                if (lastFrom && lastFrom[0] === r && lastFrom[1] === c) sq.classList.add('last-move');
-                if (lastTo   && lastTo[0]   === r && lastTo[1]   === c) sq.classList.add('last-move');
-                if (kingPos  && kingPos[0]  === r && kingPos[1]  === c) sq.classList.add('in-check');
-
-                const piece = this.game.board[r][c];
-                if (piece) sq.innerHTML = this._svg(piece);
-
-                // Legal move indicators
-                if (sel && legal.some(m => m[0] === r && m[1] === c)) {
-                    const dot = document.createElement('div');
-                    dot.className = piece ? 'legal-ring' : 'legal-dot';
-                    sq.appendChild(dot);
-                }
-
-                // Coordinate labels (ink from CSS classes, not hard-coded JS colors)
-                if (dr === 7) {
-                    const fl = document.createElement('span');
-                    fl.className = 'coord-file';
-                    fl.textContent = String.fromCharCode(97 + c);
-                    sq.appendChild(fl);
-                }
-                if (dc === 0) {
-                    const rk = document.createElement('span');
-                    rk.className = 'coord-rank';
-                    rk.textContent = 8 - r;
-                    sq.appendChild(rk);
-                }
-
-                frag.appendChild(sq);
-            }
-        }
-        board.appendChild(frag);
+        this._syncLessonSquares(board);
 
         if (flyers.length) {
             const brect = board.getBoundingClientRect();
@@ -656,6 +859,7 @@ class ChessCourseApp {
                 const dest = board.querySelector(`[data-square="${f.to}"]`);
                 if (!dest) return;
                 const dr = dest.getBoundingClientRect();
+                if (!(dr.width > 0 && dr.height > 0) || !isFinite(dr.left + dr.top)) return;
                 const cx = dr.left - brect.left + (dr.width - f.size) / 2;
                 const cy = dr.top - brect.top + (dr.height - f.size) / 2;
                 const ghost = dest.querySelector('img.chess-piece');
@@ -680,9 +884,14 @@ class ChessCourseApp {
             });
         }
 
-        this._updateMoveLog();
-        this._updateTurnUI();
-        this._paintCaptured('lesson-content', this.game, 'white');
+        // Selection-only repaints skip the expensive extras: the move log,
+        // turn speech/status scan and captured rows only change on moves.
+        // Selection callers pass { light: true } (see _click).
+        if (!light) {
+            this._updateMoveLog();
+            this._updateTurnUI();
+            this._paintCaptured('lesson-content', this.game, 'white');
+        }
     }
 
     /* ── Drag-and-drop (pointer events, touch-friendly) ─────────────
@@ -707,11 +916,39 @@ class ChessCourseApp {
             const sq = sqOf(e); if (!sq) return;
             act(+sq.dataset.row, +sq.dataset.col);
         });
+        // Keyboard: Enter/Space acts; arrows move the roving tab stop in
+        // DISPLAY space (flip-aware via dr/dc), Home/End jump to corners.
+        // The board exposes a single Tab stop (roving tabindex).
         board.addEventListener('keydown', (e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
             const sq = sqOf(e); if (!sq) return;
-            e.preventDefault();
-            act(+sq.dataset.row, +sq.dataset.col);
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                act(+sq.dataset.row, +sq.dataset.col);
+                return;
+            }
+            const moveKeys = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+            let target = null;
+            if (moveKeys[e.key]) {
+                e.preventDefault();
+                const [ddr, ddc] = moveKeys[e.key];
+                const dr = Math.max(0, Math.min(7, (+sq.dataset.dr) + ddr));
+                const dc = Math.max(0, Math.min(7, (+sq.dataset.dc) + ddc));
+                target = board.querySelector(`.chess-square[data-dr="${dr}"][data-dc="${dc}"]`);
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                target = board.querySelector('.chess-square[data-dr="0"][data-dc="0"]');
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                target = board.querySelector('.chess-square[data-dr="7"][data-dc="7"]');
+            } else return;
+            if (target) {
+                // Move the roving stop and focus without scrolling the page.
+                board.querySelectorAll('.chess-square[tabindex="0"]').forEach(n => n.setAttribute('tabindex', '-1'));
+                target.setAttribute('tabindex', '0');
+                try { target.focus({ preventScroll: false }); } catch (_) { target.focus(); }
+                if (kind === 'lesson') this._lessonRover = target.dataset.square;
+                else this._onlineRover = target.dataset.square;
+            }
         });
         board.addEventListener('pointerdown', (e) => {
             if (e.button !== undefined && e.button > 0) return;
@@ -731,6 +968,9 @@ class ChessCourseApp {
                 g.className += ' drag-ghost';
                 g.style.width = rect.width + 'px';
                 g.style.height = rect.height + 'px';
+                // Position BEFORE append: a frame must never render the ghost
+                // at the CSS default origin (top-left flash on fast drags).
+                g.style.transform = `translate(${e.clientX - rect.width / 2}px, ${e.clientY - rect.height / 2}px)`;
                 document.body.appendChild(g);
                 d.ghost = g; d.w = rect.width; d.h = rect.height;
                 const [r, c] = d.from;
@@ -750,13 +990,13 @@ class ChessCourseApp {
             const t = (e.clientX !== undefined && document.elementFromPoint(e.clientX, e.clientY) || { closest: () => null }).closest('.chess-square');
             let acted = false;
             if (!t || t.dataset.row === undefined) {
-                if (kind === 'lesson' && this.game.selectedSquare) { this.game.selectedSquare = null; this.game.legalMoves = []; this._draw(); acted = true; }
+                if (kind === 'lesson' && this.game.selectedSquare) { this.game.selectedSquare = null; this.game.legalMoves = []; this._draw({ light: true }); acted = true; }
             } else {
                 const tr = +t.dataset.row, tc = +t.dataset.col;
                 if (kind === 'lesson') {
                     const sel = this.game.selectedSquare;
                     if (sel && (sel[0] !== tr || sel[1] !== tc)) { this._click(tr, tc); acted = true; }
-                    else if (!sel) { this.game.selectedSquare = null; this.game.legalMoves = []; this._draw(); acted = true; }
+                    else if (!sel) { this.game.selectedSquare = null; this.game.legalMoves = []; this._draw({ light: true }); acted = true; }
                 } else {
                     const s = this.online;
                     if (s && s.sel && (s.sel[0] !== tr || s.sel[1] !== tc)) { this._onlineClick(tr, tc); acted = true; }
@@ -787,6 +1027,8 @@ class ChessCourseApp {
 
         const g = this.game;
 
+        // Selection never changes log/turn/captured — light sync only.
+        const paintSel = () => this._draw({ light: true });
         if (!g.selectedSquare) {
             if (g.board[r][c] && g.isColor(r, c, 'white')) {
                 g.selectedSquare = [r, c];
@@ -795,7 +1037,7 @@ class ChessCourseApp {
                     this._fb('That piece has no legal moves right now.', 'info');
                     g.selectedSquare = null;
                 }
-                this._draw();
+                paintSel();
             }
         } else {
             const isLegal = g.legalMoves.some(m => m[0] === r && m[1] === c);
@@ -806,10 +1048,10 @@ class ChessCourseApp {
             } else if (g.board[r][c] && g.isColor(r, c, 'white')) {
                 g.selectedSquare = [r, c];
                 g.legalMoves     = g.getLegalMoves([r, c]);
-                this._draw();
+                paintSel();
             } else {
                 g.selectedSquare = null; g.legalMoves = [];
-                this._draw();
+                paintSel();
             }
         }
     }
@@ -1078,6 +1320,35 @@ class ChessCourseApp {
     /* ══════════════════════════════════════════════════════════════
        PROMOTION PICKER
     ══════════════════════════════════════════════════════════════ */
+    /* Promotion dialog a11y: focus moves in, Tab is trapped, Escape
+       announces (promotion is mandatory — it cannot be cancelled, so Escape
+       keeps the dialog open and re-focuses it), choosing returns focus to
+       the promotion square. Native buttons give Enter/Space for free. */
+    _trapPromotionKeys(picker) {
+        if (picker.dataset.trapped) return;
+        picker.dataset.trapped = '1';
+        picker.addEventListener('keydown', (e) => {
+            const btns = [...picker.querySelectorAll('button.promotion-btn')];
+            if (!btns.length) return;
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const i = btns.indexOf(document.activeElement);
+                if (e.shiftKey) {
+                    const prev = i <= 0 ? btns[btns.length - 1] : btns[i - 1];
+                    prev.focus();
+                } else {
+                    const next = (i === -1 || i === btns.length - 1) ? btns[0] : btns[i + 1];
+                    next.focus();
+                }
+            } else if (e.key === 'Escape') {
+                // Mandatory choice: don't close, don't strand focus.
+                e.preventDefault();
+                e.stopPropagation();
+                (btns[0] || picker).focus?.();
+                this._fb?.('Choose a promotion piece to continue — queen, rook, bishop, or knight.', 'info');
+            }
+        });
+    }
     _showPromotion(from, to, color) {
         const picker = document.getElementById('promotion-picker');
         if (!picker) return;
@@ -1086,6 +1357,7 @@ class ChessCourseApp {
         picker.setAttribute('role', 'dialog');
         picker.setAttribute('aria-modal', 'true');
         picker.setAttribute('aria-label', 'Choose promotion piece');
+        this._trapPromotionKeys(picker);
 
         const pieces = color === 'white' ? ['Q','R','B','N'] : ['q','r','b','n'];
         const names  = { Q:'Queen', R:'Rook', B:'Bishop', N:'Knight', q:'Queen', r:'Rook', b:'Bishop', n:'Knight' };
@@ -1097,9 +1369,11 @@ class ChessCourseApp {
 
         const row = document.createElement('div');
         row.className = 'promotion-options';
-        pieces.forEach(p => {
+        pieces.forEach((p, idx) => {
             const btn = document.createElement('button');
             btn.className = 'promotion-btn';
+            btn.type = 'button';
+            btn.setAttribute('aria-label', `Promote to ${names[p]}`);
             btn.innerHTML = `${this._svg(p)}<span>${names[p]}</span>`;
             btn.onclick = () => {
                 picker.innerHTML = ''; picker.classList.add('hidden');
@@ -1108,8 +1382,20 @@ class ChessCourseApp {
                 this._draw();
                 if (!this.isFreeGame) this._checkExercise();
                 this._afterMove();
+                // Return focus to the promotion square (roving stop follows).
+                this._lessonRover = this.game.coordsToAlgebraic(to);
+                const back = document.querySelector(`#chess-board [data-square="${this._lessonRover}"]`);
+                if (back) {
+                    document.querySelectorAll('#chess-board .chess-square[tabindex="0"]').forEach(n => n.setAttribute('tabindex', '-1'));
+                    back.setAttribute('tabindex', '0');
+                    try { back.focus({ preventScroll: true }); } catch (_) {}
+                }
             };
             row.appendChild(btn);
+            if (idx === 0) {
+                // Focus the default (queen) so keyboard users land in-dialog.
+                setTimeout(() => { try { btn.focus({ preventScroll: true }); } catch (_) {} }, 0);
+            }
         });
         picker.appendChild(row);
     }
@@ -1230,7 +1516,13 @@ class ChessCourseApp {
         if (lockedDone) { this._setSpeech('Well done! Click "Complete Lesson" to continue.'); return; }
         if (this.cpuBusy) { this._setSpeech((this._cpuDifficulty || 'easy') === 'medium' ? 'Thinking a few moves deep…' : 'Playing a casual move…'); return; }
         if (this.game.gameOver) { this._refreshGameOverCard(); return; }
-        const status = this.game.getGameStatus();
+        // getGameStatus() scans the whole board (checkmate/stalemate walk
+        // every piece), so cache it per position — _updateTurnUI runs twice
+        // per move (draw + afterMove) and must stay off the select path.
+        const sKey = this.game.moveHistory.length + '|' + this.game.currentPlayer + '|' + (this.game.moveHistory.length ? this.game.moveHistory[this.game.moveHistory.length - 1].from + this.game.moveHistory[this.game.moveHistory.length - 1].to : '');
+        let status;
+        if (this._statusCache && this._statusCache.key === sKey) status = this._statusCache.status;
+        else { status = this.game.getGameStatus(); this._statusCache = { key: sKey, status }; }
         if (status.startsWith('check-white'))      this._setSpeech('Your king is in check — defend it!');
         else if (status.startsWith('check-black')) this._setSpeech('Check! The black king is under attack.');
         else if (this.exerciseDone)                this._setSpeech('Well done! Click "Complete Lesson" to continue.');
@@ -1248,25 +1540,54 @@ class ChessCourseApp {
         if (el) el.textContent = msg;
     }
 
+    _fmtLogMove(m) {
+        const cap = m.captured ? 'x' : '-';
+        const suf = m.specialMove === 'castling' ? ' O-O'
+                  : m.specialMove === 'enpassant' ? ' e.p.'
+                  : m.promotion   ? ('=' + m.promotion.toUpperCase()) : '';
+        return `<span class="move-item">${esc(m.from)}${cap}${esc(m.to)}${esc(suf)}</span>`;
+    }
     _updateMoveLog() {
+        // Append-only: only the newest pair is added. Full rebuild happens
+        // solely on reset/undo (history shrank) — never on a normal move.
         const log = document.getElementById('move-log');
         if (!log) return;
         const moves = this.game.moveHistory;
-        if (!moves.length) { log.innerHTML = '<span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span>'; return; }
-        let html = '';
-        for (let i = 0; i < moves.length; i += 2) {
+        if (!moves.length) {
+            log.innerHTML = '<span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span>';
+            this._loggedMoves = 0;
+            return;
+        }
+        if ((this._loggedMoves || 0) > moves.length) {
+            // History shrank (reset) — rebuild once.
+            log.innerHTML = '';
+            this._loggedMoves = 0;
+        }
+        const start = this._loggedMoves || 0;
+        if (start === 0) log.innerHTML = '';
+        // Append whole pairs; a trailing lone white move creates its own row
+        // and the black reply fills it in (no rebuild).
+        let i = start - (start % 2);
+        if (start % 2 === 1) {
+            // Odd start means the last pair row is missing its black move.
+            const lastRow = log.lastElementChild;
+            if (lastRow && moves[i + 1]) {
+                const w = document.createElement('span');
+                void w;
+                lastRow.insertAdjacentHTML('beforeend', this._fmtLogMove(moves[i + 1]));
+                this._loggedMoves = i + 2;
+                i += 2;
+            }
+        }
+        for (; i < moves.length; i += 2) {
             const w = moves[i], b = moves[i + 1];
             const num = Math.floor(i / 2) + 1;
-            const fmt = m => {
-                const cap = m.captured ? 'x' : '-';
-                const suf = m.specialMove === 'castling' ? ' O-O'
-                          : m.specialMove === 'enpassant' ? ' e.p.'
-                          : m.promotion   ? ('=' + m.promotion.toUpperCase()) : '';
-                return `<span class="move-item">${m.from}${cap}${m.to}${suf}</span>`;
-            };
-            html += `<div class="move-pair"><span class="move-num">${num}.</span>${fmt(w)}${b ? fmt(b) : ''}</div>`;
+            const row = document.createElement('div');
+            row.className = 'move-pair';
+            row.innerHTML = `<span class="move-num">${num}.</span>${this._fmtLogMove(w)}${b ? this._fmtLogMove(b) : ''}`;
+            log.appendChild(row);
         }
-        log.innerHTML = html;
+        this._loggedMoves = moves.length;
         log.scrollTop = log.scrollHeight;
     }
 
@@ -2669,12 +2990,30 @@ class ChessCourseApp {
         el.textContent = s.engine.currentPlayer === s.myColor ? 'Your move!' : 'Opponent is thinking…';
     }
 
-    /* ── Online board (orientation follows your color) ── */
+    /* ── Online board (orientation follows your color) — incremental sync,
+       same no-rebuild contract as the lesson board. ── */
+    _ensureOnlineSquares(board) {
+        if (board.dataset.synced === 'online' && board.querySelectorAll(':scope > .chess-square').length === 64) return;
+        board.innerHTML = '';
+        for (let dr = 0; dr < 8; dr++) {
+            for (let dc = 0; dc < 8; dc++) {
+                const sq = document.createElement('div');
+                sq.className = 'chess-square white';
+                sq.dataset.dr = String(dr);
+                sq.dataset.dc = String(dc);
+                sq.setAttribute('role', 'button');
+                sq.setAttribute('tabindex', '-1');
+                board.appendChild(sq);
+            }
+        }
+        board.dataset.synced = 'online';
+        this._bindBoard(board, 'online');
+    }
     _drawOnline() {
         const s = this.online;
         const board = document.getElementById('online-board');
         if (!board || !s) return;
-        board.innerHTML = '';
+        this._ensureOnlineSquares(board);
         this._bindBoard(board, 'online');
         const flip = (s.myColor === 'black') !== !!s.flipView;
         const at = (dr, dc) => [flip ? 7 - dr : dr, flip ? 7 - dc : dc];
@@ -2693,38 +3032,68 @@ class ChessCourseApp {
                 try { eng.movePiece(eng.algebraicToCoords(m.from), eng.algebraicToCoords(m.to), m.promotion || null); } catch (_) {}
             });
         }
-        const sel = viewing ? null : s.sel, legal = viewing ? [] : s.legal;
+        const sel = viewing ? null : s.sel, legal = viewing ? [] : (s.legal || []);
         const last = shown.length ? shown[shown.length - 1] : null;
         const lastFrom = last ? eng.algebraicToCoords(last.from) : null;
         const lastTo = last ? eng.algebraicToCoords(last.to) : null;
         const inCheck = eng._isKingInCheck(eng.currentPlayer);
         const kingPos = inCheck ? eng.findKing(eng.currentPlayer) : null;
-        const frag = document.createDocumentFragment();
-        for (let dr = 0; dr < 8; dr++) {
-            for (let dc = 0; dc < 8; dc++) {
-                const [r, c] = at(dr, dc);
-                const sq = document.createElement('div');
-                sq.className = `chess-square ${(r + c) % 2 === 0 ? 'white' : 'black'}`;
-                const alg = eng.coordsToAlgebraic([r, c]);
-                sq.dataset.square = alg; sq.dataset.row = String(r); sq.dataset.col = String(c);
-                sq.setAttribute('role', 'button'); sq.setAttribute('tabindex', '0'); sq.setAttribute('aria-label', alg);
-                if (sel && sel[0] === r && sel[1] === c) sq.classList.add('selected');
-                if (lastFrom && lastFrom[0] === r && lastFrom[1] === c) sq.classList.add('last-move');
-                if (lastTo && lastTo[0] === r && lastTo[1] === c) sq.classList.add('last-move');
-                if (kingPos && kingPos[0] === r && kingPos[1] === c) sq.classList.add('in-check');
-                const piece = eng.board[r][c];
-                if (piece) { const w = document.createElement('div'); w.innerHTML = this._svg(piece); const img = w.firstChild; if (img) sq.appendChild(img); }
-                if (sel && legal.some(m => m[0] === r && m[1] === c)) {
-                    const dot = document.createElement('div');
-                    dot.className = piece ? 'legal-ring' : 'legal-dot';
-                    sq.appendChild(dot);
+        const legalSet = new Set(legal.map(m => m[0] + ',' + m[1]));
+        let rover = this._onlineRover;
+        if (sel) rover = eng.coordsToAlgebraic(sel);
+        else if (last) rover = last.to;
+        if (!rover) rover = 'e2';
+        const kids = board.querySelectorAll(':scope > .chess-square');
+        for (let i = 0; i < kids.length; i++) {
+            const sq = kids[i];
+            const dr = +sq.dataset.dr, dc = +sq.dataset.dc;
+            const [r, c] = at(dr, dc);
+            sq.className = `chess-square ${(r + c) % 2 === 0 ? 'white' : 'black'}`;
+            const alg = eng.coordsToAlgebraic([r, c]);
+            sq.dataset.square = alg; sq.dataset.row = String(r); sq.dataset.col = String(c);
+            const piece = eng.board[r][c];
+            const isKingInCheck = !!(kingPos && kingPos[0] === r && kingPos[1] === c);
+            sq.setAttribute('aria-label', this._squareLabel(alg, piece, isKingInCheck));
+            if (sel && sel[0] === r && sel[1] === c) { sq.classList.add('selected'); sq.setAttribute('aria-selected', 'true'); }
+            else sq.removeAttribute('aria-selected');
+            if ((lastFrom && lastFrom[0] === r && lastFrom[1] === c) || (lastTo && lastTo[0] === r && lastTo[1] === c)) sq.classList.add('last-move');
+            if (isKingInCheck) sq.classList.add('in-check');
+            let img = sq.querySelector('img.chess-piece, svg.chess-piece');
+            if (piece) {
+                const wantSrc = this._pieceFile(piece);
+                if (!(img && img.tagName === 'IMG' && img.dataset.fallbackPiece === piece && img.getAttribute('src') === wantSrc)) {
+                    const w = document.createElement('div');
+                    w.innerHTML = this._svg(piece);
+                    const fresh = w.firstChild;
+                    if (img) img.replaceWith(fresh);
+                    else sq.prepend(fresh);
                 }
-                if (dr === 7) { const fl = document.createElement('span'); fl.className = 'coord-file'; fl.textContent = alg[0]; sq.appendChild(fl); }
-                if (dc === 0) { const rk = document.createElement('span'); rk.className = 'coord-rank'; rk.textContent = alg[1]; sq.appendChild(rk); }
-                frag.appendChild(sq);
-            }
+            } else if (img) img.remove();
+            const wantDot = !!(sel && legalSet.has(r + ',' + c));
+            let dot = sq.querySelector('.legal-dot, .legal-ring');
+            if (wantDot && !dot) {
+                dot = document.createElement('div');
+                dot.className = piece ? 'legal-ring' : 'legal-dot';
+                dot.setAttribute('aria-hidden', 'true');
+                sq.appendChild(dot);
+            } else if (wantDot && dot) {
+                const wantCls = piece ? 'legal-ring' : 'legal-dot';
+                if (dot.className !== wantCls) dot.className = wantCls;
+            } else if (!wantDot && dot) dot.remove();
+            let fl = sq.querySelector('.coord-file');
+            let rk = sq.querySelector('.coord-rank');
+            if (dr === 7) {
+                if (!fl) { fl = document.createElement('span'); fl.className = 'coord-file'; sq.appendChild(fl); }
+                if (fl.textContent !== alg[0]) fl.textContent = alg[0];
+            } else if (fl) fl.remove();
+            if (dc === 0) {
+                if (!rk) { rk = document.createElement('span'); rk.className = 'coord-rank'; sq.appendChild(rk); }
+                if (rk.textContent !== alg[1]) rk.textContent = alg[1];
+            } else if (rk) rk.remove();
+            sq.setAttribute('tabindex', alg === rover ? '0' : '-1');
         }
-        board.appendChild(frag);
+        this._onlineRover = rover;
+        // Focus is never destroyed now (no rebuild), so no restore needed.
         const log = document.getElementById('online-log');
         if (log) {
             if (!live) log.innerHTML = '<span style="color:var(--text-muted-dim)">No moves yet.</span>';
@@ -2788,18 +3157,20 @@ class ChessCourseApp {
         if (s.engine.currentPlayer !== s.myColor) return;
         const g = s.engine;
         const mine = (s.myColor === 'white');
+        // _drawOnline() is an in-place sync (no rebuild), already cheap.
+        const paintSelOnline = () => this._drawOnline();
         if (!g.selectedSquare && !s.sel) {
             if (g.board[r][c] && ((g.board[r][c] === g.board[r][c].toUpperCase()) === mine)) {
                 s.sel = [r, c]; s.legal = g.getLegalMoves([r, c]);
                 if (!s.legal.length) { s.sel = null; this._onlineStatus('That piece has no legal moves.'); }
-                this._drawOnline();
+                paintSelOnline();
             }
             return;
         }
         const from = s.sel;
         if (g.board[r][c] && ((g.board[r][c] === g.board[r][c].toUpperCase()) === mine) && !(from && from[0] === r && from[1] === c)) {
             s.sel = [r, c]; s.legal = g.getLegalMoves([r, c]);
-            this._drawOnline();
+            paintSelOnline();
             return;
         }
         if (from && s.legal.some(m => m[0] === r && m[1] === c)) {
@@ -2823,6 +3194,7 @@ class ChessCourseApp {
         picker.setAttribute('role', 'dialog');
         picker.setAttribute('aria-modal', 'true');
         picker.setAttribute('aria-label', 'Choose promotion piece');
+        this._trapPromotionKeys(picker);
         const white = s.myColor === 'white';
         const pieces = white ? ['Q', 'R', 'B', 'N'] : ['q', 'r', 'b', 'n'];
         const names = { Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
@@ -2831,15 +3203,27 @@ class ChessCourseApp {
         picker.appendChild(label);
         const row = document.createElement('div');
         row.className = 'promotion-options';
-        pieces.forEach(p => {
+        pieces.forEach((p, idx) => {
             const btn = document.createElement('button');
             btn.className = 'promotion-btn';
+            btn.type = 'button';
+            btn.setAttribute('aria-label', `Promote to ${names[p]}`);
             btn.innerHTML = `${this._svg(p)}<span>${names[p]}</span>`;
             btn.onclick = () => {
                 picker.innerHTML = ''; picker.classList.add('hidden');
                 const mv = s.pendingPromo; s.pendingPromo = null;
                 if (mv) this._onlinePlayMove(mv.from, mv.to, p);
+                if (mv) {
+                    this._onlineRover = s.engine.coordsToAlgebraic(mv.to);
+                    const back = document.querySelector(`#online-board [data-square="${this._onlineRover}"]`);
+                    if (back) {
+                        document.querySelectorAll('#online-board .chess-square[tabindex="0"]').forEach(n => n.setAttribute('tabindex', '-1'));
+                        back.setAttribute('tabindex', '0');
+                        try { back.focus({ preventScroll: true }); } catch (_) {}
+                    }
+                }
             };
+            if (idx === 0) setTimeout(() => { try { btn.focus({ preventScroll: true }); } catch (_) {} }, 0);
             row.appendChild(btn);
         });
         picker.appendChild(row);

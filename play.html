@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!-- play.html now redirects to the one site (index.html Learn screen),
+     preserving ?level= deep links. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DoChess — Levels</title>
+<script>
+(function () {
+  var q = location.search || '';
+  try { location.replace('index.html' + q + '#learn'); } catch (_) { location.href = 'index.html' + q; }
+})();
+</script>
+</head>
+<body>
+<p>Opening the Learn levels… <a id="fallback" href="index.html">continue</a></p>
+<script>
+document.getElementById('fallback').href = 'index.html' + (location.search || '');
+</script>
+</body>
+</html>

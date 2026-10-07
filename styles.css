@@ -51,6 +51,40 @@
     --board-dark:     #B58863;
     --board-selected: rgba(232, 160, 46, 0.45);
     --board-last:     #E8A02E;
+
+    /* Radii (were referenced ~35x but never defined — all cards fell back
+       to square corners; values match spec §35) */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+
+    /* Motion (was referenced ~20x but never defined) */
+    --transition: 0.2s ease-out;
+
+    /* Spacing scale (spec §34) — use these instead of ad-hoc values */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+}
+
+/* Reusable responsive container (spec §32): controlled max-width, flex
+   column, consistent gap. Use alongside .container where new markup lands. */
+.app-section {
+    width: 100%;
+    max-width: 1600px;
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-inline: 16px;
+}
+
+@media (min-width: 1024px) {
+    .app-section { padding-inline: 24px; }
 }
 
 body {
@@ -61,8 +95,11 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
+    min-height: 100dvh;
     position: relative;
     overflow-x: hidden;
+    /* iOS home-indicator: bottom nav / action rows must not sit under it */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 ::selection { background: var(--accent-dim); color: #fff; }
@@ -552,7 +589,8 @@ body {
 
 .lessons-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    /* min() keeps a single column fitting at 320px viewports */
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
     gap: 2rem;
 }
 
@@ -626,6 +664,63 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
+
+/* Lesson states (spec §28): locked / available / current / completed.
+   Current = first open-but-incomplete lesson, accent border + badge. */
+.current-badge {
+    background: rgba(16, 185, 129, 0.18);
+    border: 1px solid var(--accent);
+    color: var(--accent-bright);
+    padding: 0.3rem 0.85rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.lesson-card.current {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 8px 24px rgba(16, 185, 129, 0.15);
+}
+
+.lesson-card.done {
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+/* Continue Learning card (spec §31): real progress only, compact. */
+.continue-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-radius: var(--radius-md);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.continue-kicker {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent-bright);
+    margin-bottom: 0.25rem;
+}
+
+.continue-card h3 {
+    color: white;
+    font-size: 1.15rem;
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+}
+
+.continue-card p { color: var(--text-muted); font-size: 0.9rem; }
+
+.continue-card .btn-primary { min-height: 44px; white-space: nowrap; }
 
 /* ── Lesson Detail Screen ─────────────────────────────────────── */
 #lesson-screen h2 {
@@ -875,9 +970,10 @@ body {
 
 /* ── Board Container (was missing — board rendered as vertical stack) ── */
 #chess-board-wrapper {
-    width: 100%;
     max-width: 760px;
-    width: min(100%, calc(100lvh - 290px), 760px);
+    /* Single width declaration (was duplicated). min() keeps the square
+       board inside the live viewport on short desktop windows. */
+    width: min(100%, calc(100vh - 290px), 760px);
     margin: 0 auto;
     padding: 12px;
     background: var(--bg-card);
@@ -972,7 +1068,14 @@ body {
 
 .chess-square.selected  { background-color: var(--board-selected) !important; }
 .chess-square.last-move { background-color: var(--board-last) !important; }
-.chess-square.in-check  { background-color: rgba(220, 50, 50, 0.65) !important; }
+/* Check must not rely on color alone (a11y): glow + outline + king glyph
+   gets an aria-label suffix ", check" in JS. */
+.chess-square.in-check  {
+    background-color: rgba(220, 50, 50, 0.65) !important;
+    outline: 3px solid rgba(220, 50, 50, 0.9);
+    outline-offset: -3px;
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.55), inset 0 0 18px rgba(220, 50, 50, 0.8);
+}
 
 .chess-square:hover:not(.selected) {
     filter: brightness(1.07);
@@ -1663,9 +1766,8 @@ body[data-theme='day'] .nav { background: #ffffff; }
         align-items: start;
     }
     #online-board-wrapper {
-        width: 100%;
         max-width: 760px;
-        width: min(100%, calc(100lvh - 290px), 760px);
+        width: min(100%, calc(100vh - 290px), 760px);
     }
 }
 
@@ -1714,13 +1816,20 @@ body[data-theme='day'] .nav { background: #ffffff; }
 /* Drag ghost follows the pointer above everything. */
 .drag-ghost {
     position: fixed;
+    left: 0;
+    top: 0;
     z-index: 9995;
     pointer-events: none;
+    /* Positioned via left/top at grab time, moved via transform only
+       (GPU-friendly, no layout per pointermove). translate(-50%,-60%)
+       centers the piece slightly above the finger. */
     transform: translate(-50%, -60%) scale(1.12);
     will-change: transform;
 }
 
-.chess-square { touch-action: pan-y; }
+/* Single touch-action for squares (was conflicting: manipulation vs pan-y).
+   manipulation = no double-tap zoom delay, vertical scroll still works. */
+.chess-square { touch-action: manipulation; }
 
 /* Game-over result card (free game). */
 #gameover-card {
@@ -1870,13 +1979,20 @@ body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
 
 @media (max-width: 480px) {
     .wheel-wrap { grid-template-columns: 1fr 1fr; }
-    .wheel-summary { grid-column: 1 / -1; flex-direction: row; gap: 0.6rem; }
+    .wheel-summary { grid-column: 1 / -1; flex-direction: row; gap: 0.6rem; min-width: 0; }
+}
+
+@media (max-width: 360px) {
+    /* 320px phones: stack wheels so nothing forces horizontal scroll */
+    .wheel-wrap { grid-template-columns: 1fr; }
+    .game-code { font-size: 2rem; letter-spacing: 0.25em; text-indent: 0.25em; }
+    .join-input { width: 100%; }
 }
 
 .lobby-hint { color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; margin-bottom: 1rem; }
 .lobby-actions { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
 
-.join-row { display: flex; gap: 0.6rem; align-items: center; }
+.join-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
 
 .join-input {
     background: var(--bg-main);
@@ -1891,20 +2007,26 @@ body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
     text-align: center;
     padding: 0.7rem 0.5rem 0.7rem 0.8rem;
     width: 10rem;
+    max-width: 100%;
     min-height: 44px;
 }
 
-.join-input:focus { border-color: var(--accent); outline: none; }
+/* Keep a visible focus ring (was outline:none). */
+.join-input:focus { border-color: var(--accent); outline: 2px solid var(--accent-bright); outline-offset: 2px; }
+.join-input:focus:not(:focus-visible) { outline: none; }
+.join-input:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
 
 .game-code {
     font-family: 'Inter', monospace;
     font-size: 2.5rem;
     font-weight: 800;
     letter-spacing: 0.4em;
+    text-indent: 0.4em; /* center despite wide tracking, no overflow */
     text-align: center;
     color: var(--accent-bright);
     padding: 1rem;
     font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
 }
 
 .waiting-card { text-align: center; }
@@ -2081,8 +2203,14 @@ body[data-theme='day'] .confirm-card h3 { color: var(--text-main); }
 }
 
 @media (max-width: 480px) {
-    .hero h2 { font-size: 1.8rem; }
+    .hero h2 { font-size: 1.8rem; overflow-wrap: anywhere; }
     #chess-board-wrapper { padding: 12px; }
+}
+
+@media (max-width: 360px) {
+    .hero h2 { font-size: 1.55rem; }
+    .container { padding: 0 12px; }
+    .lessons-grid { gap: 1rem; }
 }
 
 /* ── Mobile nav: hamburger + dropdown panel (≤900px) ──────────── */
@@ -2151,7 +2279,7 @@ body[data-theme='day'] .confirm-card h3 { color: var(--text-main); }
     #online-screen .arena .move-log { padding: 0.5rem 0.7rem; max-height: 72px; }
     #online-screen .arena .feedback { margin-top: 0.5rem; }
     #online-screen .arena .speech-bubble { padding: 0.55rem 0.9rem; }
-    #online-screen .lesson-actions { margin-top: 0.5rem; flex-direction: row; flex-wrap: nowrap; align-items: center; overflow-x: auto; padding-bottom: 0.25rem; }
+    #online-screen .lesson-actions { margin-top: 0.5rem; flex-direction: row; flex-wrap: nowrap; align-items: center; overflow-x: auto; padding-bottom: calc(0.25rem + env(safe-area-inset-bottom, 0px)); }
     #online-screen .lesson-actions .btn-secondary { white-space: nowrap; }
     #online-screen.screen { padding: 10px 0 12px; }
     /* Match screen on phones: bars + board + actions only. Turn state
