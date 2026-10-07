@@ -95,8 +95,13 @@ test('joiner clock converges via own-move echo', async ({ browser }) => {
   const winSub = await host.evaluate(() => document.querySelector('#oprofile-you .info .sub')?.textContent || '');
   const winResult = await host.evaluate(() => (document.getElementById('online-result')?.textContent || '').replace(/\s+/g, ' '));
   console.log('winner sub:', JSON.stringify(winSub), '| result:', JSON.stringify(winResult.slice(0, 80)));
-  expect(winSub).toMatch(/· \d+ \(\+\d+\)/);
+  // You-card carries the whole change: "Black · 800 → 820 (+20)".
+  expect(winSub).toMatch(/· \d+ → \d+ \(\+\d+\)/);
   expect(winResult).toMatch(/Rating \+\d+ → \d+/);
+  // The resigner (loser) sees the same arrow format with the minus delta.
+  const loseSub = await joiner.evaluate(() => document.querySelector('#oprofile-you .info .sub')?.textContent || '');
+  console.log('loser sub:', JSON.stringify(loseSub));
+  expect(loseSub).toMatch(/· \d+ → \d+ \(-\d+\)/);
   await A.close();
   await B.close();
 });

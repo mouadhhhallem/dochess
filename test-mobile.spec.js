@@ -57,3 +57,26 @@ test('mobile match: big board, no page scroll', async ({ browser }) => {
   await A.close();
   await B.close();
 });
+
+// Short phones (375×667): the board must be full width at the FIRST
+// paint. The old height-derived width (max(270px, 100lvh − 430px)) shrank
+// it to 270px until the first scroll reflow "grew" it to phone size.
+test('short phone: board is full width at first paint', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 375, height: 667 }, hasTouch: true, isMobile: true });
+  await page.goto('index.html');
+  await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
+  await page.evaluate(() => window.app.showOnline());
+  await page.evaluate(() => {
+    document.getElementById('online-content').innerHTML =
+      '<div id="online-board-wrapper"><div id="online-board"></div></div>';
+  });
+  const ratio = await page.evaluate(() => {
+    const r = document.getElementById('online-board').getBoundingClientRect();
+    return r.width / window.innerWidth;
+  });
+  console.log('short-phone board/viewport ratio:', ratio);
+  // Full width minus container/wrapper padding (~0.90); the old
+  // height-derived sizing landed at 0.72 (a 270px board).
+  expect(ratio).toBeGreaterThanOrEqual(0.88);
+  await page.close();
+});

@@ -183,7 +183,7 @@ class ChessCourseApp {
     static assetV() { return 'v22'; }
     // App release tag (?v= on scripts). Sent on identity messages so two
     // sides on different releases warn instead of silently misbehaving.
-    static APP_VERSION = 'v33';
+    static APP_VERSION = 'v35';
     _pieceFile(piece) {
         const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
         const white = piece === piece.toUpperCase();
@@ -1728,7 +1728,13 @@ class ChessCourseApp {
         try { if (s.pingTimer) clearInterval(s.pingTimer); } catch (_) {}
         const ping = () => {
             try {
-                if (s.role === 'host' && s.conn) {
+                if (!s.conn) return;
+                // Identity heartbeat: the photo/name may have been missing
+                // at the handshake (auth still resolving) or a one-shot
+                // profile push may have raced a reconnect. Both sides
+                // resend every cycle; the peer repaints only on change.
+                const prof = { type: 'profile', v: ChessCourseApp.APP_VERSION, user: this._meTag(), epoch: s.epoch || 0 };
+                if (s.role === 'host') {
                     s.net.send(s.conn, { type: 'ping', t: performance.now() });
                     // Periodic clock sync: a lost or crawling 'move' echo can
                     // otherwise leave the joiner ticking the wrong side for a
@@ -1739,6 +1745,7 @@ class ChessCourseApp {
                         s.net.send(s.conn, { type: 'clocks', epoch: s.epoch || 0, ply: s.ply, clocks: this._clockSnapshot() });
                     }
                 }
+                s.net.send(s.conn, prof);
             } catch (_) {}
         };
         ping();
@@ -1955,6 +1962,7 @@ class ChessCourseApp {
             pendingPromo: null, result: null, reason: null,
             rematchMe: false, rematchOpp: false, peerGone: false,
             _overShown: false, short: false, oppV: null,
+            ratingDelta: null, ratingAfter: null,
             appliedMids: new Set(), pendingIntent: null,
             rtt: s.rtt || 0,
             clock: { w: control.base, b: control.base, side: 'white', turnStarted: performance.now() }
@@ -2208,10 +2216,11 @@ class ChessCourseApp {
             : '';
         const unratedBit = (over && s.unrated) ? `<div class="feedback info">Unrated game — you are playing yourself.</div>` : '';
         const shortBit = (over && s.short && !s.unrated) ? `<div class="feedback info">Unrated game — too short to rate.</div>` : '';
-        // After a rated game the You-card carries the new rating plus the
-        // delta, e.g. "Black · 831 (-26)" next to "Rating -26 → 831".
+        // After a rated game the You-card shows the whole change, e.g.
+        // "Black · 857 → 831 (-26)" next to the result line's
+        // "Rating -26 → 831".
         const youSub = (over && s.ratingDelta !== null && s.ratingDelta !== undefined)
-            ? `${mine} · ${s.ratingAfter} (${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta})`
+            ? `${mine} · ${s.ratingAfter - s.ratingDelta} → ${s.ratingAfter} (${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta})`
             : `${mine} · ${OnlineRatings.get(this.userId, s.control.id)}`;
         const resultLine = !over ? '' : s.result === 'win'
             ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`

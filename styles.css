@@ -2121,11 +2121,13 @@ body[data-theme='day'] .confirm-card h3 { color: var(--text-main); }
     .container { padding: 0 10px; }
     #chess-board-wrapper,
     #online-board-wrapper {
-        /* lvh (large viewport) is stable while the mobile URL bar shows and
-           hides; dvh would shrink the board on load and grow it mid-scroll.
-           The plain width line is the fallback for browsers without lvh. */
+        /* Full phone width from the first paint. Deriving width from the
+           viewport HEIGHT (100lvh minus chrome px) made the board render
+           small on load and only "grow" to phone size after the first
+           scroll (mobile URL-bar reflow) — players had to scroll up and
+           down to fix it. Width never changes with the URL bar, so the
+           size is stable and big from the start. */
         width: 100%;
-        width: max(270px, min(100%, calc(100lvh - 430px)));
         padding: 8px;
     }
     .arena .profile-card { padding: 0.6rem 0.8rem; gap: 0.6rem; }
@@ -2158,6 +2160,16 @@ body[data-theme='day'] .confirm-card h3 { color: var(--text-main); }
     body[data-screen="online-screen"] .logo-icon { width: 28px; height: 28px; }
     body[data-screen="online-screen"] .logo h1 { font-size: 1rem; }
     #online-screen .dashboard-section > h4:first-child { display: none; }
+}
+
+/* Landscape phones: height is scarce — keep the square board inside the
+   live viewport so the whole match stays reachable. Portrait never takes
+   this path (it always gets full width above). */
+@media (max-width: 768px) and (orientation: landscape) {
+    #chess-board-wrapper,
+    #online-board-wrapper {
+        width: max(240px, min(100%, calc(100dvh - 170px)));
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
