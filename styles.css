@@ -47,10 +47,10 @@
     --text-muted-dim: #8fa1bb;
 
     /* Chess board: lichess cream + green (reference screenshot) */
-    --board-light:    #346777;
-    --board-dark:     #8da71c;
-    --board-selected: rgba(16, 185, 129, 0.3);
-    --board-last:     rgba(251, 191, 36, 0.25);
+    --board-light:    #F0D9B5;
+    --board-dark:     #B58863;
+    --board-selected: rgba(232, 160, 46, 0.45);
+    --board-last:     #E8A02E;
 }
 
 body {
@@ -1463,8 +1463,8 @@ body[data-theme='day'] {
     --primary-mid:    #e9eff5;
     --primary-light:  #dfe7f0;
     --primary-surface:#dbe4f0;
-    --board-light:    #ececd0;
-    --board-dark:     #739552;
+    --board-light:    #F0D9B5;
+    --board-dark:     #B58863;
 }
 
 body[data-theme='night'] { color-scheme: dark; }
