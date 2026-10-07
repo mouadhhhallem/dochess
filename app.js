@@ -207,7 +207,7 @@ class ChessCourseApp {
     static assetV() { return 'v24'; }
     // App release tag (?v= on scripts). Sent on identity messages so two
     // sides on different releases warn instead of silently misbehaving.
-    static APP_VERSION = 'v37';
+    static APP_VERSION = 'v38';
     _pieceFile(piece) {
         const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
         const white = piece === piece.toUpperCase();
@@ -219,7 +219,7 @@ class ChessCourseApp {
         const src = this._pieceFile(piece);
         const label = `${white ? 'White' : 'Black'} ${src.split('-').pop().split('.')[0]}`;
         return `<img src="${src}" class="chess-piece ${white ? 'white' : 'black'}" alt="${label}" width="45" height="45"
-            draggable="false" data-fallback-piece="${piece}">`;
+            decoding="async" draggable="false" data-fallback-piece="${piece}">`;
     }
     // CSP-safe image fallback: one capture-phase listener swaps any broken
     // piece image for inline SVG (inline onerror= attributes are banned).
@@ -494,6 +494,17 @@ class ChessCourseApp {
                     <div id="lesson-feedback" class="feedback info" role="status" aria-live="polite">
                         Welcome to <strong>${esc(l.title)}</strong>! ${free ? 'You are White — make your first move!' : 'Follow the exercise above.'}
                     </div>
+                    <div class="lesson-actions">
+                        <button class="btn-secondary" data-action="reset-board">Reset Board</button>
+                        <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
+                        ${this._muteBtnHTML()}
+                        ${free ? `<label class="diff-label">Computer:
+                            <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
+                                <option value="easy" selected>Easy</option>
+                                <option value="medium">Medium</option>
+                            </select></label>` : ''}
+                        ${btn}
+                    </div>
                     <div class="profile-card player" id="profile-you">
                         <img class="avatar" src="${this._pieceFile('P')}" width="52" height="52" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
                         <div class="info">
@@ -515,17 +526,6 @@ class ChessCourseApp {
                         <div class="move-log" id="move-log" role="log" aria-live="polite" aria-label="Move log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
                     </div>
                     <div id="gameover-card" style="display:none" role="dialog" aria-modal="false" aria-labelledby="gameover-title"></div>
-                    <div class="lesson-actions">
-                        <button class="btn-secondary" data-action="reset-board">Reset Board</button>
-                        <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
-                        ${this._muteBtnHTML()}
-                        ${free ? `<label class="diff-label">Computer:
-                            <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
-                                <option value="easy" selected>Easy</option>
-                                <option value="medium">Medium</option>
-                            </select></label>` : ''}
-                        ${btn}
-                    </div>
                 </div>
             </div>`;
 
@@ -586,6 +586,9 @@ class ChessCourseApp {
         }
 
         board.innerHTML = '';
+        // One listener set per board (delegated) — re-attaching 6 listeners
+        // to all 64 squares on every redraw was the main move-time jank.
+        this._bindBoard(board, 'lesson');
 
         const sel      = this.game.selectedSquare;
         const legal    = this.game.legalMoves;
@@ -598,6 +601,7 @@ class ChessCourseApp {
 
         const flip = !!this.boardFlip;
         const at = (dr, dc) => [flip ? 7 - dr : dr, flip ? 7 - dc : dc];
+        const frag = document.createDocumentFragment();
         for (let dr = 0; dr < 8; dr++) {
             for (let dc = 0; dc < 8; dc++) {
                 const [r, c] = at(dr, dc);
@@ -641,14 +645,10 @@ class ChessCourseApp {
                     sq.appendChild(rk);
                 }
 
-                sq.addEventListener('click', () => this._click(r, c));
-                sq.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._click(r, c); }
-                });
-                this._bindDrag(sq, board, r, c, 'lesson');
-                board.appendChild(sq);
+                frag.appendChild(sq);
             }
         }
+        board.appendChild(frag);
 
         if (flyers.length) {
             const brect = board.getBoundingClientRect();
@@ -689,18 +689,42 @@ class ChessCourseApp {
        Dragging a piece glides a ghost under the pointer; dropping on a
        square runs the exact same path as click-click. A tap never moves
        enough to start a drag, so plain clicks are untouched. ─────── */
-    _bindDrag(sq, boardEl, r, c, kind) {
-        sq.addEventListener('pointerdown', (e) => {
-            if (e.button !== undefined && e.button > 0) return;
-            if (!sq.querySelector('img.chess-piece')) return;
-            this._drag = { from: [r, c], x0: e.clientX, y0: e.clientY, ghost: null, kind };
+    /* ── Board events (delegated, bound once per board element) ─────
+       Click, keyboard and drag all resolve the square from the event
+       target. One listener set per board instead of 6 per square per
+       redraw keeps every move allocation-free on the input path.
+       Touch pointers implicitly capture to the pressed square, so
+       drag move/up keep arriving exactly as the per-square version. ── */
+    _bindBoard(board, kind) {
+        if (board.dataset.bound === kind) return;
+        board.dataset.bound = kind;
+        const sqOf = (e) => {
+            const el = e.target && e.target.closest ? e.target.closest('.chess-square') : null;
+            return el && el.dataset.row !== undefined ? el : null;
+        };
+        const act = (r, c) => { if (kind === 'lesson') this._click(r, c); else this._onlineClick(r, c); };
+        board.addEventListener('click', (e) => {
+            const sq = sqOf(e); if (!sq) return;
+            act(+sq.dataset.row, +sq.dataset.col);
         });
-        sq.addEventListener('pointermove', (e) => {
+        board.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            const sq = sqOf(e); if (!sq) return;
+            e.preventDefault();
+            act(+sq.dataset.row, +sq.dataset.col);
+        });
+        board.addEventListener('pointerdown', (e) => {
+            if (e.button !== undefined && e.button > 0) return;
+            const sq = sqOf(e); if (!sq) return;
+            if (!sq.querySelector('img.chess-piece')) return;
+            this._drag = { from: [+sq.dataset.row, +sq.dataset.col], sqEl: sq, x0: e.clientX, y0: e.clientY, ghost: null, kind };
+        });
+        board.addEventListener('pointermove', (e) => {
             const d = this._drag;
             if (!d || d.kind !== kind) return;
             if (!d.ghost) {
                 if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) <= 10) return;
-                const img = sq.querySelector('img.chess-piece');
+                const img = (d.sqEl && d.sqEl.isConnected) ? d.sqEl.querySelector('img.chess-piece') : null;
                 if (!img) { this._drag = null; return; }
                 const rect = img.getBoundingClientRect();
                 const g = img.cloneNode();
@@ -709,6 +733,7 @@ class ChessCourseApp {
                 g.style.height = rect.height + 'px';
                 document.body.appendChild(g);
                 d.ghost = g; d.w = rect.width; d.h = rect.height;
+                const [r, c] = d.from;
                 if (kind === 'lesson') { if (!this.game.selectedSquare) this._click(r, c); }
                 else { const s = this.online; if (s && !s.sel) this._onlineClick(r, c); }
             }
@@ -742,8 +767,8 @@ class ChessCourseApp {
                 setTimeout(() => { this._dragMoved = false; }, 0);
             }
         };
-        sq.addEventListener('pointerup', drop);
-        sq.addEventListener('pointercancel', () => { if (this._drag?.ghost) this._drag.ghost.remove(); this._drag = null; });
+        board.addEventListener('pointerup', drop);
+        board.addEventListener('pointercancel', () => { if (this._drag?.ghost) this._drag.ghost.remove(); this._drag = null; });
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -984,7 +1009,9 @@ class ChessCourseApp {
         const step = () => {
             if (this.game !== g || epoch !== this._searchEpoch || g.gameOver) { this.cpuBusy = false; this._updateTurnUI(); return; }
             const t0 = Date.now();
-            while (i < ordered.length && Date.now() - t0 < 40) {
+            // 20ms slices: long enough to make progress, short enough that
+            // every frame still renders while the computer is thinking.
+            while (i < ordered.length && Date.now() - t0 < 20) {
                 const mv = ordered[i++];
                 const snap = g.snapshot();
                 g.movePiece(mv.from, mv.to, mv.promo || null);
@@ -2648,6 +2675,7 @@ class ChessCourseApp {
         const board = document.getElementById('online-board');
         if (!board || !s) return;
         board.innerHTML = '';
+        this._bindBoard(board, 'online');
         const flip = (s.myColor === 'black') !== !!s.flipView;
         const at = (dr, dc) => [flip ? 7 - dr : dr, flip ? 7 - dc : dc];
         // History view: null = live head; otherwise replay the first N plies
@@ -2671,6 +2699,7 @@ class ChessCourseApp {
         const lastTo = last ? eng.algebraicToCoords(last.to) : null;
         const inCheck = eng._isKingInCheck(eng.currentPlayer);
         const kingPos = inCheck ? eng.findKing(eng.currentPlayer) : null;
+        const frag = document.createDocumentFragment();
         for (let dr = 0; dr < 8; dr++) {
             for (let dc = 0; dc < 8; dc++) {
                 const [r, c] = at(dr, dc);
@@ -2692,12 +2721,10 @@ class ChessCourseApp {
                 }
                 if (dr === 7) { const fl = document.createElement('span'); fl.className = 'coord-file'; fl.textContent = alg[0]; sq.appendChild(fl); }
                 if (dc === 0) { const rk = document.createElement('span'); rk.className = 'coord-rank'; rk.textContent = alg[1]; sq.appendChild(rk); }
-                sq.addEventListener('click', () => this._onlineClick(r, c));
-                sq.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._onlineClick(r, c); } });
-                this._bindDrag(sq, board, r, c, 'online');
-                board.appendChild(sq);
+                frag.appendChild(sq);
             }
         }
+        board.appendChild(frag);
         const log = document.getElementById('online-log');
         if (log) {
             if (!live) log.innerHTML = '<span style="color:var(--text-muted-dim)">No moves yet.</span>';

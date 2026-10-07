@@ -960,6 +960,7 @@ body {
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
+    -webkit-touch-callout: none;
     transition: filter 0.12s ease;
     aspect-ratio: 1 / 1;
     min-width: 0;
@@ -1041,6 +1042,7 @@ body {
     z-index: 30;
     pointer-events: none;
     margin: 0;
+    will-change: transform;
 }
 
 /* Coordinate labels */
@@ -1715,6 +1717,7 @@ body[data-theme='day'] .nav { background: #ffffff; }
     z-index: 9995;
     pointer-events: none;
     transform: translate(-50%, -60%) scale(1.12);
+    will-change: transform;
 }
 
 .chess-square { touch-action: pan-y; }

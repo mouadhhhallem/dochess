@@ -66,6 +66,9 @@ test('short phone: board is full width at first paint', async ({ browser }) => {
   await page.goto('index.html');
   await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
   await page.evaluate(() => window.app.showOnline());
+  // The lobby first shows "Loading…" and re-renders itself when PeerJS
+  // lands — inject only AFTER that, or the re-render wipes our markup.
+  await page.waitForSelector('#join-code', { timeout: 15000 });
   await page.evaluate(() => {
     document.getElementById('online-content').innerHTML =
       '<div id="online-board-wrapper"><div id="online-board"></div></div>';
