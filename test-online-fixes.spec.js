@@ -13,7 +13,8 @@ test('opp card repaint and clock sync apply cleanly', async ({ page }) => {
       `<div class="avatar-letter">Z</div>` +
       `<div class="info"><span class="name">Zed</span><span class="sub">Black · </span>` +
       `<div class="captured-row" data-cap="opp"></div></div>` +
-      `<div class="clock" id="oclock-top">--:--</div></div>`;
+      `<div class="clock" id="oclock-top">--:--</div></div>` +
+      `<div id="online-board-wrapper"></div>`;
     window.app.online = { myColor: 'white', opp: { name: 'Zed', img: null, rating: null } };
   });
 
@@ -54,4 +55,30 @@ test('opp card repaint and clock sync apply cleanly', async ({ page }) => {
   const after = await page.evaluate(() => ({ side: window.app.online.clock.side, w: window.app.online.clock.w }));
   expect(after.side).toBe('black');
   expect(after.w).toBe(299000);
+
+  // No captures -> no material badge (no phantom +1).
+  await page.evaluate(() => {
+    document.getElementById('online-content').innerHTML =
+      `<div class="captured-row" data-cap="you"></div><div class="captured-row" data-cap="opp"></div>`;
+    window.app._paintCaptured('online-content', new ChessGame(), 'white');
+  });
+  await expect(page.locator('#online-content .mat-edge')).toHaveCount(0);
+  await expect(page.locator('#online-content [data-cap]').first()).toBeEmpty();
+
+  // Release skew: a peer on an older build (no version tag) raises the
+  // mismatch banner; a peer on the current build clears it.
+  await page.evaluate(() => {
+    document.getElementById('online-content').innerHTML = `<div id="online-board-wrapper"></div>`;
+    window.app.online = {
+      phase: 'play', result: null, myColor: 'white',
+      opp: { name: 'Zed', img: null, rating: null },
+      clock: { w: 300000, b: 300000, side: 'white', turnStarted: performance.now() },
+    };
+    window.app._joinOnMsg('profile', { user: { id: 'u_old', name: 'Old' } });
+  });
+  await expect(page.locator('#over-ver')).toContainText(/older|mismatch/i);
+  await page.evaluate(() => {
+    window.app._joinOnMsg('profile', { v: ChessCourseApp.APP_VERSION, user: { id: 'u_new', name: 'New' } });
+  });
+  await expect(page.locator('#over-ver')).toHaveCount(0);
 });

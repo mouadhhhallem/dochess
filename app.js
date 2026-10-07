@@ -181,6 +181,9 @@ class ChessCourseApp {
     // Bump ASSET_V every release so edited artwork can never hide
     // behind the browser image cache. Same rule as the ?v= tags.
     static assetV() { return 'v22'; }
+    // App release tag (?v= on scripts). Sent on identity messages so two
+    // sides on different releases warn instead of silently misbehaving.
+    static APP_VERSION = 'v33';
     _pieceFile(piece) {
         const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
         const white = piece === piece.toUpperCase();
@@ -343,7 +346,7 @@ class ChessCourseApp {
         // profile so the peer sees who they're playing.
         const s = this.online;
         if (this.userId && s && (s.phase === 'play' || s.phase === 'over') && s.conn) {
-            try { s.net.send(s.conn, { type: 'profile', user: this._meTag(), epoch: s.epoch || 0 }); } catch (_) {}
+            try { s.net.send(s.conn, { type: 'profile', v: ChessCourseApp.APP_VERSION, user: this._meTag(), epoch: s.epoch || 0 }); } catch (_) {}
         }
     }
     isDone(id)  { return this.progress.done.includes(id); }
@@ -1317,7 +1320,7 @@ class ChessCourseApp {
         return {
             id: this.userId || 'guest',
             name: u ? (u.fullName || u.username || 'Player') : 'Guest',
-            img: u?.imageUrl || null,
+            img: (u && (u.imageUrl || u.profileImageUrl || u.avatar)) || null,
             ratings: cats,
             rating: cats[this._onlineControl().id]
         };
@@ -1405,6 +1408,7 @@ class ChessCourseApp {
                     <div class="board-list" id="wheel-board-list">${board}</div>
                     <p class="lobby-hint">Every player this device has met, sorted by rating. A shared global board needs the backend from the system design; this one never leaves your browser.</p>
                 </div>
+                <p class="lobby-hint" style="text-align:center">DoChess ${ChessCourseApp.APP_VERSION} · both players need the same version — refresh if your opponent is told to.</p>
             </div>`;
         this._bindWheels();
     }
@@ -1598,7 +1602,7 @@ class ChessCourseApp {
                 const conn = await this.online.net.join(code);
                 if (!this.online || this.online.phase !== 'joining') return;
                 this.online.conn = conn;
-                this.online.net.send(conn, { type: 'hello', code, rejoin: !!isRejoin, user: this._meTag() });
+                this.online.net.send(conn, { type: 'hello', v: ChessCourseApp.APP_VERSION, code, rejoin: !!isRejoin, user: this._meTag() });
                 await this._waitFor(() => this.online && this.online.phase === 'play', 10000);
                 return; // welcome handler moved us into the game
             } catch (e) {
@@ -1767,13 +1771,14 @@ class ChessCourseApp {
             if (msg.code !== s.code || (s.phase !== 'waiting' && s.phase !== 'play')) { try { conn.close(); } catch (_) {} return; }
             s.conn = conn;
             s.opp = sanitizePeerUser(msg.user);
+            this._notePeerVersion(msg);
             if (s.resumed) {
                 // Rejoining joiner meets the restored session: same game,
                 // same colors, full snapshot. Epoch already bumped at re-host.
                 s.resumed = false; s.peerGone = false;
                 s.phase = 'play';
                 this._clearRejoin();
-                s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+                s.net.send(conn, { type: 'welcome', v: ChessCourseApp.APP_VERSION, epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
                 this._flushPending();
                 this._startOnlineTick();
                 this._startOnlinePing();
@@ -1787,7 +1792,7 @@ class ChessCourseApp {
                 if (!same) { try { conn.close(); } catch (_) {} return; }
                 s.conn = conn; s.peerGone = false;
                 this._clearRejoin();
-                s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+                s.net.send(conn, { type: 'welcome', v: ChessCourseApp.APP_VERSION, epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
                 this._flushPending();
                 this._onlineStatus();
                 this._drawOnline();
@@ -1806,13 +1811,13 @@ class ChessCourseApp {
             const myColor = Math.random() < 0.5 ? 'white' : 'black';
             this._startOnlineGame(myColor, s.opp);
             try { localStorage.setItem('cclast', JSON.stringify({ code: s.code, gameId: s.gameId })); } catch (_) {}
-            s.net.send(conn, { type: 'welcome', epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+            s.net.send(conn, { type: 'welcome', v: ChessCourseApp.APP_VERSION, epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
             this._renderOnlineGame();
             return;
         }
         if (!s.conn || conn !== s.conn) return;
         if (type === 'profile') {
-            if (msg.user) { s.opp = sanitizePeerUser(msg.user); this._paintOppCard(); }
+            if (msg.user) { s.opp = sanitizePeerUser(msg.user); this._notePeerVersion(msg); this._paintOppCard(); }
             return;
         }
         if (type === 'sync_request') { s.net.send(conn, { type: 'state', epoch: s.epoch || 0, state: this._buildOnlineState() }); return; }
@@ -1843,6 +1848,7 @@ class ChessCourseApp {
             if (typeof msg.epoch === 'number') s.epoch = msg.epoch;
             s.gameId = msg.game_id;
             s.opp = sanitizePeerUser(msg.user);
+            this._notePeerVersion(msg);
             this._startOnlineGame(msg.color === 'white' ? 'white' : 'black', s.opp, this._cleanControl(msg.control), true);
             this._applyOnlineState(msg.state);
             s.peerGone = false;
@@ -1864,7 +1870,7 @@ class ChessCourseApp {
             return;
         }
         if (type === 'profile') {
-            if (msg.user) { s.opp = sanitizePeerUser(msg.user); this._paintOppCard(); }
+            if (msg.user) { s.opp = sanitizePeerUser(msg.user); this._notePeerVersion(msg); this._paintOppCard(); }
             return;
         }
         if (type === 'move') {
@@ -1941,7 +1947,7 @@ class ChessCourseApp {
             engine: new ChessGame(), ply: 0, sel: null, legal: [],
             pendingPromo: null, result: null, reason: null,
             rematchMe: false, rematchOpp: false, peerGone: false,
-            _overShown: false, short: false,
+            _overShown: false, short: false, oppV: null,
             appliedMids: new Set(), pendingIntent: null,
             rtt: s.rtt || 0,
             clock: { w: control.base, b: control.base, side: 'white', turnStarted: performance.now() }
@@ -2172,6 +2178,11 @@ class ChessCourseApp {
             : '';
         const unratedBit = (over && s.unrated) ? `<div class="feedback info">Unrated game — you are playing yourself.</div>` : '';
         const shortBit = (over && s.short && !s.unrated) ? `<div class="feedback info">Unrated game — too short to rate.</div>` : '';
+        // After a rated game the You-card carries the new rating plus the
+        // delta, e.g. "Black · 831 (-26)" next to "Rating -26 → 831".
+        const youSub = (over && s.ratingDelta !== null && s.ratingDelta !== undefined)
+            ? `${mine} · ${s.ratingAfter} (${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta})`
+            : `${mine} · ${OnlineRatings.get(this.userId, s.control.id)}`;
         const resultLine = !over ? '' : s.result === 'win'
             ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`
             : s.result === 'loss'
@@ -2191,7 +2202,7 @@ class ChessCourseApp {
                     <div id="online-result" role="status" aria-live="polite">${resultLine}</div>
                     <div class="profile-card player" id="oprofile-you">
                         <div class="avatar-letter you">${esc((this._meTag().name || 'Y')[0].toUpperCase())}</div>
-                        <div class="info"><span class="name">You</span><span class="sub">${mine} · ${OnlineRatings.get(this.userId, s.control.id)}</span><div class="captured-row" data-cap="you"></div></div>
+                        <div class="info"><span class="name">You</span><span class="sub">${youSub}</span><div class="captured-row" data-cap="you"></div></div>
                         <div class="clock" id="oclock-bottom" role="timer" aria-label="Your clock">--:--</div>
                     </div>
                 </div>
@@ -2225,7 +2236,16 @@ class ChessCourseApp {
         this._onlineStatus();
         this._paintOnlineClocks();
         this._bindOppImgFallback();
+        this._paintVerWarn();
         this._animateRate();
+        // Phones: land on the board at full size from the first paint. The
+        // height-clamped board otherwise sits wherever the page happened to
+        // be, looking small until the player scrolls around.
+        try {
+            if (s.phase === 'play' && !s.result && window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+                document.getElementById('online-board-wrapper')?.scrollIntoView({ block: 'start' });
+            }
+        } catch (_) {}
     }
 
     _oppCardAvatarHTML() {
@@ -2239,6 +2259,31 @@ class ChessCourseApp {
     }
     // Targeted repaint of the opponent card (avatar + name + color/rating).
     // Captured pieces and the clock are untouched.
+    // Release skew guard: both sides stamp identity messages with the app
+    // release. A missing or different tag means the peer runs older code
+    // (stale cache) — say so loudly instead of misbehaving quietly.
+    _notePeerVersion(msg) {
+        const s = this.online;
+        if (!s) return;
+        const v = (msg && typeof msg.v === 'string' && msg.v) ? msg.v : 'older';
+        if (s.oppV !== v) { s.oppV = v; this._paintVerWarn(); }
+    }
+    _paintVerWarn() {
+        const s = this.online;
+        const bad = !!(s && s.oppV && s.oppV !== ChessCourseApp.APP_VERSION);
+        let el = document.getElementById('over-ver');
+        if (!bad) { el?.remove(); return; }
+        if (!el) {
+            const anchor = document.getElementById('online-board-wrapper');
+            if (!anchor || !anchor.isConnected) return;
+            el = document.createElement('div');
+            el.id = 'over-ver';
+            el.className = 'feedback error';
+            el.setAttribute('role', 'status');
+            anchor.before(el);
+        }
+        el.textContent = `Version mismatch: opponent runs ${s.oppV}, you run ${ChessCourseApp.APP_VERSION} — both refresh the page for the latest fixes.`;
+    }
     _paintOppCard() {
         const s = this.online;
         const card = document.getElementById('oprofile-opp');
@@ -2445,7 +2490,7 @@ class ChessCourseApp {
                 try {
                     const conn = await s.net.join(s.code);
                     s.conn = conn;
-                    s.net.send(conn, { type: 'hello', code: s.code, rejoin: true, lastPly: s.ply, user: this._meTag() });
+                    s.net.send(conn, { type: 'hello', v: ChessCourseApp.APP_VERSION, code: s.code, rejoin: true, lastPly: s.ply, user: this._meTag() });
                 } catch (_) { tick(); }
             }, wait);
         };

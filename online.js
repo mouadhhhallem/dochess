@@ -275,7 +275,7 @@ function sanitizePeerUser(u) {
     if (typeof u.name === 'string') {
         clean.name = u.name.replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 24) || 'Friend';
     }
-    if (typeof u.img === 'string' && /^https:/.test(u.img)) clean.img = u.img.slice(0, 500);
+    if (typeof u.img === 'string' && /^https:/.test(u.img)) clean.img = u.img.slice(0, 2048);
     if (Number.isInteger(u.rating) && u.rating >= 100 && u.rating <= 4000) clean.rating = u.rating;
     return clean;
 }

@@ -61,6 +61,18 @@ test('joiner clock converges via own-move echo', async ({ browser }) => {
   }
   console.log('joiner remaining after echo:', r1, 'drop:', r0 - r1);
   expect(r0 - r1).toBeGreaterThanOrEqual(1500);
+
+  // Rated finish: result line carries the delta and the You-card sub shows
+  // new rating plus delta, e.g. "Black · 831 (-26)". Needs 2+ plies.
+  const plies = await host.evaluate(() => window.app.online.engine.moveHistory.length);
+  if (plies < 2) { await mv(host, 'e7', 'e5'); }
+  await joiner.evaluate(() => window.app._onlineResign());
+  await host.waitForTimeout(2500);
+  const winSub = await host.evaluate(() => document.querySelector('#oprofile-you .info .sub')?.textContent || '');
+  const winResult = await host.evaluate(() => (document.getElementById('online-result')?.textContent || '').replace(/\s+/g, ' '));
+  console.log('winner sub:', JSON.stringify(winSub), '| result:', JSON.stringify(winResult.slice(0, 80)));
+  expect(winSub).toMatch(/· \d+ \(\+\d+\)/);
+  expect(winResult).toMatch(/Rating \+\d+ → \d+/);
   await A.close();
   await B.close();
 });
