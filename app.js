@@ -1868,7 +1868,15 @@ class ChessCourseApp {
             return;
         }
         if (type === 'move') {
-            if (typeof msg.ply === 'number' && msg.ply <= s.ply) return; // idempotent: duplicate delivery = no-op
+            // My own move echoed back (ply === s.ply): already applied, but
+            // the echo carries the host's authoritative clocks — snap them.
+            // Without this the display sticks to the pre-move side until the
+            // opponent's next move, so each device shows a different time.
+            // Older echoes (ply < s.ply) carry stale values: never rewind.
+            if (typeof msg.ply === 'number' && msg.ply <= s.ply) {
+                if (msg.ply === s.ply && msg.clocks) this._snapOnlineClocks(msg.clocks);
+                return; // idempotent: duplicate delivery = no-op
+            }
             const ok = this._applyOnlineMove(msg.from, msg.to, msg.promo || null);
             if (!ok) { s.net.send(s.conn, { type: 'sync_request' }); return; }
             s.ply = msg.ply; s.viewPly = null;
