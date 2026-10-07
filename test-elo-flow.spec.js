@@ -53,6 +53,13 @@ test('self-play between two tabs of one account is unrated, never one-sided', as
   expect(ratingB).toBe(800);
   expect(ratingA).toBe(800);
   expect(msgB + ' ' + msgA).toMatch(/playing yourself|not rated/i);
+  // The finished game must render its result card on BOTH tabs: result text
+  // plus the Rematch/Review/Lobby actions (not the in-game buttons).
+  for (const P of [A, B]) {
+    await expect(P.locator('#online-result')).toContainText(/playing yourself|not rated|draw|win|lose/i, { timeout: 10000 });
+    await expect(P.locator('#online-actions button[data-action="online-rematch"]')).toBeVisible({ timeout: 10000 });
+    await expect(P.locator('#online-actions button[data-action="online-resign-ask"]')).toHaveCount(0);
+  }
   await A.close();
   await B.close();
 });

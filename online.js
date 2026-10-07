@@ -116,6 +116,8 @@ class OnlineNet {
             case 'welcome': return isStr(msg.game_id) && (msg.color === 'white' || msg.color === 'black') && ctrl(msg.control) && user(msg.user) && (!msg.state || typeof msg.state === 'object');
             case 'move': return sq(msg.from) && sq(msg.to) && promo(msg.promo) && (msg.ply === undefined || isNum(msg.ply)) && (msg.mid === undefined || isStr(msg.mid));
             case 'state': return !msg.state || typeof msg.state === 'object';
+            case 'clocks': return !msg.clocks || typeof msg.clocks === 'object';
+            case 'profile': return user(msg.user);
             case 'rejected': return true;
             case 'game_over': return isStr(msg.result) && (msg.reason === undefined || isStr(msg.reason));
             case 'resign': case 'draw_offer': case 'draw_accept': case 'draw_decline':

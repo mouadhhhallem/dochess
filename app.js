@@ -338,6 +338,13 @@ class ChessCourseApp {
         this._syncProgress();
         if (document.getElementById('lessons-screen')?.classList.contains('active')) this._renderLessons();
         if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
+        // Late sign-in during a live game: the handshake may have gone out
+        // before Clerk was ready (guest name, no photo). Push the real
+        // profile so the peer sees who they're playing.
+        const s = this.online;
+        if (this.userId && s && (s.phase === 'play' || s.phase === 'over') && s.conn) {
+            try { s.net.send(s.conn, { type: 'profile', user: this._meTag(), epoch: s.epoch || 0 }); } catch (_) {}
+        }
     }
     isDone(id)  { return this.progress.done.includes(id); }
     isOpen(id)  { return id === 1 || this.isDone(id - 1); }
@@ -1715,7 +1722,19 @@ class ChessCourseApp {
         const s = this.online;
         if (!s) return;
         try { if (s.pingTimer) clearInterval(s.pingTimer); } catch (_) {}
-        const ping = () => { try { if (s.role === 'host' && s.conn) s.net.send(s.conn, { type: 'ping', t: performance.now() }); } catch (_) {} };
+        const ping = () => {
+            try {
+                if (s.role === 'host' && s.conn) {
+                    s.net.send(s.conn, { type: 'ping', t: performance.now() });
+                    // Periodic clock sync: a lost or crawling 'move' echo can
+                    // otherwise leave the joiner ticking the wrong side for a
+                    // whole game. Host values only — never accepted from peer.
+                    if (s.phase === 'play' && !s.result) {
+                        s.net.send(s.conn, { type: 'clocks', epoch: s.epoch || 0, clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side } });
+                    }
+                }
+            } catch (_) {}
+        };
         ping();
         s.pingTimer = setInterval(ping, 5000);
     }
@@ -1792,6 +1811,10 @@ class ChessCourseApp {
             return;
         }
         if (!s.conn || conn !== s.conn) return;
+        if (type === 'profile') {
+            if (msg.user) { s.opp = sanitizePeerUser(msg.user); this._paintOppCard(); }
+            return;
+        }
         if (type === 'sync_request') { s.net.send(conn, { type: 'state', epoch: s.epoch || 0, state: this._buildOnlineState() }); return; }
         if (type === 'resign') { this._onlineFinish('win', 'resignation'); return; }
         if (type === 'draw_offer') { this._onlineDrawPrompt(); return; }
@@ -1834,6 +1857,16 @@ class ChessCourseApp {
         }
         if (!this._epochOk(msg)) return;
         if (s.phase !== 'play' && s.phase !== 'over') return;
+        if (type === 'clocks') {
+            // Host sync only; never accept clock values from anyone else,
+            // and never touch the engine here — display convergence only.
+            if (s.phase === 'play' && !s.result && msg.clocks) this._snapOnlineClocks(msg.clocks);
+            return;
+        }
+        if (type === 'profile') {
+            if (msg.user) { s.opp = sanitizePeerUser(msg.user); this._paintOppCard(); }
+            return;
+        }
         if (type === 'move') {
             if (typeof msg.ply === 'number' && msg.ply <= s.ply) return; // idempotent: duplicate delivery = no-op
             const ok = this._applyOnlineMove(msg.from, msg.to, msg.promo || null);
@@ -1900,6 +1933,7 @@ class ChessCourseApp {
             engine: new ChessGame(), ply: 0, sel: null, legal: [],
             pendingPromo: null, result: null, reason: null,
             rematchMe: false, rematchOpp: false, peerGone: false,
+            _overShown: false,
             appliedMids: new Set(), pendingIntent: null,
             rtt: s.rtt || 0,
             clock: { w: control.base, b: control.base, side: 'white', turnStarted: performance.now() }
@@ -1981,6 +2015,12 @@ class ChessCourseApp {
             this._onlineAfterMove(true);
         } else {
             if (!s.net.send(s.conn, msg)) s.pendingIntent = msg; // flushed on reconnect
+            // Optimistic display flip: the host authoritative echo can lag a
+            // slow relay by seconds, during which the joiner would otherwise
+            // watch its OWN clock drain after moving. Remaining values still
+            // come only from the host snap on echo (never invented here).
+            s.clock.side = s.myColor === 'white' ? 'black' : 'white';
+            s.clock.turnStarted = performance.now();
             this._onlineAfterMove(false);
         }
     }
@@ -2090,8 +2130,19 @@ class ChessCourseApp {
         if (result === 'win') { this.snd.playSuccess(); }
         else this.snd.playCheck();
         this._stopOnlineTick();
-        this._drawOnline();
+        s.pendingPromo = null;
+        const firstOver = !s._overShown;
+        s._overShown = true;
+        this._renderOnlineGame();
         this._onlineStatus();
+        // The result + Rematch/Review/Lobby live below the board: bring them
+        // into view once per game-over or players never see the card.
+        if (firstOver) {
+            try {
+                const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                document.getElementById('online-result')?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+            } catch (_) {}
+        }
     }
 
     /* ── Online game view ── */
@@ -2115,7 +2166,7 @@ class ChessCourseApp {
             <div class="lesson-content">
                 <div class="arena">
                     <div class="profile-card opponent" id="oprofile-opp">
-                        ${s.opp?.img ? `<img class="avatar" src="${esc(s.opp.img)}" width="52" height="52" alt="${esc(s.opp?.name || 'Opponent')}">` : `<div class="avatar-letter">${esc((s.opp?.name || 'F')[0].toUpperCase())}</div>`}
+                        ${this._oppCardAvatarHTML()}
                         <div class="info"><span class="name">${esc(s.opp?.name || 'Opponent')}</span><span class="sub">${theirs} · ${s.opp?.rating || ''}</span><div class="captured-row" data-cap="opp"></div></div>
                         <div class="clock" id="oclock-top" role="timer" aria-label="Opponent clock">--:--</div>
                     </div>
@@ -2158,7 +2209,52 @@ class ChessCourseApp {
         this._drawOnline();
         this._onlineStatus();
         this._paintOnlineClocks();
+        this._bindOppImgFallback();
         this._animateRate();
+    }
+
+    _oppCardAvatarHTML() {
+        const s = this.online;
+        const name = s?.opp?.name || 'Opponent';
+        if (s?.opp?.img) return this._oppImgHTML(name, s.opp.img);
+        return `<div class="avatar-letter">${esc((name || 'F')[0].toUpperCase())}</div>`;
+    }
+    _oppImgHTML(name, src) {
+        return `<img class="avatar" src="${esc(src)}" width="52" height="52" alt="${esc(name)}" data-opp-img="1">`;
+    }
+    // Targeted repaint of the opponent card (avatar + name + color/rating).
+    // Captured pieces and the clock are untouched.
+    _paintOppCard() {
+        const s = this.online;
+        const card = document.getElementById('oprofile-opp');
+        if (!card || !s) return;
+        const theirs = s.myColor === 'white' ? 'Black' : 'White';
+        const name = s.opp?.name || 'Opponent';
+        const cur = card.querySelector('img.avatar, .avatar-letter');
+        const wantImg = !!s.opp?.img;
+        const isImg = !!cur && cur.tagName === 'IMG';
+        if (wantImg !== isImg || (wantImg && cur.getAttribute('src') !== s.opp.img)) {
+            const fresh = wantImg ? this._oppImgHTML(name, s.opp.img) : `<div class="avatar-letter">${esc((name || 'F')[0].toUpperCase())}</div>`;
+            if (cur) cur.outerHTML = fresh;
+            else card.insertAdjacentHTML('afterbegin', fresh);
+        }
+        const nEl = card.querySelector('.info .name'); if (nEl) nEl.textContent = name;
+        const sEl = card.querySelector('.info .sub'); if (sEl) sEl.textContent = `${theirs} · ${s.opp?.rating || ''}`;
+        this._bindOppImgFallback();
+    }
+    // CSP-safe broken-photo fallback: a photo that cannot load (offline,
+    // blocked remote, dead URL) becomes the letter tile instead of a
+    // broken-image icon. Inline onerror would violate the CSP.
+    _bindOppImgFallback() {
+        const img = document.querySelector('#oprofile-opp img.avatar[data-opp-img]');
+        if (!img || img.dataset.fbBound) return;
+        img.dataset.fbBound = '1';
+        img.addEventListener('error', () => {
+            const letter = document.createElement('div');
+            letter.className = 'avatar-letter';
+            letter.textContent = (img.alt || 'F')[0].toUpperCase();
+            img.replaceWith(letter);
+        });
     }
 
     // Rating count-up: tween the displayed rating from old to new.
