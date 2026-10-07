@@ -1933,7 +1933,7 @@ class ChessCourseApp {
             engine: new ChessGame(), ply: 0, sel: null, legal: [],
             pendingPromo: null, result: null, reason: null,
             rematchMe: false, rematchOpp: false, peerGone: false,
-            _overShown: false,
+            _overShown: false, short: false,
             appliedMids: new Set(), pendingIntent: null,
             rtt: s.rtt || 0,
             clock: { w: control.base, b: control.base, side: 'white', turnStarted: performance.now() }
@@ -2096,8 +2096,13 @@ class ChessCourseApp {
         if (!s || s.result) return; // first writer wins; duplicates are no-ops
         s.result = result; s.reason = reason; s.phase = 'over';
         s.engine.gameOver = true;
-        if (s.engine.moveHistory.length < 2 && reason !== 'checkmate' && reason !== 'stalemate') {
-            reason = 'aborted'; // §11: too short to rate — no rating change.
+        // Short games (<2 plies) are never rated (§11), but a resignation,
+        // timeout or forfeit is still somebody's decisive win/loss — only a
+        // mutual non-result collapses to the aborted draw.
+        const shortGame = s.engine.moveHistory.length < 2 && reason !== 'checkmate' && reason !== 'stalemate';
+        s.short = shortGame;
+        if (shortGame && reason !== 'resignation' && reason !== 'timeout' && reason !== 'forfeit') {
+            reason = 'aborted'; // too short to rate — no rating change.
             s.reason = reason;
         }
         if (reason === 'aborted') {
@@ -2111,10 +2116,11 @@ class ChessCourseApp {
             s.net.send(s.conn, { type: 'game_over', result: result === 'win' ? 'loss' : result === 'loss' ? 'win' : 'draw', reason, epoch: s.epoch || 0 });
         }
         // Idempotent Elo write: same game_id twice changes nothing (§6-D4).
-        // Self-play is never rated: same account on both tabs.
+        // Self-play is never rated: same account on both tabs. Short games
+        // (<2 plies) are never rated either — the verdict still stands.
         let delta = null, rating = null;
         const score = result === 'win' ? 1 : result === 'draw' ? 0.5 : 0;
-        if (!s.unrated) {
+        if (!s.unrated && !s.short) {
             const r = OnlineRatings.applyGame({ uid: this.userId, cat: s.control.id, score, oppRating: this._oppRatingFor(), gameId: s.gameId });
             if (r) { delta = r.delta; rating = r.rating; }
         }
@@ -2157,11 +2163,12 @@ class ChessCourseApp {
             ? ` <span class="rate-count" data-from="${s.ratingAfter - s.ratingDelta}" data-to="${s.ratingAfter}">Rating ${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}</span>`
             : '';
         const unratedBit = (over && s.unrated) ? `<div class="feedback info">Unrated game — you are playing yourself.</div>` : '';
+        const shortBit = (over && s.short && !s.unrated) ? `<div class="feedback info">Unrated game — too short to rate.</div>` : '';
         const resultLine = !over ? '' : s.result === 'win'
-            ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}`
+            ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`
             : s.result === 'loss'
-            ? `<div class="feedback error">You lose. ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}`
-            : `<div class="feedback info">Draw. ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}`;
+            ? `<div class="feedback error">You lose. ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`
+            : `<div class="feedback info">Draw. ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`;
         box.innerHTML = `
             <div class="lesson-content">
                 <div class="arena">
