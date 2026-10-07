@@ -5,6 +5,9 @@ import { test, expect } from '@playwright/test';
 // every own move the joiner's display stuck to the pre-move side and each
 // device showed a different time (seen: 0:49 vs 0:17 for the same clock).
 test('joiner clock converges via own-move echo', async ({ browser }) => {
+  // The rated-finish refresh checks below wait out one 5s identity
+  // heartbeat, so this test needs more than the global 90s.
+  test.setTimeout(180000);
   const mk = async (uid, name) => {
     const page = await browser.newPage();
     await page.goto('index.html');
@@ -102,6 +105,41 @@ test('joiner clock converges via own-move echo', async ({ browser }) => {
   const loseSub = await joiner.evaluate(() => document.querySelector('#oprofile-you .info .sub')?.textContent || '');
   console.log('loser sub:', JSON.stringify(loseSub));
   expect(loseSub).toMatch(/· \d+ → \d+ \(-\d+\)/);
+
+  // Instant refresh everywhere: both sides keep heartbeating identity
+  // after the finish, so the device leaderboard picks up each player's
+  // NEW rating — and the lobby + profile read those numbers fresh.
+  await host.waitForTimeout(6500);
+  const lobby = (P) => P.evaluate(() => ({
+    summary: document.querySelector('#wheel-summary .ws-rating')?.textContent || null,
+    rows: [...document.querySelectorAll('.board-row')]
+      .map((r) => `${r.querySelector('.board-name')?.textContent}:${r.querySelector('.board-rating')?.textContent}`),
+    stats: [...document.querySelectorAll('#profile-content .stat-value')].map((e) => e.textContent)
+  }));
+  await host.evaluate(() => window.app._onlineLeave());
+  await host.waitForSelector('#wheel-summary .ws-rating', { timeout: 5000 });
+  const hl = await lobby(host);
+  console.log('host lobby:', JSON.stringify(hl));
+  expect(hl.rows).toContain('C1:820');   // own fresh Elo write
+  expect(hl.rows).toContain('C2:780');   // opponent refreshed by heartbeat
+  expect(hl.summary).toBe('820');
+  await host.evaluate(() => window.app.showProfile());
+  const hs = await host.evaluate(() => [...document.querySelectorAll('#profile-content .stat-value')].map((e) => e.textContent));
+  console.log('host profile stats:', JSON.stringify(hs));
+  expect(hs).toContain('820');
+
+  await joiner.evaluate(() => window.app._onlineLeave());
+  await joiner.waitForSelector('#wheel-summary .ws-rating', { timeout: 5000 });
+  const jl = await lobby(joiner);
+  console.log('joiner lobby:', JSON.stringify(jl));
+  expect(jl.rows).toContain('C2:780');
+  expect(jl.rows).toContain('C1:820');
+  expect(jl.summary).toBe('780');
+  await joiner.evaluate(() => window.app.showProfile());
+  const js = await joiner.evaluate(() => [...document.querySelectorAll('#profile-content .stat-value')].map((e) => e.textContent));
+  console.log('joiner profile stats:', JSON.stringify(js));
+  expect(js).toContain('780');
+
   await A.close();
   await B.close();
 });

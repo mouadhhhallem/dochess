@@ -180,7 +180,7 @@ class ChessCourseApp {
     ══════════════════════════════════════════════════════════════ */
     // Bump ASSET_V every release so edited artwork can never hide
     // behind the browser image cache. Same rule as the ?v= tags.
-    static assetV() { return 'v22'; }
+    static assetV() { return 'v23'; }
     // App release tag (?v= on scripts). Sent on identity messages so two
     // sides on different releases warn instead of silently misbehaving.
     static APP_VERSION = 'v35';
@@ -341,6 +341,9 @@ class ChessCourseApp {
         this._syncProgress();
         if (document.getElementById('lessons-screen')?.classList.contains('active')) this._renderLessons();
         if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
+        // Auth resolving (or signing out) mid-game: repaint my own photo
+        // on the You-card without re-rendering the match.
+        this._paintYouCard();
         // Late sign-in during a live game: the handshake may have gone out
         // before Clerk was ready (guest name, no photo). Push the real
         // profile so the peer sees who they're playing.
@@ -1317,12 +1320,16 @@ class ChessCourseApp {
         const u = this._clerk?.user;
         const cats = {};
         ChessCourseApp.onlineControls().forEach(c => { cats[c.id] = OnlineRatings.get(this.userId, c.id); });
+        // The rating we advertise over the wire must be for THIS game's
+        // control (a mid-game lobby-wheel change must not mislabel it).
+        const cat = (this.online && this.online.control && this.online.control.id)
+            ? this.online.control.id : this._onlineControl().id;
         return {
             id: this.userId || 'guest',
             name: u ? (u.fullName || u.username || 'Player') : 'Guest',
             img: (u && (u.imageUrl || u.profileImageUrl || u.avatar)) || null,
             ratings: cats,
-            rating: cats[this._onlineControl().id]
+            rating: cats[cat]
         };
     }
     // Opponent's rating for THIS game's control (never the lobby's).
@@ -1826,7 +1833,17 @@ class ChessCourseApp {
         }
         if (!s.conn || conn !== s.conn) return;
         if (type === 'profile') {
-            if (msg.user) { s.opp = sanitizePeerUser(msg.user); this._notePeerVersion(msg); this._paintOppCard(); }
+            if (msg.user) {
+                s.opp = sanitizePeerUser(msg.user);
+                this._notePeerVersion(msg);
+                this._paintOppCard();
+                // A post-game heartbeat carries the opponent's NEW rating
+                // after their own Elo write — re-note it so the device
+                // leaderboard refreshes instantly for both players.
+                if (s.phase === 'over' && s.control && s.opp?.id) {
+                    OnlineRatings.notePlayer(s.opp.id, s.opp.name, s.control.id, s.opp.rating);
+                }
+            }
             return;
         }
         if (type === 'sync_request') { s.net.send(conn, { type: 'state', epoch: s.epoch || 0, state: this._buildOnlineState() }); return; }
@@ -1884,7 +1901,17 @@ class ChessCourseApp {
             return;
         }
         if (type === 'profile') {
-            if (msg.user) { s.opp = sanitizePeerUser(msg.user); this._notePeerVersion(msg); this._paintOppCard(); }
+            if (msg.user) {
+                s.opp = sanitizePeerUser(msg.user);
+                this._notePeerVersion(msg);
+                this._paintOppCard();
+                // A post-game heartbeat carries the opponent's NEW rating
+                // after their own Elo write — re-note it so the device
+                // leaderboard refreshes instantly for both players.
+                if (s.phase === 'over' && s.control && s.opp?.id) {
+                    OnlineRatings.notePlayer(s.opp.id, s.opp.name, s.control.id, s.opp.rating);
+                }
+            }
             return;
         }
         if (type === 'move') {
@@ -2212,7 +2239,7 @@ class ChessCourseApp {
         const theirs = s.myColor === 'white' ? 'Black' : 'White';
         const over = s.phase === 'over';
         const rateBit = (s.ratingDelta !== null && s.ratingDelta !== undefined)
-            ? ` <span class="rate-count" data-from="${s.ratingAfter - s.ratingDelta}" data-to="${s.ratingAfter}">Rating ${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}</span>`
+            ? ` <span class="rate-count" data-from="${s.ratingAfter - s.ratingDelta}" data-to="${s.ratingAfter}">Rating ${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}</span>`
             : '';
         const unratedBit = (over && s.unrated) ? `<div class="feedback info">Unrated game — you are playing yourself.</div>` : '';
         const shortBit = (over && s.short && !s.unrated) ? `<div class="feedback info">Unrated game — too short to rate.</div>` : '';
@@ -2220,7 +2247,7 @@ class ChessCourseApp {
         // "Black · 857 → 831 (-26)" next to the result line's
         // "Rating -26 → 831".
         const youSub = (over && s.ratingDelta !== null && s.ratingDelta !== undefined)
-            ? `${mine} · ${s.ratingAfter - s.ratingDelta} → ${s.ratingAfter} (${s.ratingDelta >= 0 ? '+' : ''}${s.ratingDelta})`
+            ? `${mine} · ${s.ratingAfter - s.ratingDelta} → ${s.ratingAfter} (${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta})`
             : `${mine} · ${OnlineRatings.get(this.userId, s.control.id)}`;
         const resultLine = !over ? '' : s.result === 'win'
             ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`
@@ -2240,7 +2267,7 @@ class ChessCourseApp {
                     <div id="online-promo" class="promotion-picker hidden"></div>
                     <div id="online-result" role="status" aria-live="polite">${resultLine}</div>
                     <div class="profile-card player" id="oprofile-you">
-                        <div class="avatar-letter you">${esc((this._meTag().name || 'Y')[0].toUpperCase())}</div>
+                        ${this._myAvatarHTML()}
                         <div class="info"><span class="name">You</span><span class="sub">${youSub}</span><div class="captured-row" data-cap="you"></div></div>
                         <div class="clock" id="oclock-bottom" role="timer" aria-label="Your clock">--:--</div>
                     </div>
@@ -2274,7 +2301,8 @@ class ChessCourseApp {
         this._drawOnline();
         this._onlineStatus();
         this._paintOnlineClocks();
-        this._bindOppImgFallback();
+        this._bindAvatarFallback('#oprofile-opp img.avatar[data-opp-img]');
+        this._bindAvatarFallback('#oprofile-you img.avatar[data-my-img]', 'you');
         this._paintVerWarn();
         this._animateRate();
         // Phones: land on the board at full size from the first paint. The
@@ -2295,6 +2323,28 @@ class ChessCourseApp {
     }
     _oppImgHTML(name, src) {
         return `<img class="avatar" src="${esc(src)}" width="52" height="52" alt="${esc(name)}" data-opp-img="1">`;
+    }
+    // My own photo on the You-card — letter tile until auth resolves, and
+    // again if the photo cannot load or the player signs out.
+    _myAvatarHTML() {
+        const u = this._meTag();
+        if (u.img) return `<img class="avatar you" src="${esc(u.img)}" width="52" height="52" alt="${esc(u.name)}" data-my-img="1">`;
+        return `<div class="avatar-letter you">${esc((u.name || 'Y')[0].toUpperCase())}</div>`;
+    }
+    // Targeted repaint of MY avatar (auth resolving late, sign-out mid-game)
+    // without re-rendering the whole match view.
+    _paintYouCard() {
+        const card = document.getElementById('oprofile-you');
+        if (!card) return;
+        const cur = card.querySelector('img.avatar[data-my-img], .avatar-letter.you');
+        const src = this._meTag().img;
+        const isImg = !!cur && cur.tagName === 'IMG';
+        if (!cur || !!src !== isImg || (src && cur.getAttribute('src') !== src)) {
+            const fresh = this._myAvatarHTML();
+            if (cur) cur.outerHTML = fresh;
+            else card.insertAdjacentHTML('afterbegin', fresh);
+        }
+        this._bindAvatarFallback('#oprofile-you img.avatar[data-my-img]', 'you');
     }
     // Targeted repaint of the opponent card (avatar + name + color/rating).
     // Captured pieces and the clock are untouched.
@@ -2339,18 +2389,18 @@ class ChessCourseApp {
         }
         const nEl = card.querySelector('.info .name'); if (nEl) nEl.textContent = name;
         const sEl = card.querySelector('.info .sub'); if (sEl) sEl.textContent = `${theirs} · ${s.opp?.rating || ''}`;
-        this._bindOppImgFallback();
+        this._bindAvatarFallback('#oprofile-opp img.avatar[data-opp-img]');
     }
     // CSP-safe broken-photo fallback: a photo that cannot load (offline,
     // blocked remote, dead URL) becomes the letter tile instead of a
     // broken-image icon. Inline onerror would violate the CSP.
-    _bindOppImgFallback() {
-        const img = document.querySelector('#oprofile-opp img.avatar[data-opp-img]');
+    _bindAvatarFallback(sel, letterCls) {
+        const img = document.querySelector(sel);
         if (!img || img.dataset.fbBound) return;
         img.dataset.fbBound = '1';
         img.addEventListener('error', () => {
             const letter = document.createElement('div');
-            letter.className = 'avatar-letter';
+            letter.className = 'avatar-letter' + (letterCls ? ' ' + letterCls : '');
             letter.textContent = (img.alt || 'F')[0].toUpperCase();
             img.replaceWith(letter);
         });
@@ -3045,7 +3095,7 @@ class ChessCourseApp {
         if (!user) {
             box.innerHTML = `
                 <div class="profile-card profile-hero">
-                    <img class="profile-avatar" src="assets/pieces/white-king.svg" width="96" height="96" alt="Guest">
+                    <img class="profile-avatar" src="assets/pieces/white-king.svg?${ChessCourseApp.assetV()}" width="96" height="96" alt="Guest">
                     <div class="profile-id">
                         <h3>Guest learner</h3>
                         <p>Sign in to track this course across devices — progress stays on this browser until then.</p>
@@ -3064,7 +3114,7 @@ class ChessCourseApp {
         }
         const name = user.fullName || user.username || (user.primaryEmailAddress?.emailAddress) || 'Player';
         const email = user.primaryEmailAddress?.emailAddress || '';
-        const img = (typeof user.imageUrl === 'string' && /^https:/.test(user.imageUrl)) ? user.imageUrl : 'assets/pieces/white-king.svg';
+        const img = (typeof user.imageUrl === 'string' && /^https:/.test(user.imageUrl)) ? user.imageUrl : `assets/pieces/white-king.svg?${ChessCourseApp.assetV()}`;
         let joined = '';
         try { if (user.createdAt) joined = new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }); } catch (_) {}
         box.innerHTML = `

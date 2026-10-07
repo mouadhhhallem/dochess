@@ -84,3 +84,77 @@ test('ping heartbeat re-sends my profile on both roles', async ({ page }) => {
   const joinSent = await run('join');
   expect(joinSent.some((m) => m.type === 'ping' || m.type === 'clocks')).toBe(false);
 });
+
+// My own photo now shows on the You-card too — same CSP-safe letter-tile
+// fallback as the opponent card, and a targeted repaint when auth resolves
+// late (or the player signs out) mid-game, without re-rendering the match.
+test('own photo shows on the You-card with letter fallback', async ({ page }) => {
+  await page.goto('index.html');
+  await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
+
+  await page.evaluate(() => {
+    document.getElementById('online-content').innerHTML =
+      `<div class="profile-card player" id="oprofile-you">` +
+      `<div class="avatar-letter you">H</div>` +
+      `<div class="info"><span class="name">You</span><span class="sub">White · 800</span></div>` +
+      `<div class="clock" id="oclock-bottom">5:00</div></div>`;
+    window.app._clerk = {
+      user: { id: 'u_me', fullName: 'Me', imageUrl: 'https://img.clerk.com/me.png' },
+      openSignIn() {}, signOut() {}, addListener() {}, mountUserButton() {}
+    };
+    window.app.userId = 'u_me';
+    window.app._paintYouCard();
+  });
+  await expect(page.locator('#oprofile-you img.avatar[data-my-img]'))
+    .toHaveAttribute('src', 'https://img.clerk.com/me.png');
+
+  // Broken photo -> letter tile (no inline onerror, CSP stays intact).
+  await page.evaluate(() => document.querySelector('#oprofile-you img.avatar').dispatchEvent(new Event('error')));
+  await expect(page.locator('#oprofile-you .avatar-letter.you')).toHaveText('M');
+  await expect(page.locator('#oprofile-you img.avatar')).toHaveCount(0);
+
+  // Auth resolving late repaints letter -> photo in place.
+  await page.evaluate(() => window.app._paintYouCard());
+  await expect(page.locator('#oprofile-you img.avatar[data-my-img]')).toHaveCount(1);
+
+  // Sign-out mid-game repaints back to the letter tile.
+  await page.evaluate(() => { window.app._clerk.user = null; window.app._setUser(null); });
+  await expect(page.locator('#oprofile-you .avatar-letter.you')).toHaveCount(1);
+  await page.close();
+});
+
+// Post-game leaderboard refresh: after the Elo write each side keeps
+// heartbeating its identity, so receiving a 'profile' while the game is
+// over re-notes the opponent with their NEW rating (the finish-time note
+// could only ever carry the handshake value).
+test('post-game profile heartbeat re-notes the opponent rating', async ({ page }) => {
+  await page.goto('index.html');
+  await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
+
+  const before = await page.evaluate(() => {
+    window.app.online = {
+      phase: 'over', result: 'loss', myColor: 'white',
+      opp: { id: 'u_opp', name: 'Oppy', img: null, rating: 780 },
+      control: { id: 'blitz', base: 180000, inc: 0 },
+      clock: { w: 0, b: 60000, side: 'black', turnStarted: performance.now() }
+    };
+    document.getElementById('online-content').innerHTML =
+      `<div class="profile-card opponent" id="oprofile-opp">` +
+      `<div class="avatar-letter">O</div>` +
+      `<div class="info"><span class="name">Oppy</span><span class="sub">Black · 780</span></div>` +
+      `<div class="clock" id="oclock-top">--:--</div></div>` +
+      `<div id="online-board-wrapper"></div>`;
+    return OnlineRatings.board('blitz').find((p) => p.uid === 'u_opp')?.rating ?? null;
+  });
+  expect(before).toBeNull();
+
+  // The opponent's own device just applied their Elo change (800 -> 785);
+  // their heartbeat now carries 785 and we must store it for the board.
+  const after = await page.evaluate(() => {
+    window.app._joinOnMsg('profile', { epoch: 1, user: { id: 'u_opp', name: 'Oppy', img: null, rating: 785 } });
+    window.app.online = null;
+    return OnlineRatings.board('blitz').find((p) => p.uid === 'u_opp')?.rating ?? null;
+  });
+  expect(after).toBe(785);
+  await page.close();
+});

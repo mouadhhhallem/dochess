@@ -82,3 +82,39 @@ test('opp card repaint and clock sync apply cleanly', async ({ page }) => {
   });
   await expect(page.locator('#over-ver')).toHaveCount(0);
 });
+
+// Equal-rating draws are the common case: the finish line must read
+// "Rating 0 → 800" and the You-card "(0)" — never a fake "+0".
+test('zero-delta draw renders without a fake +0', async ({ page }) => {
+  await page.goto('index.html');
+  await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
+
+  await page.evaluate(() => {
+    const app = window.app;
+    app.userId = 'u_draw';
+    app._clerk = {
+      user: { id: 'u_draw', fullName: 'Drawee' },
+      openSignIn() {}, signOut() {}, addListener() {}, mountUserButton() {}
+    };
+    app.online = {
+      phase: 'over', result: 'draw', reason: 'agreement',
+      myColor: 'white', oppColor: 'black',
+      opp: { id: 'u_o', name: 'Oppy', img: null, rating: 800 },
+      control: { id: 'blitz', name: 'Blitz', label: '5+0', base: 300000, inc: 0 },
+      engine: new ChessGame(), ply: 0, viewPly: null, sel: null, legal: [],
+      clock: { w: 290000, b: 290000, side: 'white', turnStarted: performance.now() },
+      ratingDelta: 0, ratingAfter: 800, unrated: false, short: false, flipView: false
+    };
+    app._renderOnlineGame();
+  });
+
+  const result = (await page.locator('#online-result').textContent()).replace(/\s+/g, ' ');
+  console.log('draw result:', JSON.stringify(result));
+  expect(result).toMatch(/Rating 0 → 800/);
+  expect(result).not.toMatch(/\+0/);
+  const sub = await page.locator('#oprofile-you .info .sub').textContent();
+  console.log('draw sub:', JSON.stringify(sub));
+  expect(sub).toMatch(/White · 800 → 800 \(0\)/);
+  expect(sub).not.toMatch(/\+0/);
+  await page.close();
+});
