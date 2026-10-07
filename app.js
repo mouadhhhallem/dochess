@@ -1733,8 +1733,10 @@ class ChessCourseApp {
                     // Periodic clock sync: a lost or crawling 'move' echo can
                     // otherwise leave the joiner ticking the wrong side for a
                     // whole game. Host values only — never accepted from peer.
+                    // ply rides along so the joiner can drop syncs from before
+                    // its own optimistic move (they carry the old side).
                     if (s.phase === 'play' && !s.result) {
-                        s.net.send(s.conn, { type: 'clocks', epoch: s.epoch || 0, clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side } });
+                        s.net.send(s.conn, { type: 'clocks', epoch: s.epoch || 0, ply: s.ply, clocks: this._clockSnapshot() });
                     }
                 }
             } catch (_) {}
@@ -1866,6 +1868,11 @@ class ChessCourseApp {
         if (type === 'clocks') {
             // Host sync only; never accept clock values from anyone else,
             // and never touch the engine here — display convergence only.
+            // A sync stamped with another ply is from the wrong side of a
+            // move: one from before my move would revert my optimistic flip
+            // and drain my own clock again; one from after a move I have
+            // not applied yet would flip early. Skip both.
+            if (typeof msg.ply === 'number' && msg.ply !== s.ply) return;
             if (s.phase === 'play' && !s.result && msg.clocks) this._snapOnlineClocks(msg.clocks);
             return;
         }
@@ -1961,7 +1968,7 @@ class ChessCourseApp {
         const s = this.online;
         return {
             moves: s.engine.moveHistory.map(m => ({ from: m.from, to: m.to, promo: m.promotion || null })),
-            clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side },
+            clocks: this._clockSnapshot(),
             side: s.engine.currentPlayer, ply: s.ply,
             status: s.phase === 'over' ? 'over' : 'play', result: s.result, reason: s.reason
         };
@@ -1987,6 +1994,20 @@ class ChessCourseApp {
         const s = this.online;
         s.clock.w = c.w; s.clock.b = c.b; s.clock.side = c.side;
         s.clock.turnStarted = performance.now();
+    }
+
+    // What each side shows RIGHT NOW (mid-turn aware). The raw stored
+    // values are "remaining when the current turn started"; the peer snaps
+    // them with turnStarted = now, so sending them mid-turn makes the peer
+    // treat stale think-time as current and drift ahead of the host by the
+    // whole turn length on every sync (seen: 0:49 vs 0:17).
+    _clockSnapshot() {
+        const s = this.online, c = s.clock;
+        const running = s.phase === 'play' && !s.result && c;
+        const el = running && c.turnStarted ? Math.max(0, performance.now() - c.turnStarted) : 0;
+        const w = running && c.side === 'white' ? Math.max(0, c.w - el) : (c ? c.w : 0);
+        const b = running && c.side === 'black' ? Math.max(0, c.b - el) : (c ? c.b : 0);
+        return { w: Math.round(w), b: Math.round(b), side: c ? c.side : 'white' };
     }
 
     /* ── Moves: both sides validate with the shared engine; the host
@@ -2024,11 +2045,20 @@ class ChessCourseApp {
         this._saveOnlineSession();
         if (s.role === 'host') {
             this._hostChargeClock(s.myColor, 0);
-            msg.clocks = { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side };
+            msg.clocks = this._clockSnapshot();
             s.net.send(s.conn, msg);
             this._onlineAfterMove(true);
         } else {
             if (!s.net.send(s.conn, msg)) s.pendingIntent = msg; // flushed on reconnect
+            // Charge locally with the host's math so the frozen own-clock
+            // does not keep showing pre-move time while the echo is in
+            // flight (bad relay = seconds of stale time). The host's
+            // authoritative values still overwrite on echo.
+            if (s.clock && s.clock.side === s.myColor) {
+                const el = Math.max(0, performance.now() - s.clock.turnStarted);
+                const k = s.myColor === 'white' ? 'w' : 'b';
+                s.clock[k] = Math.max(0, s.clock[k] - el) + s.control.inc;
+            }
             // Optimistic display flip: the host authoritative echo can lag a
             // slow relay by seconds, during which the joiner would otherwise
             // watch its OWN clock drain after moving. Remaining values still
@@ -2049,7 +2079,7 @@ class ChessCourseApp {
             return;
         }
         if (typeof msg.ply === 'number' && msg.ply <= s.ply) {
-            s.net.send(s.conn, { type: 'move', ply: s.ply, from: msg.from, to: msg.to, promo: msg.promo || null, clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side }, epoch: s.epoch || 0 });
+            s.net.send(s.conn, { type: 'move', ply: s.ply, from: msg.from, to: msg.to, promo: msg.promo || null, clocks: this._clockSnapshot(), epoch: s.epoch || 0 });
             return; // idempotent duplicate: re-ack, change nothing
         }
         const mover = s.oppColor;
@@ -2069,7 +2099,7 @@ class ChessCourseApp {
         const credit = Math.min((s.rtt || 0) / 2, 150);
         this._hostChargeClock(mover, credit);
         this.snd.playMove();
-        s.net.send(s.conn, { type: 'move', ply: s.ply, from: msg.from, to: msg.to, promo: msg.promo || null, clocks: { w: Math.round(s.clock.w), b: Math.round(s.clock.b), side: s.clock.side } });
+        s.net.send(s.conn, { type: 'move', ply: s.ply, from: msg.from, to: msg.to, promo: msg.promo || null, clocks: this._clockSnapshot() });
         this._drawOnline();
         this._onlineAfterMove(true);
     }

@@ -62,6 +62,30 @@ test('joiner clock converges via own-move echo', async ({ browser }) => {
   console.log('joiner remaining after echo:', r1, 'drop:', r0 - r1);
   expect(r0 - r1).toBeGreaterThanOrEqual(1500);
 
+  // Live check: with the host's 5s sync running mid-turn, both devices must
+  // agree on BOTH clocks. The raw-stored sync used to re-widen the gap by
+  // the full elapsed think time on every ping (host draining, joiner's view
+  // jumping back to the turn-start value).
+  await host.evaluate(() => window.app._startOnlinePing());
+  const disp = (P) => P.evaluate(() => {
+    const s = window.app.online, c = s.clock, now = performance.now();
+    const f = (col) => {
+      const k = col === 'white' ? 'w' : 'b';
+      let ms = c[k];
+      if (s.phase === 'play' && !s.result && c.side === col) ms -= now - c.turnStarted;
+      return Math.max(0, ms);
+    };
+    return { w: f('white'), b: f('black') };
+  });
+  let worst = 0;
+  for (let i = 0; i < 18; i++) {
+    await host.waitForTimeout(400);
+    const h = await disp(host), j = await disp(joiner);
+    worst = Math.max(worst, Math.abs(h.w - j.w), Math.abs(h.b - j.b));
+  }
+  console.log('worst cross-device clock drift (ms):', worst);
+  expect(worst).toBeLessThan(1200);
+
   // Rated finish: result line carries the delta and the You-card sub shows
   // new rating plus delta, e.g. "Black · 831 (-26)". Needs 2+ plies.
   const plies = await host.evaluate(() => window.app.online.engine.moveHistory.length);
@@ -75,4 +99,62 @@ test('joiner clock converges via own-move echo', async ({ browser }) => {
   expect(winResult).toMatch(/Rating \+\d+ → \d+/);
   await A.close();
   await B.close();
+});
+
+// Regression: the host's 5s 'clocks' sync and every state snapshot used to
+// send the RAW stored remainders ("remaining when the turn started"), while
+// the joiner snaps them with turnStarted = now — so mid-turn the joiner
+// treated stale think-time as current and drifted ahead of the host by the
+// whole elapsed turn on every sync (seen: 0:49 vs 0:17 for the same clock).
+test('mid-turn clock sync carries displayed remainders', async ({ browser }) => {
+  const page = await browser.newPage();
+  await page.goto('index.html');
+  await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
+
+  const res = await page.evaluate(() => {
+    const app = window.app;
+    const mk = (role) => ({
+      role, phase: 'play', result: null,
+      myColor: role === 'host' ? 'white' : 'black',
+      oppColor: role === 'host' ? 'black' : 'white',
+      epoch: 1, ply: 3, control: { id: 'blitz', base: 180000, inc: 2000 },
+      conn: {},
+      clock: { w: 60000, b: 60000, side: 'white', turnStarted: performance.now() },
+      net: { send: (c, m) => { (window.__sent = window.__sent || []).push(m); return true; } }
+    });
+    window.__sent = [];
+
+    // Host is 3s into white's turn: displayed ~57000, stored still 60000.
+    app.online = mk('host');
+    app.online.clock.turnStarted = performance.now() - 3000;
+    const hostSnap = app._clockSnapshot();
+    app._startOnlinePing();
+    clearInterval(app.online.pingTimer);
+    const ping = (window.__sent || []).find((m) => m.type === 'clocks');
+    if (!ping) return { err: 'host sent no clocks ping' };
+
+    // Joiner applies the sync: its display must match the host's now.
+    app.online = mk('joiner');
+    app._joinOnMsg('clocks', ping);
+    const drift = app._clockSnapshot().w - hostSnap.w;
+
+    // A sync stamped with an older ply (pre-move side) must change nothing.
+    const before = JSON.stringify(app.online.clock);
+    app._joinOnMsg('clocks', { type: 'clocks', epoch: 1, ply: 2, clocks: { w: 1000, b: 1000, side: 'black' } });
+    const dropped = JSON.stringify(app.online.clock) === before;
+    app.online = null;
+    return { pingPly: ping.ply, sentW: ping.clocks.w, drift, dropped };
+  });
+
+  console.log('clocks ping:', JSON.stringify(res));
+  expect(res.err).toBeUndefined();
+  expect(res.pingPly).toBe(3);
+  // Raw stored would be 60000; the displayed mid-turn value is ~57000.
+  expect(res.sentW).toBeLessThan(58000);
+  expect(res.sentW).toBeGreaterThan(55500);
+  // The joiner converges with the host (the raw sync left ~3000ms here).
+  expect(Math.abs(res.drift)).toBeLessThan(400);
+  // Wrong-ply syncs are dropped entirely.
+  expect(res.dropped).toBe(true);
+  await page.close();
 });
