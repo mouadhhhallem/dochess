@@ -29,6 +29,7 @@ const MODULES = [
     ['lessons', 'js/lessons.js'],
     ['engine', 'js/engine.js'],
     ['board', 'js/board.js'],
+    ['focus', 'js/focus.js'],
     ['learn', 'js/learn.js'],
 ];
 
@@ -134,6 +135,8 @@ global.DoChessLearn = {
     lessons: __req('lessons'),
     engine: __req('engine'),
     board: __req('board'),
+    // Focus mode is shared by Learn and Lessons; app.js boots it too.
+    focus: __req('focus'),
 };
 function __boot() {
     const p = __learn.bootLearn();

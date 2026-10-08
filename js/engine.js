@@ -16,6 +16,7 @@ import { pathBetween, solveFreeMove } from './lessons.js';
 import { starsForPar, pointsFor } from './storage.js';
 
 const PROMO_PIECES = ['q', 'r', 'b', 'n'];
+const EMPTY = [];
 
 /* ── chess.js adapter for the BFS solver ─────────────────────────────── */
 export function ChessJsAdapter(ChessCtor) {
@@ -118,7 +119,20 @@ export function createLevel(level, ChessCtor, lang = 'en') {
         done: false,
         result: null,
         undoStack: [], // {fen, collected:[], captured:[], moves}
+        // Bumped on EVERY position/goal mutation. Derived reads (piece map,
+        // legal move lists, check + king square) memoise against it, so the
+        // click path — which asks for the same square up to four times per
+        // move (select, target, play, paint) — pays chess.js for it once.
+        version: 0,
     };
+
+    // Derived-read cache. One generation per version; a bump invalidates all.
+    const memo = { v: -1, pieces: null, legal: new Map(), check: false, king: null };
+
+    function touch() {
+        st.version++;
+        memo.legal.clear();
+    }
     // Stars already occupied at start count immediately.
     for (const sq of wantCollect) {
         const p = game.get(sq);
@@ -141,9 +155,12 @@ export function createLevel(level, ChessCtor, lang = 'en') {
 
     /** Legal destinations for a selected square, with level rules applied. */
     function legalFor(sq) {
+        if (memo.v !== st.version) { memo.v = st.version; memo.pieces = null; memo.check = null; memo.king = null; }
+        const hit = memo.legal.get(sq);
+        if (hit) return hit;
         const p = game.get(sq);
-        if (!p || !isPlayerPiece(p)) return [];
-        if (allowed.size && !allowed.has(p.type)) return [];
+        if (!p || !isPlayerPiece(p)) return EMPTY;
+        if (allowed.size && !allowed.has(p.type)) return EMPTY;
         const out = [];
         for (const m of game.moves({ square: sq, verbose: true })) {
             if (m.captured === 'k') continue;
@@ -153,6 +170,7 @@ export function createLevel(level, ChessCtor, lang = 'en') {
             if (level.avoidAttacked && attackedByEnemy(m.to)) continue;
             out.push(m);
         }
+        memo.legal.set(sq, out);
         return out;
     }
 
@@ -210,6 +228,7 @@ export function createLevel(level, ChessCtor, lang = 'en') {
                 if (wantCapture.has(capSq)) st.captured.add(capSq);
             }
             st.selected = null;
+            touch();
             if (checkDone(to, mover.type, res.promotion)) finish();
             return { ok: true, move: res, done: st.done, result: st.result };
         },
@@ -227,6 +246,7 @@ export function createLevel(level, ChessCtor, lang = 'en') {
             st.selected = null;
             st.done = false;
             st.result = null;
+            touch();
             return true;
         },
         restart() {
@@ -244,6 +264,7 @@ export function createLevel(level, ChessCtor, lang = 'en') {
             st.done = false;
             st.result = null;
             st.undoStack = [];
+            touch();
         },
         hint() {
             const hints = level.hints || [];
@@ -260,6 +281,8 @@ export function createLevel(level, ChessCtor, lang = 'en') {
         legalFor,
         needsPromotion,
         pieces() {
+            if (memo.v === st.version && memo.pieces) return memo.pieces;
+            memo.v = st.version;
             // NOTE: chess.js 0.10.3 board() cells have no .square — derive it.
             const out = {};
             game.board().forEach((row, r) => {
@@ -267,16 +290,22 @@ export function createLevel(level, ChessCtor, lang = 'en') {
                     if (cell) out['abcdefgh'[c] + (8 - r)] = { type: cell.type, color: cell.color };
                 });
             });
+            memo.pieces = out;
             return out;
         },
         inCheck() {
+            if (memo.v === st.version) return memo.check;
+            memo.v = st.version;
             try {
-                return game.in_check();
+                memo.check = game.in_check();
             } catch (_) {
-                return false;
+                memo.check = false;
             }
+            return memo.check;
         },
         kingSquare() {
+            if (memo.v === st.version) return memo.king;
+            memo.v = st.version;
             let found = null;
             game.board().forEach((row, r) => {
                 row.forEach((cell, c) => {
@@ -285,6 +314,7 @@ export function createLevel(level, ChessCtor, lang = 'en') {
                     }
                 });
             });
+            memo.king = found;
             return found;
         },
         enemyName,

@@ -239,6 +239,7 @@ class ChessCourseApp {
                 else if (a === 'gameover-hide') { document.getElementById('gameover-card').style.display = 'none'; }
                 else if (a === 'online-draw-offer') this._onlineDrawOffer();
                 else if (a === 'movenav') this._onlineNavGo(action.dataset.where);
+                else if (a === 'next-lesson') this._nextLessonFromBoard();
                 else if (a === 'profile-signin') this._profileSignIn();
                 else if (a === 'manage-account') this.openUserProfile();
                 else if (a === 'logout') this.signOut();
@@ -256,7 +257,7 @@ class ChessCourseApp {
     static assetV() { return 'v24'; }
     // App release tag (?v= on scripts). Sent on identity messages so two
     // sides on different releases warn instead of silently misbehaving.
-    static APP_VERSION = 'v38';
+    static APP_VERSION = 'v39';
     _pieceFile(piece) {
         const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
         const white = piece === piece.toUpperCase();
@@ -609,6 +610,7 @@ class ChessCourseApp {
     _buildLessonUI(l) {
         const t    = this.teachers.find(x => x.id === l.teacherId);
         const free = l.type === 'free-game';
+        const done = this.completedLessons ? this.completedLessons.has(l.id) : false;
 
         const exBox = l.exercise
             ? `<div class="exercise-instructions"><h4>Exercise</h4><p id="exercise-instruction">${this._stepText(l.exercise, 0)}</p></div>`
@@ -619,7 +621,7 @@ class ChessCourseApp {
             : `<button class="btn-primary btn-glow-strong" id="complete-btn" data-action="mark-complete" disabled title="Finish the exercise move first">Complete Lesson</button>`;
 
         document.getElementById('lesson-content').innerHTML = `
-            <div class="lesson-detail-header">
+            <div class="lesson-detail-header" data-focus-hide>
                 <div class="lesson-title">
                     <div class="lesson-number">${l.id}</div>
                     <div><h2>${esc(l.title)}</h2><p>${esc(l.objective)}</p></div>
@@ -629,7 +631,7 @@ class ChessCourseApp {
             </div>
             <div class="lesson-content">
                 <div class="arena">
-                    <div class="profile-card opponent" id="profile-opp">
+                    <div class="profile-card opponent" id="profile-opp" data-focus-hide>
                         <img class="avatar" src="${t.img}" width="52" height="52" alt="${esc(t.name)}">
                         <div class="info">
                             <span class="name">${esc(t.name)}</span>
@@ -638,13 +640,34 @@ class ChessCourseApp {
                         </div>
                         <div class="turn-indicator" id="ti-opp">Waiting</div>
                     </div>
-                    <div class="speech-bubble" id="speech" role="status" aria-live="polite">Think carefully about your move.</div>
+                    <div class="speech-bubble" id="speech" role="status" aria-live="polite" data-focus-hide>Think carefully about your move.</div>
+                    <!-- Sticky twin of the advance CTA, placed ABOVE the board. On a phone
+                         the action row lands ~1100px down an 844px viewport, so
+                         "next lesson" was permanently off-screen. sticky +
+                         bottom:0 pins it to the viewport bottom once the board
+                         arrives, and it can never cover the board. -->
+                    <div class="sticky-actions" id="lesson-sticky">
+                        <span class="sticky-label" id="lesson-sticky-label">Lesson ${l.id}</span>
+                        <span class="sticky-count"><span id="lesson-sticky-score">0</span> moves</span>
+                        <button class="btn-secondary sm" data-action="reset-board" type="button" title="Reset board"><span class="btn-icon">↺</span> Reset</button>
+                        <button class="btn-secondary sm" data-action="flip-board" type="button" title="Flip board"><span class="btn-icon">⇄</span> Flip</button>
+                        ${done || free
+                            ? `<button class="btn-primary sm btn-glow-strong" id="complete-btn-sticky" data-action="mark-complete" type="button"><span class="btn-icon">✓</span> Complete</button>`
+                            : `<button class="btn-primary sm btn-glow-strong" id="complete-btn-sticky" data-action="mark-complete" type="button" disabled title="Finish the exercise move first"><span class="btn-icon">✓</span> Complete</button>`}
+                        <button class="btn-cta sm" data-action="next-lesson" id="next-lesson-sticky" type="button">Next →</button>
+                        <button class="icon-btn" id="lesson-focus-toggle" data-focus-toggle type="button"
+                                aria-expanded="true" aria-controls="lesson-screen"
+                                aria-label="Hide everything except the board" title="Focus mode">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M16 3v18"/></g></svg>
+                        </button>
+                    </div>
+
                     <div id="chess-board-wrapper"><div id="chess-board" role="group" aria-label="Chess board"></div></div>
                     <div id="promotion-picker" class="promotion-picker hidden"></div>
-                    <div id="lesson-feedback" class="feedback info" role="status" aria-live="polite">
+                    <div id="lesson-feedback" class="feedback info" role="status" aria-live="polite" data-focus-hide>
                         Welcome to <strong>${esc(l.title)}</strong>! ${free ? 'You are White — make your first move!' : 'Follow the exercise above.'}
                     </div>
-                    <div class="lesson-actions">
+                    <div class="lesson-actions" data-focus-hide>
                         <button class="btn-secondary" data-action="reset-board">Reset Board</button>
                         <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
                         ${this._muteBtnHTML()}
@@ -654,8 +677,15 @@ class ChessCourseApp {
                                 <option value="medium">Medium</option>
                             </select></label>` : ''}
                         ${btn}
+                        <!-- Next stage right under the board: advancing to the
+                             following lesson never needs a trip back to the grid.
+                             Deliberately .btn-cta, NOT .btn-primary — the primary
+                             action of a lesson stays uniquely "Complete Lesson". -->
+                        <button class="btn-cta" data-action="next-lesson" id="next-lesson-btn" type="button"
+                                title="Jump to the next lesson">Next lesson →</button>
                     </div>
-                    <div class="profile-card player" id="profile-you">
+                    
+                    <div class="profile-card player" id="profile-you" data-focus-hide>
                         <img class="avatar" src="${this._pieceFile('P')}" width="52" height="52" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
                         <div class="info">
                             <span class="name">You</span>
@@ -665,7 +695,7 @@ class ChessCourseApp {
                         <div class="turn-indicator" id="ti-you">Your turn</div>
                     </div>
                 </div>
-                <div class="lesson-dashboard">
+                <div class="lesson-dashboard" data-focus-hide>
                     <div class="dashboard-section">
                         <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Lecture Notes</h4>
                         <div class="lesson-explanation"><h4>Explanation</h4><p>${l.desc}</p></div>
@@ -680,6 +710,12 @@ class ChessCourseApp {
             </div>`;
 
         this._initBoard(l);
+        // Focus mode is a class on the screen, so a freshly rendered lesson
+        // screen has to be told the current preference (it may be on).
+        if (typeof window.DoChessLearn !== 'undefined'
+            && window.DoChessLearn.focus && window.DoChessLearn.focus.applyFocusMode) {
+            window.DoChessLearn.focus.applyFocusMode();
+        }
         const diff = document.getElementById('cpu-diff');
         if (diff) {
             diff.value = this._cpuDifficulty || 'easy';
@@ -704,6 +740,7 @@ class ChessCourseApp {
         const b = document.getElementById('chess-board');
         if (b) b.dataset.synced = '';
         this._draw();
+        this._syncNextLessonBtn();
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -892,6 +929,8 @@ class ChessCourseApp {
             this._updateTurnUI();
             this._paintCaptured('lesson-content', this.game, 'white');
         }
+        const sc = document.getElementById('lesson-sticky-score');
+        if (sc) sc.textContent = this.game.moveHistory.length;
     }
 
     /* ── Drag-and-drop (pointer events, touch-friendly) ─────────────
@@ -1464,8 +1503,10 @@ class ChessCourseApp {
                 if (box) { box.style.background = 'rgba(16,185,129,0.12)'; box.style.borderColor = 'var(--accent)'; }
             }
             this._fb(fbText, 'success');
-            const doneBtn = document.getElementById('complete-btn');
-            if (doneBtn) { doneBtn.disabled = false; doneBtn.removeAttribute('title'); }
+            document.querySelectorAll('#complete-btn, #complete-btn-sticky').forEach((btn) => {
+                btn.disabled = false;
+                btn.removeAttribute('title');
+            });
         } else {
             const names = { p: 'pawn', r: 'rook', b: 'bishop', n: 'knight', q: 'queen', k: 'king' };
             const featured = step.freePiece || ((step.freeCapture || step.from) ? 'p' : null);
@@ -1594,6 +1635,36 @@ class ChessCourseApp {
     /* ══════════════════════════════════════════════════════════════
        ACTIONS
     ══════════════════════════════════════════════════════════════ */
+    /* Keep both "next lesson" buttons honest: they are only usable once the
+       following lesson is unlocked, and they say so when it is not. The sticky
+       twin is what a phone user actually sees. */
+    _syncNextLessonBtn() {
+        const btn = document.getElementById('next-lesson-btn');
+        const sbtn = document.getElementById('next-lesson-sticky');
+        const label = document.getElementById('lesson-sticky-label');
+        if (!this.currentLesson) return;
+        const next = this.lessons.find((l) => l.id === this.currentLesson.id + 1);
+        if (label) label.textContent = `Lesson ${this.currentLesson.id} · ${esc(this.currentLesson.title)}`;
+        if (!btn && !sbtn) return;
+        if (!next) {
+            if (btn) { btn.disabled = true; btn.textContent = 'Last lesson ✓'; btn.title = 'Course complete'; }
+            if (sbtn) { sbtn.disabled = true; sbtn.textContent = 'Cleared ✓'; }
+            return;
+        }
+        const open = this.isOpen(next.id);
+        const title = open ? `Next: ${next.title} →` : 'Finish this lesson to unlock it';
+        if (btn) {
+            btn.disabled = !open;
+            btn.textContent = open ? title : title;
+            btn.title = open ? `Jump to lesson ${next.id}` : 'Finish this lesson to unlock it';
+        }
+        if (sbtn) {
+            sbtn.disabled = !open;
+            sbtn.textContent = open ? 'Next →' : 'Locked';
+            sbtn.title = title;
+        }
+    }
+
     resetBoard() {
         if (!this.currentLesson) return;
         this.cpuBusy = false;
@@ -1608,10 +1679,28 @@ class ChessCourseApp {
             const box = el.closest('.exercise-instructions');
             if (box) { box.style.background = ''; box.style.borderColor = ''; }
         }
-        const doneBtn = document.getElementById('complete-btn');
-        if (doneBtn && !this.isFreeGame) { doneBtn.disabled = true; doneBtn.title = 'Finish the exercise move first'; }
+        document.querySelectorAll('#complete-btn, #complete-btn-sticky').forEach((btn) => {
+            if (!this.isFreeGame) {
+                btn.disabled = true;
+                btn.title = 'Finish the exercise move first';
+            }
+        });
         this._fb(this.isFreeGame ? 'Board reset. You are White — make your first move!' : 'Board reset. Start fresh!', 'info');
         this._updateTurnUI();
+        this._syncNextLessonBtn();
+    }
+
+    /* Advance to the following lesson from the board itself. Enabled only
+       when that lesson is already unlocked (isOpen), so it can never skip a
+       locked step; on the last lesson it returns to the grid. */
+    _nextLessonFromBoard() {
+        if (!this.currentLesson) return;
+        const next = this.lessons.find((l) => l.id === this.currentLesson.id + 1);
+        if (!next || !this.isOpen(next.id)) {
+            this._fb(next ? 'Finish this lesson first — then the next one unlocks.' : 'That was the last lesson!', 'info');
+            return;
+        }
+        this.openLesson(next.id);
     }
 
     markComplete() {
@@ -1625,6 +1714,8 @@ class ChessCourseApp {
         }
         this.markDone(this.currentLesson.id);
         this.snd.playSuccess();
+        // Complete Lesson returns to the grid; the board's own "Next lesson"
+        // button then lights up so continuing is one click from either place.
         this.showLessons();
     }
 

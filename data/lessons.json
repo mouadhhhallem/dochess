@@ -3,7 +3,11 @@
   "stages": [
     {
       "n": 1,
-      "title": { "en": "The board and the pieces", "fr": "L'échiquier et les pièces", "ar": "الرقعة والقطع" },
+      "title": {
+        "en": "The board and the pieces",
+        "fr": "L'échiquier et les pièces",
+        "ar": "الرقعة والقطع"
+      },
       "desc": {
         "en": "How each piece moves. Land on stars, capture targets — fewer moves, more points.",
         "fr": "Comment chaque pièce se déplace. Atteignez les étoiles, capturez les cibles — moins de coups, plus de points.",
@@ -14,734 +18,2461 @@
   "levels": [
     {
       "id": "s1r-1",
-      "stage": 1, "group": "rook", "themes": ["rook", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Rook: straight lines", "fr": "Tour : lignes droites", "ar": "الرخ: خطوط مستقيمة" },
-      "intro": { "en": "The rook moves in straight lines. Land on every star — the fewer moves you make, the more points you win!", "fr": "La tour se déplace en ligne droite. Atteignez chaque étoile — moins de coups, plus de points !", "ar": "يتحرك الرخ في خطوط مستقيمة. قف على كل نجمة — كلما قلّت نقلاتك زادت نقاطك!" },
-      "goalText": { "en": "Collect all 3 stars with the rook.", "fr": "Ramassez les 3 étoiles avec la tour.", "ar": "اجمع النجوم الثلاث بالرخ." },
-      "fen": "4k3/8/8/8/8/8/8/R3K3 w - - 0 1",
-      "movePieces": ["r"],
-      "goal": { "collect": ["a4", "a6", "a8"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "Rooks travel any number of empty squares, straight only.", "fr": "La tour parcourt autant de cases vides qu'elle veut, en ligne droite.", "ar": "يقطع الرخ أي عدد من المربعات الفارغة في خط مستقيم." },
-        { "en": "The whole a-file is empty — climb it star by star.", "fr": "Toute la colonne a est vide — montez étoile par étoile.", "ar": "العمود a فارغ تمامًا — اصعده نجمةً نجمة." },
-        { "en": "Play a4, then a6, then a8.", "fr": "Jouez a4, puis a6, puis a8.", "ar": "العب a4 ثم a6 ثم a8." }
+      "stage": 1,
+      "group": "rook",
+      "themes": [
+        "rook",
+        "movement"
       ],
-      "explain": { "en": "One star per landing: passing over a star does not collect it.", "fr": "Une étoile par arrivée : passer au-dessus ne suffit pas.", "ar": "نجمة واحدة عند الوقوف: المرور فوق النجمة لا يجمعها." },
-      "success": { "en": "3 stars in 3 moves — perfect rook control!", "fr": "3 étoiles en 3 coups — contrôle parfait !", "ar": "٣ نجوم في ٣ نقلات — سيطرة مثالية!" },
-      "failHint": { "en": "Count your landings: each star needs its own stop.", "fr": "Comptez vos arrivées : chaque étoile demande son arrêt.", "ar": "احسب وقفاتك: كل نجمة تحتاج توقفًا." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rook: straight lines",
+        "fr": "Tour : lignes droites",
+        "ar": "الرخ: خطوط مستقيمة"
+      },
+      "intro": {
+        "en": "The rook moves in straight lines. Land on every star — the fewer moves you make, the more points you win!",
+        "fr": "La tour se déplace en ligne droite. Atteignez chaque étoile — moins de coups, plus de points !",
+        "ar": "يتحرك الرخ في خطوط مستقيمة. قف على كل نجمة — كلما قلّت نقلاتك زادت نقاطك!"
+      },
+      "goalText": {
+        "en": "Collect all 3 stars with the rook.",
+        "fr": "Ramassez les 3 étoiles avec la tour.",
+        "ar": "اجمع النجوم الثلاث بالرخ."
+      },
+      "fen": "4k3/8/8/8/8/8/8/R3K3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "collect": [
+          "a4",
+          "a6",
+          "a8"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Rooks travel any number of empty squares, straight only.",
+          "fr": "La tour parcourt autant de cases vides qu'elle veut, en ligne droite.",
+          "ar": "يقطع الرخ أي عدد من المربعات الفارغة في خط مستقيم."
+        },
+        {
+          "en": "The whole a-file is empty — climb it star by star.",
+          "fr": "Toute la colonne a est vide — montez étoile par étoile.",
+          "ar": "العمود a فارغ تمامًا — اصعده نجمةً نجمة."
+        },
+        {
+          "en": "Play a4, then a6, then a8.",
+          "fr": "Jouez a4, puis a6, puis a8.",
+          "ar": "العب a4 ثم a6 ثم a8."
+        }
+      ],
+      "explain": {
+        "en": "One star per landing: passing over a star does not collect it.",
+        "fr": "Une étoile par arrivée : passer au-dessus ne suffit pas.",
+        "ar": "نجمة واحدة عند الوقوف: المرور فوق النجمة لا يجمعها."
+      },
+      "success": {
+        "en": "3 stars in 3 moves — perfect rook control!",
+        "fr": "3 étoiles en 3 coups — contrôle parfait !",
+        "ar": "٣ نجوم في ٣ نقلات — سيطرة مثالية!"
+      },
+      "failHint": {
+        "en": "Count your landings: each star needs its own stop.",
+        "fr": "Comptez vos arrivées : chaque étoile demande son arrêt.",
+        "ar": "احسب وقفاتك: كل نجمة تحتاج توقفًا."
+      },
       "xp": 10
     },
     {
       "id": "s1r-2",
-      "stage": 1, "group": "rook", "themes": ["rook", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Rook: change direction", "fr": "Tour : changer de direction", "ar": "الرخ: تغيير الاتجاه" },
-      "goalText": { "en": "Collect all 3 stars. Your own king blocks the first rank!", "fr": "Ramassez les 3 étoiles. Votre propre roi bloque la première rangée !", "ar": "اجمع النجوم الثلاث. ملكك يعترض الصف الأول!" },
-      "fen": "8/8/6k1/8/8/8/8/R3K3 w - - 0 1",
-      "movePieces": ["r"],
-      "goal": { "collect": ["a8", "h8", "h1"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "Your king on e1 blocks sliding along rank 1.", "fr": "Votre roi en e1 bloque le passage sur la rangée 1.", "ar": "ملكك في e1 يسد الطريق على الصف الأول." },
-        { "en": "Go up the a-file first, then turn.", "fr": "Montez d'abord la colonne a, puis tournez.", "ar": "اصعد العمود a أولًا ثم انعطف." },
-        { "en": "Play a8, h8, h1.", "fr": "Jouez a8, h8, h1.", "ar": "العب a8 ثم h8 ثم h1." }
+      "stage": 1,
+      "group": "rook",
+      "themes": [
+        "rook",
+        "movement"
       ],
-      "explain": { "en": "Rooks turn corners by combining two straight slides. Friendly pieces block too.", "fr": "La tour tourne en combinant deux glissades droites. Les pièces amies bloquent aussi.", "ar": "ينعطف الرخ بجمع حركتين مستقيمتين. القطع الصديقة تعترض أيضًا." },
-      "success": { "en": "Three corners turned — the rook dances!", "fr": "Trois virages — la tour danse !", "ar": "ثلاثة انعطافات — الرخ يرقص!" },
-      "failHint": { "en": "The e1 king forces the a-file route. Up, across, down.", "fr": "Le roi e1 impose la colonne a. Haut, traversée, bas.", "ar": "ملك e1 يفرض طريق العمود a. اصعد ثم اعبر ثم انزل." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rook: change direction",
+        "fr": "Tour : changer de direction",
+        "ar": "الرخ: تغيير الاتجاه"
+      },
+      "goalText": {
+        "en": "Collect all 3 stars. Your own king blocks the first rank!",
+        "fr": "Ramassez les 3 étoiles. Votre propre roi bloque la première rangée !",
+        "ar": "اجمع النجوم الثلاث. ملكك يعترض الصف الأول!"
+      },
+      "fen": "8/8/6k1/8/8/8/8/R3K3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "collect": [
+          "a8",
+          "h8",
+          "h1"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Your king on e1 blocks sliding along rank 1.",
+          "fr": "Votre roi en e1 bloque le passage sur la rangée 1.",
+          "ar": "ملكك في e1 يسد الطريق على الصف الأول."
+        },
+        {
+          "en": "Go up the a-file first, then turn.",
+          "fr": "Montez d'abord la colonne a, puis tournez.",
+          "ar": "اصعد العمود a أولًا ثم انعطف."
+        },
+        {
+          "en": "Play a8, h8, h1.",
+          "fr": "Jouez a8, h8, h1.",
+          "ar": "العب a8 ثم h8 ثم h1."
+        }
+      ],
+      "explain": {
+        "en": "Rooks turn corners by combining two straight slides. Friendly pieces block too.",
+        "fr": "La tour tourne en combinant deux glissades droites. Les pièces amies bloquent aussi.",
+        "ar": "ينعطف الرخ بجمع حركتين مستقيمتين. القطع الصديقة تعترض أيضًا."
+      },
+      "success": {
+        "en": "Three corners turned — the rook dances!",
+        "fr": "Trois virages — la tour danse !",
+        "ar": "ثلاثة انعطافات — الرخ يرقص!"
+      },
+      "failHint": {
+        "en": "The e1 king forces the a-file route. Up, across, down.",
+        "fr": "Le roi e1 impose la colonne a. Haut, traversée, bas.",
+        "ar": "ملك e1 يفرض طريق العمود a. اصعد ثم اعبر ثم انزل."
+      },
       "xp": 10
     },
     {
       "id": "s1r-3",
-      "stage": 1, "group": "rook", "themes": ["rook", "blocked-path"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Rook: blocked path", "fr": "Tour : passage bloqué", "ar": "الرخ: طريق مسدود" },
-      "goalText": { "en": "Your pawn on a6 blocks the file. Collect both stars anyway.", "fr": "Votre pion en a6 bloque la colonne. Ramassez les étoiles quand même.", "ar": "بيدقك في a6 يسد العمود. اجمع النجمتين رغم ذلك." },
-      "fen": "8/7k/P7/8/8/8/8/R3K3 w - - 0 1",
-      "movePieces": ["r"],
-      "goal": { "collect": ["a4", "a8"] },
-      "par": 4, "maxMoves": 10,
-      "hints": [
-        { "en": "The a6 pawn splits the file in two — detour around it.", "fr": "Le pion a6 coupe la colonne en deux — contournez-le.", "ar": "البيدق a6 يقسم العمود — التفّ حوله." },
-        { "en": "Collect a4 first, then leave the file sideways.", "fr": "Prenez a4 d'abord, puis quittez la colonne.", "ar": "اجمع a4 أولًا ثم اخرج من العمود جانبًا." },
-        { "en": "Play a4, e4, e8, a8.", "fr": "Jouez a4, e4, e8, a8.", "ar": "العب a4 ثم e4 ثم e8 ثم a8." }
+      "stage": 1,
+      "group": "rook",
+      "themes": [
+        "rook",
+        "blocked-path"
       ],
-      "explain": { "en": "When the direct road is blocked, a rook goes around the obstacle in a rectangle.", "fr": "Quand la route directe est bloquée, la tour contourne l'obstacle en rectangle.", "ar": "عندما يُسد الطريق المباشر يلتف الرخ حول العائق مستطيلًا." },
-      "success": { "en": "Detour mastered — blockers are just puzzles!", "fr": "Détour maîtrisé — les bloqueurs ne sont que des énigmes !", "ar": "أتقنت الالتفاف — العوائق مجرد ألغاز!" },
-      "failHint": { "en": "a6 can't be crossed. Rectangle: out, up, back.", "fr": "a6 est infranchissable. Rectangle : sortie, montée, retour.", "ar": "لا يمكن عبور a6. مستطيل: اخرج ثم اصعد ثم عُد." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rook: blocked path",
+        "fr": "Tour : passage bloqué",
+        "ar": "الرخ: طريق مسدود"
+      },
+      "goalText": {
+        "en": "Your pawn on a6 blocks the file. Collect both stars anyway.",
+        "fr": "Votre pion en a6 bloque la colonne. Ramassez les étoiles quand même.",
+        "ar": "بيدقك في a6 يسد العمود. اجمع النجمتين رغم ذلك."
+      },
+      "fen": "8/7k/P7/8/8/8/8/R3K3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "collect": [
+          "a4",
+          "a8"
+        ]
+      },
+      "par": 4,
+      "maxMoves": 10,
+      "hints": [
+        {
+          "en": "The a6 pawn splits the file in two — detour around it.",
+          "fr": "Le pion a6 coupe la colonne en deux — contournez-le.",
+          "ar": "البيدق a6 يقسم العمود — التفّ حوله."
+        },
+        {
+          "en": "Collect a4 first, then leave the file sideways.",
+          "fr": "Prenez a4 d'abord, puis quittez la colonne.",
+          "ar": "اجمع a4 أولًا ثم اخرج من العمود جانبًا."
+        },
+        {
+          "en": "Play a4, e4, e8, a8.",
+          "fr": "Jouez a4, e4, e8, a8.",
+          "ar": "العب a4 ثم e4 ثم e8 ثم a8."
+        }
+      ],
+      "explain": {
+        "en": "When the direct road is blocked, a rook goes around the obstacle in a rectangle.",
+        "fr": "Quand la route directe est bloquée, la tour contourne l'obstacle en rectangle.",
+        "ar": "عندما يُسد الطريق المباشر يلتف الرخ حول العائق مستطيلًا."
+      },
+      "success": {
+        "en": "Detour mastered — blockers are just puzzles!",
+        "fr": "Détour maîtrisé — les bloqueurs ne sont que des énigmes !",
+        "ar": "أتقنت الالتفاف — العوائق مجرد ألغاز!"
+      },
+      "failHint": {
+        "en": "a6 can't be crossed. Rectangle: out, up, back.",
+        "fr": "a6 est infranchissable. Rectangle : sortie, montée, retour.",
+        "ar": "لا يمكن عبور a6. مستطيل: اخرج ثم اصعد ثم عُد."
+      },
       "xp": 15
     },
     {
       "id": "s1r-4",
-      "stage": 1, "group": "rook", "themes": ["rook", "capture"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Rook: capture the pawns", "fr": "Tour : capturez les pions", "ar": "الرخ: التقط البيادق" },
-      "goalText": { "en": "Capture all 3 black pawns.", "fr": "Capturez les 3 pions noirs.", "ar": "التقط البيادق السوداء الثلاثة." },
-      "fen": "3kp3/8/8/p3p3/8/8/8/R3K3 w - - 0 1",
-      "movePieces": ["r"],
-      "goal": { "capture": ["a5", "e5", "e8"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "Rooks capture exactly like they move: land on the enemy.", "fr": "La tour capture comme elle se déplace : en arrivant sur l'ennemi.", "ar": "يلتقط الرخ كما يتحرك: بالوقوف على العدو." },
-        { "en": "Start with the closest pawn, a5.", "fr": "Commencez par le pion le plus proche, a5.", "ar": "ابدأ بالبيدق الأقرب a5." },
-        { "en": "Play axa5, a5–e5, exxe8.", "fr": "Jouez axa5, a5–e5, exxe8.", "ar": "العب axa5 ثم a5–e5 ثم exxe8." }
+      "stage": 1,
+      "group": "rook",
+      "themes": [
+        "rook",
+        "capture"
       ],
-      "explain": { "en": "Chain captures along shared lines: each capture lands you lined up for the next.", "fr": "Enchaînez les captures sur des lignes partagées : chaque prise vous aligne pour la suivante.", "ar": "سلسِل الالتقاط على خطوط مشتركة: كل التقاط يضعك على خط التالي." },
-      "success": { "en": "Three pawns swept off the board!", "fr": "Trois pions balayés de l'échiquier !", "ar": "ثلاثة بيادق كُنسَت عن الرقعة!" },
-      "failHint": { "en": "Follow the chain a5 → e5 → e8.", "fr": "Suivez la chaîne a5 → e5 → e8.", "ar": "اتبع السلسلة a5 ← e5 ← e8." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rook: capture the pawns",
+        "fr": "Tour : capturez les pions",
+        "ar": "الرخ: التقط البيادق"
+      },
+      "goalText": {
+        "en": "Capture all 3 black pawns.",
+        "fr": "Capturez les 3 pions noirs.",
+        "ar": "التقط البيادق السوداء الثلاثة."
+      },
+      "fen": "1k2p3/8/8/p3p3/8/8/8/R3K3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "capture": [
+          "a5",
+          "e5",
+          "e8"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Rooks capture exactly like they move: land on the enemy.",
+          "fr": "La tour capture comme elle se déplace : en arrivant sur l'ennemi.",
+          "ar": "يلتقط الرخ كما يتحرك: بالوقوف على العدو."
+        },
+        {
+          "en": "Start with the closest pawn, a5.",
+          "fr": "Commencez par le pion le plus proche, a5.",
+          "ar": "ابدأ بالبيدق الأقرب a5."
+        },
+        {
+          "en": "Play axa5, a5–e5, exxe8.",
+          "fr": "Jouez axa5, a5–e5, exxe8.",
+          "ar": "العب axa5 ثم a5–e5 ثم exxe8."
+        }
+      ],
+      "explain": {
+        "en": "Chain captures along shared lines: each capture lands you lined up for the next.",
+        "fr": "Enchaînez les captures sur des lignes partagées : chaque prise vous aligne pour la suivante.",
+        "ar": "سلسِل الالتقاط على خطوط مشتركة: كل التقاط يضعك على خط التالي."
+      },
+      "success": {
+        "en": "Three pawns swept off the board!",
+        "fr": "Trois pions balayés de l'échiquier !",
+        "ar": "ثلاثة بيادق كُنسَت عن الرقعة!"
+      },
+      "failHint": {
+        "en": "Follow the chain a5 → e5 → e8.",
+        "fr": "Suivez la chaîne a5 → e5 → e8.",
+        "ar": "اتبع السلسلة a5 ← e5 ← e8."
+      },
       "xp": 15
     },
     {
       "id": "s1r-5",
-      "stage": 1, "group": "rook", "themes": ["rook", "obstacles"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Rook: forbidden squares", "fr": "Tour : cases interdites", "ar": "الرخ: مربعات ممنوعة" },
-      "goalText": { "en": "Reach h8. The marked squares are lava — never cross or land on them.", "fr": "Atteignez h8. Les cases marquées sont de la lave — ne les traversez ni n'y arrêtez.", "ar": "اصِل إلى h8. المربعات المعلّمة حمم — لا تعبرها ولا تقف عليها." },
-      "fen": "8/6k1/8/8/8/8/8/R3K3 w - - 0 1",
-      "movePieces": ["r"],
-      "goal": { "collect": ["d8", "h8"] },
-      "obstacles": ["a8", "h1"],
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "a8 and h1 are lava. Both 2-move roads use them.", "fr": "a8 et h1 sont de la lave. Les deux routes en 2 coups les utilisent.", "ar": "a8 وh1 حمم. الطريقان ذات النقلتين يمران بهما." },
-        { "en": "Climb the d-file instead.", "fr": "Montez plutôt par la colonne d.", "ar": "اصعد من العمود d بدلًا من ذلك." },
-        { "en": "Play d1, d8, h8.", "fr": "Jouez d1, d8, h8.", "ar": "العب d1 ثم d8 ثم h8." }
+      "stage": 1,
+      "group": "rook",
+      "themes": [
+        "rook",
+        "obstacles"
       ],
-      "explain": { "en": "Obstacles turn roads off: always re-check which 2-move tries survive.", "fr": "Les obstacles ferment des routes : revérifiez quelles tentatives en 2 coups survivent.", "ar": "العوائق تغلق الطرق: أعد فحص محاولات النقلتين الناجية." },
-      "success": { "en": "Lava dodged — route planning unlocked!", "fr": "Lave évitée — planification débloquée !", "ar": "نجوت من الحمم — فتحت تخطيط الطرق!" },
-      "failHint": { "en": "a8 and h1 burn. The d-file road is safe.", "fr": "a8 et h1 brûlent. La route de la colonne d est sûre.", "ar": "a8 وh1 تحرقان. طريق العمود d آمن." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rook: forbidden squares",
+        "fr": "Tour : cases interdites",
+        "ar": "الرخ: مربعات ممنوعة"
+      },
+      "goalText": {
+        "en": "Reach h8. The marked squares are lava — never cross or land on them.",
+        "fr": "Atteignez h8. Les cases marquées sont de la lave — ne les traversez ni n'y arrêtez.",
+        "ar": "اصِل إلى h8. المربعات المعلّمة حمم — لا تعبرها ولا تقف عليها."
+      },
+      "fen": "8/8/8/1k6/8/8/8/R3K3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "collect": [
+          "d8",
+          "h8"
+        ]
+      },
+      "obstacles": [
+        "a8",
+        "h1"
+      ],
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "a8 and h1 are lava. Both 2-move roads use them.",
+          "fr": "a8 et h1 sont de la lave. Les deux routes en 2 coups les utilisent.",
+          "ar": "a8 وh1 حمم. الطريقان ذات النقلتين يمران بهما."
+        },
+        {
+          "en": "Climb the d-file instead.",
+          "fr": "Montez plutôt par la colonne d.",
+          "ar": "اصعد من العمود d بدلًا من ذلك."
+        },
+        {
+          "en": "Play d1, d8, h8.",
+          "fr": "Jouez d1, d8, h8.",
+          "ar": "العب d1 ثم d8 ثم h8."
+        }
+      ],
+      "explain": {
+        "en": "Obstacles turn roads off: always re-check which 2-move tries survive.",
+        "fr": "Les obstacles ferment des routes : revérifiez quelles tentatives en 2 coups survivent.",
+        "ar": "العوائق تغلق الطرق: أعد فحص محاولات النقلتين الناجية."
+      },
+      "success": {
+        "en": "Lava dodged — route planning unlocked!",
+        "fr": "Lave évitée — planification débloquée !",
+        "ar": "نجوت من الحمم — فتحت تخطيط الطرق!"
+      },
+      "failHint": {
+        "en": "a8 and h1 burn. The d-file road is safe.",
+        "fr": "a8 et h1 brûlent. La route de la colonne d est sûre.",
+        "ar": "a8 وh1 تحرقان. طريق العمود d آمن."
+      },
       "xp": 15
     },
     {
       "id": "s1r-6",
-      "stage": 1, "group": "rook", "themes": ["rook", "route"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Rook: the grand tour", "fr": "Tour : le grand tour", "ar": "الرخ: الجولة الكبرى" },
-      "goalText": { "en": "Collect all 4 stars. Plan the whole tour before moving!", "fr": "Ramassez les 4 étoiles. Planifiez tout le parcours avant de jouer !", "ar": "اجمع النجوم الأربع. خطط الجولة كاملة قبل الحركة!" },
-      "fen": "7k/8/8/8/K7/8/8/R7 w - - 0 1",
-      "movePieces": ["r"],
-      "goal": { "collect": ["h2", "b2", "b7", "h7"] },
-      "par": 5, "maxMoves": 12,
-      "hints": [
-        { "en": "Four stars, so at least 4 landings — plus getting started.", "fr": "Quatre étoiles, donc au moins 4 arrivées — plus le départ.", "ar": "أربع نجوم أي أربع وقفات على الأقل — زائد البداية." },
-        { "en": "Sweep the bottom rank, then climb the b-file.", "fr": "Balayez la rangée du bas, puis montez la colonne b.", "ar": "امسح الصف السفلي ثم اصعد العمود b." },
-        { "en": "One road: h1, h2, b2, b7, h7.", "fr": "Une route : h1, h2, b2, b7, h7.", "ar": "طريق واحد: h1 ثم h2 ثم b2 ثم b7 ثم h7." }
+      "stage": 1,
+      "group": "rook",
+      "themes": [
+        "rook",
+        "route"
       ],
-      "explain": { "en": "Shortest routes chain shared lines: each landing sets up the next.", "fr": "Les routes les plus courtes enchaînent des lignes partagées : chaque arrivée prépare la suivante.", "ar": "أقصر الطرق تسلسل خطوطًا مشتركة: كل وقفة تجهّز التالية." },
-      "success": { "en": "Grand tour in 5 — true rook vision!", "fr": "Grand tour en 5 — vraie vision de tour !", "ar": "جولة كبرى في ٥ — نظرة رخ حقيقية!" },
-      "failHint": { "en": "Order matters: h2–b2 share a rank, b2–b7 a file, b7–h7 a rank.", "fr": "L'ordre compte : h2–b2 partagent une rangée, b2–b7 une colonne, b7–h7 une rangée.", "ar": "الترتيب مهم: h2–b2 في صف واحد وb2–b7 في عمود وb7–h7 في صف." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rook: the grand tour",
+        "fr": "Tour : le grand tour",
+        "ar": "الرخ: الجولة الكبرى"
+      },
+      "goalText": {
+        "en": "Collect all 4 stars. Plan the whole tour before moving!",
+        "fr": "Ramassez les 4 étoiles. Planifiez tout le parcours avant de jouer !",
+        "ar": "اجمع النجوم الأربع. خطط الجولة كاملة قبل الحركة!"
+      },
+      "fen": "8/8/8/8/K2k4/8/8/R7 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "collect": [
+          "h2",
+          "b2",
+          "b7",
+          "h7"
+        ]
+      },
+      "par": 5,
+      "maxMoves": 12,
+      "hints": [
+        {
+          "en": "Four stars, so at least 4 landings — plus getting started.",
+          "fr": "Quatre étoiles, donc au moins 4 arrivées — plus le départ.",
+          "ar": "أربع نجوم أي أربع وقفات على الأقل — زائد البداية."
+        },
+        {
+          "en": "Sweep the bottom rank, then climb the b-file.",
+          "fr": "Balayez la rangée du bas, puis montez la colonne b.",
+          "ar": "امسح الصف السفلي ثم اصعد العمود b."
+        },
+        {
+          "en": "One road: h1, h2, b2, b7, h7.",
+          "fr": "Une route : h1, h2, b2, b7, h7.",
+          "ar": "طريق واحد: h1 ثم h2 ثم b2 ثم b7 ثم h7."
+        }
+      ],
+      "explain": {
+        "en": "Shortest routes chain shared lines: each landing sets up the next.",
+        "fr": "Les routes les plus courtes enchaînent des lignes partagées : chaque arrivée prépare la suivante.",
+        "ar": "أقصر الطرق تسلسل خطوطًا مشتركة: كل وقفة تجهّز التالية."
+      },
+      "success": {
+        "en": "Grand tour in 5 — true rook vision!",
+        "fr": "Grand tour en 5 — vraie vision de tour !",
+        "ar": "جولة كبرى في ٥ — نظرة رخ حقيقية!"
+      },
+      "failHint": {
+        "en": "Order matters: h2–b2 share a rank, b2–b7 a file, b7–h7 a rank.",
+        "fr": "L'ordre compte : h2–b2 partagent une rangée, b2–b7 une colonne, b7–h7 une rangée.",
+        "ar": "الترتيب مهم: h2–b2 في صف واحد وb2–b7 في عمود وb7–h7 في صف."
+      },
       "xp": 20
     },
     {
       "id": "s1b-1",
-      "stage": 1, "group": "bishop", "themes": ["bishop", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Bishop: stay on color", "fr": "Fou : restez sur la couleur", "ar": "الفيل: ابقَ على اللون" },
-      "intro": { "en": "The bishop glides diagonally and never leaves its color. Land on every star — fewer moves, more points!", "fr": "Le fou glisse en diagonale et ne quitte jamais sa couleur. Atteignez chaque étoile — moins de coups, plus de points !", "ar": "ينزلق الفيل قطريًا ولا يغادر لونه أبدًا. قف على كل نجمة — كلما قلّت نقلاتك زادت نقاطك!" },
-      "goalText": { "en": "Collect both stars with the bishop.", "fr": "Ramassez les 2 étoiles avec le fou.", "ar": "اجمع النجمتين بالفيل." },
-      "fen": "k7/8/8/8/8/8/8/2B3K1 w - - 0 1",
-      "movePieces": ["b"],
-      "goal": { "collect": ["e3", "g5"] },
-      "par": 2, "maxMoves": 8,
-      "hints": [
-        { "en": "Bishops own diagonals — c1, d2, e3, f4, g5, h6 is one line.", "fr": "Les fous règnent sur les diagonales — c1, d2, e3, f4, g5, h6 forment une ligne.", "ar": "الفيلة تملك الأقطار — c1 وd2 وe3 وf4 وg5 وh6 خط واحد." },
-        { "en": "Both stars sit on that diagonal.", "fr": "Les deux étoiles sont sur cette diagonale.", "ar": "النجمتان على هذا القطر." },
-        { "en": "Play e3, then g5 — or g5, then e3.", "fr": "Jouez e3, puis g5 — ou g5, puis e3.", "ar": "العب e3 ثم g5 — أو g5 ثم e3." }
+      "stage": 1,
+      "group": "bishop",
+      "themes": [
+        "bishop",
+        "movement"
       ],
-      "explain": { "en": "Landing collects the star; gliding over it does not.", "fr": "L'arrivée ramasse l'étoile ; la survoler ne suffit pas.", "ar": "الوقوف يجمع النجمة؛ المرور فوقها لا يكفي." },
-      "success": { "en": "Diagonal swept clean!", "fr": "Diagonale balayée !", "ar": "قطر نظيف تمامًا!" },
-      "failHint": { "en": "Stay on the c1–h6 diagonal: e3 and g5.", "fr": "Restez sur la diagonale c1–h6 : e3 et g5.", "ar": "ابقَ على قطر c1–h6: e3 وg5." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Bishop: stay on color",
+        "fr": "Fou : restez sur la couleur",
+        "ar": "الفيل: ابقَ على اللون"
+      },
+      "intro": {
+        "en": "The bishop glides diagonally and never leaves its color. Land on every star — fewer moves, more points!",
+        "fr": "Le fou glisse en diagonale et ne quitte jamais sa couleur. Atteignez chaque étoile — moins de coups, plus de points !",
+        "ar": "ينزلق الفيل قطريًا ولا يغادر لونه أبدًا. قف على كل نجمة — كلما قلّت نقلاتك زادت نقاطك!"
+      },
+      "goalText": {
+        "en": "Collect both stars with the bishop.",
+        "fr": "Ramassez les 2 étoiles avec le fou.",
+        "ar": "اجمع النجمتين بالفيل."
+      },
+      "fen": "k7/8/8/8/8/8/8/2B3K1 w - - 0 1",
+      "movePieces": [
+        "b"
+      ],
+      "goal": {
+        "collect": [
+          "e3",
+          "g5"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Bishops own diagonals — c1, d2, e3, f4, g5, h6 is one line.",
+          "fr": "Les fous règnent sur les diagonales — c1, d2, e3, f4, g5, h6 forment une ligne.",
+          "ar": "الفيلة تملك الأقطار — c1 وd2 وe3 وf4 وg5 وh6 خط واحد."
+        },
+        {
+          "en": "Both stars sit on that diagonal.",
+          "fr": "Les deux étoiles sont sur cette diagonale.",
+          "ar": "النجمتان على هذا القطر."
+        },
+        {
+          "en": "Play e3, then g5 — or g5, then e3.",
+          "fr": "Jouez e3, puis g5 — ou g5, puis e3.",
+          "ar": "العب e3 ثم g5 — أو g5 ثم e3."
+        }
+      ],
+      "explain": {
+        "en": "Landing collects the star; gliding over it does not.",
+        "fr": "L'arrivée ramasse l'étoile ; la survoler ne suffit pas.",
+        "ar": "الوقوف يجمع النجمة؛ المرور فوقها لا يكفي."
+      },
+      "success": {
+        "en": "Diagonal swept clean!",
+        "fr": "Diagonale balayée !",
+        "ar": "قطر نظيف تمامًا!"
+      },
+      "failHint": {
+        "en": "Stay on the c1–h6 diagonal: e3 and g5.",
+        "fr": "Restez sur la diagonale c1–h6 : e3 et g5.",
+        "ar": "ابقَ على قطر c1–h6: e3 وg5."
+      },
       "xp": 10
     },
     {
       "id": "s1b-2",
-      "stage": 1, "group": "bishop", "themes": ["bishop", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Bishop: two diagonals", "fr": "Fou : deux diagonales", "ar": "الفيل: قطران" },
-      "goalText": { "en": "Collect all 3 stars across both diagonals.", "fr": "Ramassez les 3 étoiles sur les deux diagonales.", "ar": "اجمع النجوم الثلاثة على القطرين." },
-      "fen": "k7/8/8/8/8/8/8/2B3K1 w - - 0 1",
-      "movePieces": ["b"],
-      "goal": { "collect": ["b2", "a3", "e7"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "From c1 the bishop reaches two diagonals: b2–a3 and d2–h6.", "fr": "Depuis c1 le fou atteint deux diagonales : b2–a3 et d2–h6.", "ar": "من c1 يصل الفيل إلى قطرين: b2–a3 وd2–h6." },
-        { "en": "Clear the short diagonal first.", "fr": "Nettoyez d'abord la petite diagonale.", "ar": "نظّف القطر القصير أولًا." },
-        { "en": "Play b2, a3, then swing up to e7.", "fr": "Jouez b2, a3, puis remontez vers e7.", "ar": "العب b2 ثم a3 ثم اصعد إلى e7." }
+      "stage": 1,
+      "group": "bishop",
+      "themes": [
+        "bishop",
+        "movement"
       ],
-      "explain": { "en": "Every bishop move switches diagonals — plan which diagonal each star needs.", "fr": "Chaque coup de fou change de diagonale — prévoyez la diagonale de chaque étoile.", "ar": "كل نقلة فيل تغيّر القطر — خطط لقطر كل نجمة." },
-      "success": { "en": "Both diagonals harvested!", "fr": "Les deux diagonales récoltées !", "ar": "حصدت القطرين!" },
-      "failHint": { "en": "b2 and a3 share one diagonal; e7 needs the long a3–f8 road.", "fr": "b2 et a3 partagent une diagonale ; e7 exige la longue route a3–f8.", "ar": "b2 وa3 على قطر واحد؛ e7 يحتاج طريق a3–f8 الطويل." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Bishop: two diagonals",
+        "fr": "Fou : deux diagonales",
+        "ar": "الفيل: قطران"
+      },
+      "goalText": {
+        "en": "Collect all 3 stars across both diagonals.",
+        "fr": "Ramassez les 3 étoiles sur les deux diagonales.",
+        "ar": "اجمع النجوم الثلاثة على القطرين."
+      },
+      "fen": "k7/8/8/8/8/8/8/2B3K1 w - - 0 1",
+      "movePieces": [
+        "b"
+      ],
+      "goal": {
+        "collect": [
+          "b2",
+          "a3",
+          "e7"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "From c1 the bishop reaches two diagonals: b2–a3 and d2–h6.",
+          "fr": "Depuis c1 le fou atteint deux diagonales : b2–a3 et d2–h6.",
+          "ar": "من c1 يصل الفيل إلى قطرين: b2–a3 وd2–h6."
+        },
+        {
+          "en": "Clear the short diagonal first.",
+          "fr": "Nettoyez d'abord la petite diagonale.",
+          "ar": "نظّف القطر القصير أولًا."
+        },
+        {
+          "en": "Play b2, a3, then swing up to e7.",
+          "fr": "Jouez b2, a3, puis remontez vers e7.",
+          "ar": "العب b2 ثم a3 ثم اصعد إلى e7."
+        }
+      ],
+      "explain": {
+        "en": "Every bishop move switches diagonals — plan which diagonal each star needs.",
+        "fr": "Chaque coup de fou change de diagonale — prévoyez la diagonale de chaque étoile.",
+        "ar": "كل نقلة فيل تغيّر القطر — خطط لقطر كل نجمة."
+      },
+      "success": {
+        "en": "Both diagonals harvested!",
+        "fr": "Les deux diagonales récoltées !",
+        "ar": "حصدت القطرين!"
+      },
+      "failHint": {
+        "en": "b2 and a3 share one diagonal; e7 needs the long a3–f8 road.",
+        "fr": "b2 et a3 partagent une diagonale ; e7 exige la longue route a3–f8.",
+        "ar": "b2 وa3 على قطر واحد؛ e7 يحتاج طريق a3–f8 الطويل."
+      },
       "xp": 10
     },
     {
       "id": "s1b-3",
-      "stage": 1, "group": "bishop", "themes": ["bishop", "blocked-path"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Bishop: blocked diagonal", "fr": "Fou : diagonale bloquée", "ar": "الفيل: قطر مسدود" },
-      "goalText": { "en": "Your pawn on d2 blocks the main diagonal. Collect both stars anyway.", "fr": "Votre pion en d2 bloque la grande diagonale. Ramassez les étoiles quand même.", "ar": "بيدقك في d2 يسد القطر الرئيسي. اجمع النجمتين رغم ذلك." },
-      "fen": "k7/8/8/8/8/8/3P4/2B3K1 w - - 0 1",
-      "movePieces": ["b"],
-      "goal": { "collect": ["f4", "h6"] },
-      "par": 4, "maxMoves": 10,
-      "hints": [
-        { "en": "d2 is occupied, so c1 can't go right — go left first.", "fr": "d2 est occupée, c1 ne peut pas aller à droite — allez à gauche d'abord.", "ar": "d2 مشغول فلا يستطيع c1 الذهاب يمينًا — اذهب يسارًا أولًا." },
-        { "en": "The a3–f8 diagonal climbs back to the kingside.", "fr": "La diagonale a3–f8 remonte vers l'aile roi.", "ar": "قطر a3–f8 يصعد عائدًا إلى جناح الملك." },
-        { "en": "Play a3, f8, h6, then drop to f4.", "fr": "Jouez a3, f8, h6, puis redescendez en f4.", "ar": "العب a3 ثم f8 ثم h6 ثم انزل إلى f4." }
+      "stage": 1,
+      "group": "bishop",
+      "themes": [
+        "bishop",
+        "blocked-path"
       ],
-      "explain": { "en": "A blocked diagonal means leaving by the other one and returning from above.", "fr": "Une diagonale bloquée impose de sortir par l'autre et de revenir par le haut.", "ar": "القطر المسدود يعني الخروج من الآخر والعودة من الأعلى." },
-      "success": { "en": "Blockade outflanked — beautiful detour!", "fr": "Blocus contourné — beau détour !", "ar": "التفت على الحصار — التفاف جميل!" },
-      "failHint": { "en": "Left, up, across, down: a3, f8, h6, f4.", "fr": "Gauche, haut, traversée, bas : a3, f8, h6, f4.", "ar": "يسار ثم صعود ثم عبور ثم نزول: a3 وf8 وh6 وf4." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Bishop: blocked diagonal",
+        "fr": "Fou : diagonale bloquée",
+        "ar": "الفيل: قطر مسدود"
+      },
+      "goalText": {
+        "en": "Your pawn on d2 blocks the main diagonal. Collect both stars anyway.",
+        "fr": "Votre pion en d2 bloque la grande diagonale. Ramassez les étoiles quand même.",
+        "ar": "بيدقك في d2 يسد القطر الرئيسي. اجمع النجمتين رغم ذلك."
+      },
+      "fen": "k7/8/8/8/8/8/3P4/2B3K1 w - - 0 1",
+      "movePieces": [
+        "b"
+      ],
+      "goal": {
+        "collect": [
+          "f4",
+          "h6"
+        ]
+      },
+      "par": 4,
+      "maxMoves": 10,
+      "hints": [
+        {
+          "en": "d2 is occupied, so c1 can't go right — go left first.",
+          "fr": "d2 est occupée, c1 ne peut pas aller à droite — allez à gauche d'abord.",
+          "ar": "d2 مشغول فلا يستطيع c1 الذهاب يمينًا — اذهب يسارًا أولًا."
+        },
+        {
+          "en": "The a3–f8 diagonal climbs back to the kingside.",
+          "fr": "La diagonale a3–f8 remonte vers l'aile roi.",
+          "ar": "قطر a3–f8 يصعد عائدًا إلى جناح الملك."
+        },
+        {
+          "en": "Play a3, f8, h6, then drop to f4.",
+          "fr": "Jouez a3, f8, h6, puis redescendez en f4.",
+          "ar": "العب a3 ثم f8 ثم h6 ثم انزل إلى f4."
+        }
+      ],
+      "explain": {
+        "en": "A blocked diagonal means leaving by the other one and returning from above.",
+        "fr": "Une diagonale bloquée impose de sortir par l'autre et de revenir par le haut.",
+        "ar": "القطر المسدود يعني الخروج من الآخر والعودة من الأعلى."
+      },
+      "success": {
+        "en": "Blockade outflanked — beautiful detour!",
+        "fr": "Blocus contourné — beau détour !",
+        "ar": "التفت على الحصار — التفاف جميل!"
+      },
+      "failHint": {
+        "en": "Left, up, across, down: a3, f8, h6, f4.",
+        "fr": "Gauche, haut, traversée, bas : a3, f8, h6, f4.",
+        "ar": "يسار ثم صعود ثم عبور ثم نزول: a3 وf8 وh6 وf4."
+      },
       "xp": 15
     },
     {
       "id": "s1b-4",
-      "stage": 1, "group": "bishop", "themes": ["bishop", "capture"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Bishop: capture the pawns", "fr": "Fou : capturez les pions", "ar": "الفيل: التقط البيادق" },
-      "goalText": { "en": "Capture all 3 black pawns.", "fr": "Capturez les 3 pions noirs.", "ar": "التقط البيادق السوداء الثلاثة." },
-      "fen": "k7/8/8/6p1/8/4p3/1p6/2B3K1 w - - 0 1",
-      "movePieces": ["b"],
-      "goal": { "capture": ["b2", "e3", "g5"] },
-      "par": 4, "maxMoves": 10,
-      "hints": [
-        { "en": "Captures land you on new diagonals — chain them.", "fr": "Les captures vous posent sur de nouvelles diagonales — enchaînez-les.", "ar": "الالتقاط يضعك على أقطار جديدة — سلسِلها." },
-        { "en": "The b2 pawn is closest to home.", "fr": "Le pion b2 est le plus proche.", "ar": "بيدق b2 هو الأقرب." },
-        { "en": "Play xbxb2, back to c1, xxe3, xxg5.", "fr": "Jouez xbxb2, retour en c1, xxe3, xxg5.", "ar": "العب xbxb2 ثم عُد إلى c1 ثم xxe3 ثم xxg5." }
+      "stage": 1,
+      "group": "bishop",
+      "themes": [
+        "bishop",
+        "capture"
       ],
-      "explain": { "en": "Each capture is also a redeployment onto the next diagonal.", "fr": "Chaque capture est aussi un redéploiement sur la diagonale suivante.", "ar": "كل التقاط هو أيضًا إعادة انتشار على القطر التالي." },
-      "success": { "en": "Three pawns picked off the diagonals!", "fr": "Trois pions cueillis sur les diagonales !", "ar": "ثلاثة بيادق قُطفت من الأقطار!" },
-      "failHint": { "en": "Order: b2 first, swing home, then climb e3–g5.", "fr": "Ordre : b2 d'abord, retour, puis montée e3–g5.", "ar": "الترتيب: b2 أولًا ثم العودة ثم الصعود e3–g5." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Bishop: capture the pawns",
+        "fr": "Fou : capturez les pions",
+        "ar": "الفيل: التقط البيادق"
+      },
+      "goalText": {
+        "en": "Capture all 3 black pawns.",
+        "fr": "Capturez les 3 pions noirs.",
+        "ar": "التقط البيادق السوداء الثلاثة."
+      },
+      "fen": "k7/8/8/6p1/8/4p3/1p6/2B3K1 w - - 0 1",
+      "movePieces": [
+        "b"
+      ],
+      "goal": {
+        "capture": [
+          "b2",
+          "e3",
+          "g5"
+        ]
+      },
+      "par": 4,
+      "maxMoves": 10,
+      "hints": [
+        {
+          "en": "Captures land you on new diagonals — chain them.",
+          "fr": "Les captures vous posent sur de nouvelles diagonales — enchaînez-les.",
+          "ar": "الالتقاط يضعك على أقطار جديدة — سلسِلها."
+        },
+        {
+          "en": "The b2 pawn is closest to home.",
+          "fr": "Le pion b2 est le plus proche.",
+          "ar": "بيدق b2 هو الأقرب."
+        },
+        {
+          "en": "Play xbxb2, back to c1, xxe3, xxg5.",
+          "fr": "Jouez xbxb2, retour en c1, xxe3, xxg5.",
+          "ar": "العب xbxb2 ثم عُد إلى c1 ثم xxe3 ثم xxg5."
+        }
+      ],
+      "explain": {
+        "en": "Each capture is also a redeployment onto the next diagonal.",
+        "fr": "Chaque capture est aussi un redéploiement sur la diagonale suivante.",
+        "ar": "كل التقاط هو أيضًا إعادة انتشار على القطر التالي."
+      },
+      "success": {
+        "en": "Three pawns picked off the diagonals!",
+        "fr": "Trois pions cueillis sur les diagonales !",
+        "ar": "ثلاثة بيادق قُطفت من الأقطار!"
+      },
+      "failHint": {
+        "en": "Order: b2 first, swing home, then climb e3–g5.",
+        "fr": "Ordre : b2 d'abord, retour, puis montée e3–g5.",
+        "ar": "الترتيب: b2 أولًا ثم العودة ثم الصعود e3–g5."
+      },
       "xp": 15
     },
     {
       "id": "s1b-5",
-      "stage": 1, "group": "bishop", "themes": ["bishop", "obstacles"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Bishop: the lava diagonal", "fr": "Fou : la diagonale de lave", "ar": "الفيل: قطر الحمم" },
-      "goalText": { "en": "g5 is lava — it blocks the direct road to h6. Collect all 3 stars.", "fr": "g5 est de la lave — elle bloque la route directe vers h6. Ramassez les 3 étoiles.", "ar": "g5 حمم — تسد الطريق المباشر إلى h6. اجمع النجوم الثلاث." },
-      "fen": "k7/8/8/8/8/8/8/2B3K1 w - - 0 1",
-      "movePieces": ["b"],
-      "goal": { "collect": ["b2", "a3", "h6"] },
-      "obstacles": ["g5"],
-      "par": 4, "maxMoves": 10,
-      "hints": [
-        { "en": "c1–h6 crosses g5, which burns. Go the long way round.", "fr": "c1–h6 traverse g5, qui brûle. Faites le grand tour.", "ar": "c1–h6 يعبر g5 الحارقة. سِر الطريق الطويل." },
-        { "en": "Grab b2 and a3 on the way out.", "fr": "Prenez b2 et a3 en sortant.", "ar": "اجمع b2 وa3 في طريقك للخارج." },
-        { "en": "Play b2, a3, f8, h6.", "fr": "Jouez b2, a3, f8, h6.", "ar": "العب b2 ثم a3 ثم f8 ثم h6." }
+      "stage": 1,
+      "group": "bishop",
+      "themes": [
+        "bishop",
+        "obstacles"
       ],
-      "explain": { "en": "One blocked square can force a three-diagonal journey.", "fr": "Une seule case bloquée peut imposer un voyage en trois diagonales.", "ar": "مربع مسدود واحد قد يفرض رحلة بثلاثة أقطار." },
-      "success": { "en": "Lava crossed safely — detour expert!", "fr": "Lave traversée sans dommage — expert du détour !", "ar": "عبرت الحمم بسلام — خبير الالتفاف!" },
-      "failHint": { "en": "Never touch g5: b2, a3, f8, h6.", "fr": "Ne touchez jamais g5 : b2, a3, f8, h6.", "ar": "لا تلمس g5 أبدًا: b2 ثم a3 ثم f8 ثم h6." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Bishop: the lava diagonal",
+        "fr": "Fou : la diagonale de lave",
+        "ar": "الفيل: قطر الحمم"
+      },
+      "goalText": {
+        "en": "g5 is lava — it blocks the direct road to h6. Collect all 3 stars.",
+        "fr": "g5 est de la lave — elle bloque la route directe vers h6. Ramassez les 3 étoiles.",
+        "ar": "g5 حمم — تسد الطريق المباشر إلى h6. اجمع النجوم الثلاث."
+      },
+      "fen": "k7/8/8/8/8/8/8/2B3K1 w - - 0 1",
+      "movePieces": [
+        "b"
+      ],
+      "goal": {
+        "collect": [
+          "b2",
+          "a3",
+          "h6"
+        ]
+      },
+      "obstacles": [
+        "g5"
+      ],
+      "par": 4,
+      "maxMoves": 10,
+      "hints": [
+        {
+          "en": "c1–h6 crosses g5, which burns. Go the long way round.",
+          "fr": "c1–h6 traverse g5, qui brûle. Faites le grand tour.",
+          "ar": "c1–h6 يعبر g5 الحارقة. سِر الطريق الطويل."
+        },
+        {
+          "en": "Grab b2 and a3 on the way out.",
+          "fr": "Prenez b2 et a3 en sortant.",
+          "ar": "اجمع b2 وa3 في طريقك للخارج."
+        },
+        {
+          "en": "Play b2, a3, f8, h6.",
+          "fr": "Jouez b2, a3, f8, h6.",
+          "ar": "العب b2 ثم a3 ثم f8 ثم h6."
+        }
+      ],
+      "explain": {
+        "en": "One blocked square can force a three-diagonal journey.",
+        "fr": "Une seule case bloquée peut imposer un voyage en trois diagonales.",
+        "ar": "مربع مسدود واحد قد يفرض رحلة بثلاثة أقطار."
+      },
+      "success": {
+        "en": "Lava crossed safely — detour expert!",
+        "fr": "Lave traversée sans dommage — expert du détour !",
+        "ar": "عبرت الحمم بسلام — خبير الالتفاف!"
+      },
+      "failHint": {
+        "en": "Never touch g5: b2, a3, f8, h6.",
+        "fr": "Ne touchez jamais g5 : b2, a3, f8, h6.",
+        "ar": "لا تلمس g5 أبدًا: b2 ثم a3 ثم f8 ثم h6."
+      },
       "xp": 15
     },
     {
       "id": "s1b-6",
-      "stage": 1, "group": "bishop", "themes": ["bishop", "route"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Bishop: the grand diagonal tour", "fr": "Fou : le grand tour des diagonales", "ar": "الفيل: الجولة القطرية الكبرى" },
-      "goalText": { "en": "Collect all 4 stars. Plan the whole tour first!", "fr": "Ramassez les 4 étoiles. Planifiez tout le parcours d'abord !", "ar": "اجمع النجوم الأربع. خطط الجولة كاملة أولًا!" },
-      "fen": "k7/8/8/8/8/8/8/2B3K1 w - - 0 1",
-      "movePieces": ["b"],
-      "goal": { "collect": ["f4", "h6", "a3", "e7"] },
-      "par": 5, "maxMoves": 12,
-      "hints": [
-        { "en": "Four stars on two clusters: the c1 side and the a3 side.", "fr": "Quatre étoiles en deux groupes : côté c1 et côté a3.", "ar": "أربع نجوم في مجموعتين: جهة c1 وجهة a3." },
-        { "en": "Finish one cluster before crossing to the other.", "fr": "Terminez un groupe avant de passer à l'autre.", "ar": "أنهِ مجموعة قبل العبور إلى الأخرى." },
-        { "en": "One road: f4, h6, c1, a3, e7.", "fr": "Une route : f4, h6, c1, a3, e7.", "ar": "طريق واحد: f4 ثم h6 ثم c1 ثم a3 ثم e7." }
+      "stage": 1,
+      "group": "bishop",
+      "themes": [
+        "bishop",
+        "route"
       ],
-      "explain": { "en": "Cluster your targets: crossings between clusters cost extra moves.", "fr": "Regroupez vos cibles : les traversées entre groupes coûtent des coups.", "ar": "جمّع أهدافك: العبور بين المجموعات يكلّف نقلات." },
-      "success": { "en": "Grand tour in 5 — diagonal mastery!", "fr": "Grand tour en 5 — maîtrise des diagonales !", "ar": "جولة كبرى في ٥ — إتقان الأقطار!" },
-      "failHint": { "en": "f4–h6 share a road, a3–e7 share one. Cross once, in c1.", "fr": "f4–h6 partagent une route, a3–e7 aussi. Traversez une fois, en c1.", "ar": "f4–h6 على طريق واحد وa3–e7 كذلك. اعبر مرة واحدة عبر c1." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Bishop: the grand diagonal tour",
+        "fr": "Fou : le grand tour des diagonales",
+        "ar": "الفيل: الجولة القطرية الكبرى"
+      },
+      "goalText": {
+        "en": "Collect all 4 stars. Plan the whole tour first!",
+        "fr": "Ramassez les 4 étoiles. Planifiez tout le parcours d'abord !",
+        "ar": "اجمع النجوم الأربع. خطط الجولة كاملة أولًا!"
+      },
+      "fen": "k7/8/8/8/8/8/8/2B3K1 w - - 0 1",
+      "movePieces": [
+        "b"
+      ],
+      "goal": {
+        "collect": [
+          "f4",
+          "h6",
+          "a3",
+          "e7"
+        ]
+      },
+      "par": 5,
+      "maxMoves": 12,
+      "hints": [
+        {
+          "en": "Four stars on two clusters: the c1 side and the a3 side.",
+          "fr": "Quatre étoiles en deux groupes : côté c1 et côté a3.",
+          "ar": "أربع نجوم في مجموعتين: جهة c1 وجهة a3."
+        },
+        {
+          "en": "Finish one cluster before crossing to the other.",
+          "fr": "Terminez un groupe avant de passer à l'autre.",
+          "ar": "أنهِ مجموعة قبل العبور إلى الأخرى."
+        },
+        {
+          "en": "One road: f4, h6, c1, a3, e7.",
+          "fr": "Une route : f4, h6, c1, a3, e7.",
+          "ar": "طريق واحد: f4 ثم h6 ثم c1 ثم a3 ثم e7."
+        }
+      ],
+      "explain": {
+        "en": "Cluster your targets: crossings between clusters cost extra moves.",
+        "fr": "Regroupez vos cibles : les traversées entre groupes coûtent des coups.",
+        "ar": "جمّع أهدافك: العبور بين المجموعات يكلّف نقلات."
+      },
+      "success": {
+        "en": "Grand tour in 5 — diagonal mastery!",
+        "fr": "Grand tour en 5 — maîtrise des diagonales !",
+        "ar": "جولة كبرى في ٥ — إتقان الأقطار!"
+      },
+      "failHint": {
+        "en": "f4–h6 share a road, a3–e7 share one. Cross once, in c1.",
+        "fr": "f4–h6 partagent une route, a3–e7 aussi. Traversez une fois, en c1.",
+        "ar": "f4–h6 على طريق واحد وa3–e7 كذلك. اعبر مرة واحدة عبر c1."
+      },
       "xp": 20
     },
     {
       "id": "s1q-1",
-      "stage": 1, "group": "queen", "themes": ["queen", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Queen: the strong file", "fr": "Dame : la colonne forte", "ar": "الملكة: العمود القوي" },
-      "intro": { "en": "The queen moves like a rook PLUS a bishop. Land on every star — the fewer moves, the more points!", "fr": "La dame se déplace comme une tour PLUS un fou. Atteignez chaque étoile — moins de coups, plus de points !", "ar": "تتحرك الملكة مثل الرخ والفيل معًا. قف على كل نجمة — كلما قلّت نقلاتك زادت نقاطك!" },
-      "goalText": { "en": "Collect all 3 stars with the queen.", "fr": "Ramassez les 3 étoiles avec la dame.", "ar": "اجمع النجوم الثلاث بالملكة." },
-      "fen": "4k3/8/8/8/8/8/8/3QK3 w - - 0 1",
-      "movePieces": ["q"],
-      "goal": { "collect": ["d4", "d6", "d8"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "The whole d-file is empty.", "fr": "Toute la colonne d est vide.", "ar": "العمود d فارغ تمامًا." },
-        { "en": "Climb it star by star.", "fr": "Montez étoile par étoile.", "ar": "اصعده نجمةً نجمة." },
-        { "en": "Play d4, d6, d8.", "fr": "Jouez d4, d6, d8.", "ar": "العب d4 ثم d6 ثم d8." }
+      "stage": 1,
+      "group": "queen",
+      "themes": [
+        "queen",
+        "movement"
       ],
-      "explain": { "en": "Queen power means options — but one star still needs one landing.", "fr": "La puissance de la dame offre des options — mais chaque étoile exige son arrivée.", "ar": "قوة الملكة تعني خيارات — لكن كل نجمة تحتاج وقفة." },
-      "success": { "en": "Majestic climb — 3 for 3!", "fr": "Montée majestueuse — 3 sur 3 !", "ar": "صعود مهيب — ٣ من ٣!" },
-      "failHint": { "en": "Straight up the d-file: d4, d6, d8.", "fr": "Tout droit sur la colonne d : d4, d6, d8.", "ar": "مباشرة في العمود d: d4 ثم d6 ثم d8." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Queen: the strong file",
+        "fr": "Dame : la colonne forte",
+        "ar": "الملكة: العمود القوي"
+      },
+      "intro": {
+        "en": "The queen moves like a rook PLUS a bishop. Land on every star — the fewer moves, the more points!",
+        "fr": "La dame se déplace comme une tour PLUS un fou. Atteignez chaque étoile — moins de coups, plus de points !",
+        "ar": "تتحرك الملكة مثل الرخ والفيل معًا. قف على كل نجمة — كلما قلّت نقلاتك زادت نقاطك!"
+      },
+      "goalText": {
+        "en": "Collect all 3 stars with the queen.",
+        "fr": "Ramassez les 3 étoiles avec la dame.",
+        "ar": "اجمع النجوم الثلاث بالملكة."
+      },
+      "fen": "7k/8/8/8/8/8/8/3QK3 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "collect": [
+          "d4",
+          "d6",
+          "d8"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "The whole d-file is empty.",
+          "fr": "Toute la colonne d est vide.",
+          "ar": "العمود d فارغ تمامًا."
+        },
+        {
+          "en": "Climb it star by star.",
+          "fr": "Montez étoile par étoile.",
+          "ar": "اصعده نجمةً نجمة."
+        },
+        {
+          "en": "Play d4, d6, d8.",
+          "fr": "Jouez d4, d6, d8.",
+          "ar": "العب d4 ثم d6 ثم d8."
+        }
+      ],
+      "explain": {
+        "en": "Queen power means options — but one star still needs one landing.",
+        "fr": "La puissance de la dame offre des options — mais chaque étoile exige son arrivée.",
+        "ar": "قوة الملكة تعني خيارات — لكن كل نجمة تحتاج وقفة."
+      },
+      "success": {
+        "en": "Majestic climb — 3 for 3!",
+        "fr": "Montée majestueuse — 3 sur 3 !",
+        "ar": "صعود مهيب — ٣ من ٣!"
+      },
+      "failHint": {
+        "en": "Straight up the d-file: d4, d6, d8.",
+        "fr": "Tout droit sur la colonne d : d4, d6, d8.",
+        "ar": "مباشرة في العمود d: d4 ثم d6 ثم d8."
+      },
       "xp": 10
     },
     {
       "id": "s1q-2",
-      "stage": 1, "group": "queen", "themes": ["queen", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Queen: rook and bishop in one", "fr": "Dame : tour et fou en une", "ar": "الملكة: رخ وفيل معًا" },
-      "goalText": { "en": "Collect all 3 stars using both queen powers.", "fr": "Ramassez les 3 étoiles en utilisant les deux pouvoirs.", "ar": "اجمع النجوم الثلاث باستخدام القوتين." },
-      "fen": "4k3/8/8/8/8/8/8/3QK3 w - - 0 1",
-      "movePieces": ["q"],
-      "goal": { "collect": ["h5", "a5", "a8"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "Start with the bishop-move: the d1–h5 diagonal.", "fr": "Commencez par le coup de fou : la diagonale d1–h5.", "ar": "ابدأ بحركة الفيل: قطر d1–h5." },
-        { "en": "Then slide like a rook along rank 5 and file a.", "fr": "Puis glissez comme une tour sur la rangée 5 et la colonne a.", "ar": "ثم انزلق كالرخ على الصف الخامس والعمود a." },
-        { "en": "Play h5, a5, a8.", "fr": "Jouez h5, a5, a8.", "ar": "العب h5 ثم a5 ثم a8." }
+      "stage": 1,
+      "group": "queen",
+      "themes": [
+        "queen",
+        "movement"
       ],
-      "explain": { "en": "Diagonal, rank, file — one tour uses every queen power.", "fr": "Diagonale, rangée, colonne — un parcours utilise tous les pouvoirs.", "ar": "قطر وصف وعمود — جولة واحدة تستخدم كل القوى." },
-      "success": { "en": "Full powers unleashed!", "fr": "Pleins pouvoirs déchaînés !", "ar": "أُطلقت كل القوى!" },
-      "failHint": { "en": "Bishop first (h5), then rook slides (a5, a8).", "fr": "Fou d'abord (h5), puis glissades de tour (a5, a8).", "ar": "الفيل أولًا (h5) ثم انزلاقات الرخ (a5 وa8)." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Queen: rook and bishop in one",
+        "fr": "Dame : tour et fou en une",
+        "ar": "الملكة: رخ وفيل معًا"
+      },
+      "goalText": {
+        "en": "Collect all 3 stars using both queen powers.",
+        "fr": "Ramassez les 3 étoiles en utilisant les deux pouvoirs.",
+        "ar": "اجمع النجوم الثلاث باستخدام القوتين."
+      },
+      "fen": "4k3/8/8/8/8/8/8/3QK3 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "collect": [
+          "h5",
+          "a5",
+          "a8"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Start with the bishop-move: the d1–h5 diagonal.",
+          "fr": "Commencez par le coup de fou : la diagonale d1–h5.",
+          "ar": "ابدأ بحركة الفيل: قطر d1–h5."
+        },
+        {
+          "en": "Then slide like a rook along rank 5 and file a.",
+          "fr": "Puis glissez comme une tour sur la rangée 5 et la colonne a.",
+          "ar": "ثم انزلق كالرخ على الصف الخامس والعمود a."
+        },
+        {
+          "en": "Play h5, a5, a8.",
+          "fr": "Jouez h5, a5, a8.",
+          "ar": "العب h5 ثم a5 ثم a8."
+        }
+      ],
+      "explain": {
+        "en": "Diagonal, rank, file — one tour uses every queen power.",
+        "fr": "Diagonale, rangée, colonne — un parcours utilise tous les pouvoirs.",
+        "ar": "قطر وصف وعمود — جولة واحدة تستخدم كل القوى."
+      },
+      "success": {
+        "en": "Full powers unleashed!",
+        "fr": "Pleins pouvoirs déchaînés !",
+        "ar": "أُطلقت كل القوى!"
+      },
+      "failHint": {
+        "en": "Bishop first (h5), then rook slides (a5, a8).",
+        "fr": "Fou d'abord (h5), puis glissades de tour (a5, a8).",
+        "ar": "الفيل أولًا (h5) ثم انزلاقات الرخ (a5 وa8)."
+      },
       "xp": 10
     },
     {
       "id": "s1q-3",
-      "stage": 1, "group": "queen", "themes": ["queen", "blocked-path"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Queen: blocked file", "fr": "Dame : colonne bloquée", "ar": "الملكة: عمود مسدود" },
-      "goalText": { "en": "Your pawn on d4 blocks the file. Collect both stars anyway.", "fr": "Votre pion en d4 bloque la colonne. Ramassez les étoiles quand même.", "ar": "بيدقك في d4 يسد العمود. اجمع النجمتين رغم ذلك." },
-      "fen": "4k3/8/8/8/3P4/8/8/3QK3 w - - 0 1",
-      "movePieces": ["q"],
-      "goal": { "collect": ["d6", "d8"] },
-      "par": 4, "maxMoves": 10,
-      "hints": [
-        { "en": "d4 is occupied, so leave the file and come back from above.", "fr": "d4 est occupée : quittez la colonne et revenez par le haut.", "ar": "d4 مشغول: اخرج من العمود وعُد من الأعلى." },
-        { "en": "The h5 square starts a road back to d5.", "fr": "La case h5 ouvre une route vers d5.", "ar": "المربع h5 يفتح طريقًا إلى d5." },
-        { "en": "Play h5, d5, d6, d8.", "fr": "Jouez h5, d5, d6, d8.", "ar": "العب h5 ثم d5 ثم d6 ثم d8." }
+      "stage": 1,
+      "group": "queen",
+      "themes": [
+        "queen",
+        "blocked-path"
       ],
-      "explain": { "en": "Queens detour like rooks when blocked — out, across, up, back.", "fr": "Bloquée, la dame contourne comme une tour — sortie, traversée, montée, retour.", "ar": "عند الانسداد تلتف الملكة كالرخ — خروج وعبور وصعود وعودة." },
-      "success": { "en": "Blockade dissolved in 4!", "fr": "Blocus dissous en 4 !", "ar": "تبدد الحصار في ٤!" },
-      "failHint": { "en": "Around, not through: h5, d5, d6, d8.", "fr": "Autour, pas à travers : h5, d5, d6, d8.", "ar": "حوله لا خلاله: h5 ثم d5 ثم d6 ثم d8." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Queen: blocked file",
+        "fr": "Dame : colonne bloquée",
+        "ar": "الملكة: عمود مسدود"
+      },
+      "goalText": {
+        "en": "Your pawn on d4 blocks the file. Collect both stars anyway.",
+        "fr": "Votre pion en d4 bloque la colonne. Ramassez les étoiles quand même.",
+        "ar": "بيدقك في d4 يسد العمود. اجمع النجمتين رغم ذلك."
+      },
+      "fen": "7k/8/8/8/3P4/8/8/3QK3 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "collect": [
+          "d6",
+          "d8"
+        ]
+      },
+      "par": 4,
+      "maxMoves": 10,
+      "hints": [
+        {
+          "en": "d4 is occupied, so leave the file and come back from above.",
+          "fr": "d4 est occupée : quittez la colonne et revenez par le haut.",
+          "ar": "d4 مشغول: اخرج من العمود وعُد من الأعلى."
+        },
+        {
+          "en": "The h5 square starts a road back to d5.",
+          "fr": "La case h5 ouvre une route vers d5.",
+          "ar": "المربع h5 يفتح طريقًا إلى d5."
+        },
+        {
+          "en": "Play h5, d5, d6, d8.",
+          "fr": "Jouez h5, d5, d6, d8.",
+          "ar": "العب h5 ثم d5 ثم d6 ثم d8."
+        }
+      ],
+      "explain": {
+        "en": "Queens detour like rooks when blocked — out, across, up, back.",
+        "fr": "Bloquée, la dame contourne comme une tour — sortie, traversée, montée, retour.",
+        "ar": "عند الانسداد تلتف الملكة كالرخ — خروج وعبور وصعود وعودة."
+      },
+      "success": {
+        "en": "Blockade dissolved in 4!",
+        "fr": "Blocus dissous en 4 !",
+        "ar": "تبدد الحصار في ٤!"
+      },
+      "failHint": {
+        "en": "Around, not through: h5, d5, d6, d8.",
+        "fr": "Autour, pas à travers : h5, d5, d6, d8.",
+        "ar": "حوله لا خلاله: h5 ثم d5 ثم d6 ثم d8."
+      },
       "xp": 15
     },
     {
       "id": "s1q-4",
-      "stage": 1, "group": "queen", "themes": ["queen", "capture"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Queen: the hunting chain", "fr": "Dame : la chaîne de chasse", "ar": "الملكة: سلسلة الصيد" },
-      "goalText": { "en": "Capture all 3 black pawns. Your g4 pawn guards the shortcut.", "fr": "Capturez les 3 pions noirs. Votre pion g4 garde le raccourci.", "ar": "التقط البيادق السوداء الثلاثة. بيدقك g4 يحرس الطريق المختصر." },
-      "fen": "4k3/3p4/8/3p3p/6P1/8/8/3QK3 w - - 0 1",
-      "movePieces": ["q"],
-      "goal": { "capture": ["d5", "d7", "h5"] },
-      "par": 4, "maxMoves": 10,
-      "hints": [
-        { "en": "The d1–h5 diagonal is guarded by your own g4 pawn.", "fr": "La diagonale d1–h5 est gardée par votre propre pion g4.", "ar": "قطر d1–h5 يحرسه بيدقك g4." },
-        { "en": "Climb the d-file eating as you go.", "fr": "Montez la colonne d en mangeant au passage.", "ar": "اصعد العمود d آكلًا في طريقك." },
-        { "en": "Play xd5, xd7, h7, xxh5.", "fr": "Jouez xd5, xd7, h7, xxh5.", "ar": "العب xd5 ثم xd7 ثم h7 ثم xxh5." }
+      "stage": 1,
+      "group": "queen",
+      "themes": [
+        "queen",
+        "capture"
       ],
-      "explain": { "en": "Even queens take the stairs when the elevator is guarded.", "fr": "Même les dames prennent l'escalier quand l'ascenseur est gardé.", "ar": "حتى الملكات تصعد الدرج عندما يكون المصعد محروسًا." },
-      "success": { "en": "Three pawns hunted down!", "fr": "Trois pions chassés !", "ar": "ثلاثة بيادق اصطيدت!" },
-      "failHint": { "en": "Up the file first: d5, d7, then swing to h5.", "fr": "D'abord la colonne : d5, d7, puis vers h5.", "ar": "العمود أولًا: d5 ثم d7 ثم نحو h5." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Queen: the hunting chain",
+        "fr": "Dame : la chaîne de chasse",
+        "ar": "الملكة: سلسلة الصيد"
+      },
+      "goalText": {
+        "en": "Capture all 3 black pawns. Your g4 pawn guards the shortcut.",
+        "fr": "Capturez les 3 pions noirs. Votre pion g4 garde le raccourci.",
+        "ar": "التقط البيادق السوداء الثلاثة. بيدقك g4 يحرس الطريق المختصر."
+      },
+      "fen": "1k6/3p4/8/3p3p/6P1/8/8/3QK3 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "capture": [
+          "d5",
+          "d7",
+          "h5"
+        ]
+      },
+      "par": 4,
+      "maxMoves": 10,
+      "hints": [
+        {
+          "en": "The d1–h5 diagonal is guarded by your own g4 pawn.",
+          "fr": "La diagonale d1–h5 est gardée par votre propre pion g4.",
+          "ar": "قطر d1–h5 يحرسه بيدقك g4."
+        },
+        {
+          "en": "Climb the d-file eating as you go.",
+          "fr": "Montez la colonne d en mangeant au passage.",
+          "ar": "اصعد العمود d آكلًا في طريقك."
+        },
+        {
+          "en": "Play xd5, xd7, h7, xxh5.",
+          "fr": "Jouez xd5, xd7, h7, xxh5.",
+          "ar": "العب xd5 ثم xd7 ثم h7 ثم xxh5."
+        }
+      ],
+      "explain": {
+        "en": "Even queens take the stairs when the elevator is guarded.",
+        "fr": "Même les dames prennent l'escalier quand l'ascenseur est gardé.",
+        "ar": "حتى الملكات تصعد الدرج عندما يكون المصعد محروسًا."
+      },
+      "success": {
+        "en": "Three pawns hunted down!",
+        "fr": "Trois pions chassés !",
+        "ar": "ثلاثة بيادق اصطيدت!"
+      },
+      "failHint": {
+        "en": "Up the file first: d5, d7, then swing to h5.",
+        "fr": "D'abord la colonne : d5, d7, puis vers h5.",
+        "ar": "العمود أولًا: d5 ثم d7 ثم نحو h5."
+      },
       "xp": 15
     },
     {
       "id": "s1q-5",
-      "stage": 1, "group": "queen", "themes": ["queen", "obstacles"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Queen: three roads closed", "fr": "Dame : trois routes fermées", "ar": "الملكة: ثلاث طرق مغلقة" },
-      "goalText": { "en": "Reach h8. Three 2-move roads are lava — find the 3-move road.", "fr": "Atteignez h8. Trois routes en 2 coups sont de la lave — trouvez celle en 3 coups.", "ar": "اصِل إلى h8. ثلاثة طرق بنقلتين حمم — جد طريق النقلات الثلاث." },
-      "fen": "8/6k1/8/8/8/8/8/3QK3 w - - 0 1",
-      "movePieces": ["q"],
-      "goal": { "collect": ["h8"] },
-      "obstacles": ["h1", "d8", "h5"],
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "h1, d8 and h5 each kill one 2-move road.", "fr": "h1, d8 et h5 tuent chacune une route en 2 coups.", "ar": "h1 وd8 وh5 تقتل كل منها طريق نقلتين." },
-        { "en": "The a-file road survives.", "fr": "La route de la colonne a survit.", "ar": "طريق العمود a ناجٍ." },
-        { "en": "Play a1, a8, h8.", "fr": "Jouez a1, a8, h8.", "ar": "العب a1 ثم a8 ثم h8." }
+      "stage": 1,
+      "group": "queen",
+      "themes": [
+        "queen",
+        "obstacles"
       ],
-      "explain": { "en": "Eliminate the blocked roads first; the survivor is your route.", "fr": "Éliminez d'abord les routes bloquées ; la survivante est votre route.", "ar": "استبعد الطرق المسدودة أولًا؛ الناجي هو طريقك." },
-      "success": { "en": "Only road home found!", "fr": "Seule route trouvée !", "ar": "وجدت الطريق الوحيد!" },
-      "failHint": { "en": "h1, d8, h5 burn — go a1, a8, h8.", "fr": "h1, d8, h5 brûlent — passez par a1, a8, h8.", "ar": "h1 وd8 وh5 تحرق — سِر a1 ثم a8 ثم h8." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Queen: three roads closed",
+        "fr": "Dame : trois routes fermées",
+        "ar": "الملكة: ثلاث طرق مغلقة"
+      },
+      "goalText": {
+        "en": "Reach h8. Three 2-move roads are lava — find the 3-move road.",
+        "fr": "Atteignez h8. Trois routes en 2 coups sont de la lave — trouvez celle en 3 coups.",
+        "ar": "اصِل إلى h8. ثلاثة طرق بنقلتين حمم — جد طريق النقلات الثلاث."
+      },
+      "fen": "8/k7/8/8/8/8/8/3QK3 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "collect": [
+          "h8"
+        ]
+      },
+      "obstacles": [
+        "h1",
+        "d8",
+        "h5",
+        "g7"
+      ],
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "h1, d8 and h5 each kill one 2-move road.",
+          "fr": "h1, d8 et h5 tuent chacune une route en 2 coups.",
+          "ar": "h1 وd8 وh5 تقتل كل منها طريق نقلتين."
+        },
+        {
+          "en": "The a-file road survives.",
+          "fr": "La route de la colonne a survit.",
+          "ar": "طريق العمود a ناجٍ."
+        },
+        {
+          "en": "Play a1, a8, h8.",
+          "fr": "Jouez a1, a8, h8.",
+          "ar": "العب a1 ثم a8 ثم h8."
+        }
+      ],
+      "explain": {
+        "en": "Eliminate the blocked roads first; the survivor is your route.",
+        "fr": "Éliminez d'abord les routes bloquées ; la survivante est votre route.",
+        "ar": "استبعد الطرق المسدودة أولًا؛ الناجي هو طريقك."
+      },
+      "success": {
+        "en": "Only road home found!",
+        "fr": "Seule route trouvée !",
+        "ar": "وجدت الطريق الوحيد!"
+      },
+      "failHint": {
+        "en": "h1, d8, h5 burn — go a1, a8, h8.",
+        "fr": "h1, d8, h5 brûlent — passez par a1, a8, h8.",
+        "ar": "h1 وd8 وh5 تحرق — سِر a1 ثم a8 ثم h8."
+      },
       "xp": 15
     },
     {
       "id": "s1q-6",
-      "stage": 1, "group": "queen", "themes": ["queen", "route"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Queen: the royal circuit", "fr": "Dame : le circuit royal", "ar": "الملكة: الدائرة الملكية" },
-      "goalText": { "en": "Collect all 5 stars in one royal circuit.", "fr": "Ramassez les 5 étoiles en un circuit royal.", "ar": "اجمع النجوم الخمس في دائرة ملكية واحدة." },
-      "fen": "8/6k1/8/8/8/8/8/3QK3 w - - 0 1",
-      "movePieces": ["q"],
-      "goal": { "collect": ["h5", "a5", "a8", "h8", "e8"] },
-      "par": 5, "maxMoves": 12,
-      "hints": [
-        { "en": "Five stars need five landings — no wasted transit allowed.", "fr": "Cinq étoiles exigent cinq arrivées — aucun transit perdu.", "ar": "خمس نجوم تحتاج خمس وقفات — لا عبور ضائع." },
-        { "en": "Diagonal out, then sweep the edges home.", "fr": "Diagonale de sortie, puis balayez les bords.", "ar": "قطر للخروج ثم امسح الحواف عائدًا." },
-        { "en": "One circuit: h5, a5, a8, h8, e8.", "fr": "Un circuit : h5, a5, a8, h8, e8.", "ar": "دائرة واحدة: h5 ثم a5 ثم a8 ثم h8 ثم e8." }
+      "stage": 1,
+      "group": "queen",
+      "themes": [
+        "queen",
+        "route"
       ],
-      "explain": { "en": "Five targets, five landings: every move must collect.", "fr": "Cinq cibles, cinq arrivées : chaque coup doit ramasser.", "ar": "خمسة أهداف وخمس وقفات: كل نقلة يجب أن تجمع." },
-      "success": { "en": "Royal circuit in 5 — flawless!", "fr": "Circuit royal en 5 — sans faute !", "ar": "دائرة ملكية في ٥ — بلا خطأ!" },
-      "failHint": { "en": "h5–a5–a8–h8–e8: never land empty.", "fr": "h5–a5–a8–h8–e8 : ne vous arrêtez jamais à vide.", "ar": "h5–a5–a8–h8–e8: لا تقف فارغًا أبدًا." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Queen: the royal circuit",
+        "fr": "Dame : le circuit royal",
+        "ar": "الملكة: الدائرة الملكية"
+      },
+      "goalText": {
+        "en": "Collect all 5 stars in one royal circuit.",
+        "fr": "Ramassez les 5 étoiles en un circuit royal.",
+        "ar": "اجمع النجوم الخمس في دائرة ملكية واحدة."
+      },
+      "fen": "8/8/8/8/8/2k5/8/3QK3 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "collect": [
+          "h5",
+          "a5",
+          "a8",
+          "h8",
+          "e8"
+        ]
+      },
+      "par": 5,
+      "maxMoves": 12,
+      "hints": [
+        {
+          "en": "Five stars need five landings — no wasted transit allowed.",
+          "fr": "Cinq étoiles exigent cinq arrivées — aucun transit perdu.",
+          "ar": "خمس نجوم تحتاج خمس وقفات — لا عبور ضائع."
+        },
+        {
+          "en": "Diagonal out, then sweep the edges home.",
+          "fr": "Diagonale de sortie, puis balayez les bords.",
+          "ar": "قطر للخروج ثم امسح الحواف عائدًا."
+        },
+        {
+          "en": "One circuit: h5, a5, a8, h8, e8.",
+          "fr": "Un circuit : h5, a5, a8, h8, e8.",
+          "ar": "دائرة واحدة: h5 ثم a5 ثم a8 ثم h8 ثم e8."
+        }
+      ],
+      "explain": {
+        "en": "Five targets, five landings: every move must collect.",
+        "fr": "Cinq cibles, cinq arrivées : chaque coup doit ramasser.",
+        "ar": "خمسة أهداف وخمس وقفات: كل نقلة يجب أن تجمع."
+      },
+      "success": {
+        "en": "Royal circuit in 5 — flawless!",
+        "fr": "Circuit royal en 5 — sans faute !",
+        "ar": "دائرة ملكية في ٥ — بلا خطأ!"
+      },
+      "failHint": {
+        "en": "h5–a5–a8–h8–e8: never land empty.",
+        "fr": "h5–a5–a8–h8–e8 : ne vous arrêtez jamais à vide.",
+        "ar": "h5–a5–a8–h8–e8: لا تقف فارغًا أبدًا."
+      },
       "xp": 20
     },
     {
       "id": "s1k-1",
-      "stage": 1, "group": "king", "themes": ["king", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "King: one step at a time", "fr": "Roi : un pas à la fois", "ar": "الملك: خطوة واحدة كل مرة" },
-      "intro": { "en": "The king moves exactly one square in any direction. Collect the stairs — slow and safe wins!", "fr": "Le roi avance d'exactement une case dans toute direction. Ramassez l'escalier — doucement et sûrement !", "ar": "يتحرك الملك مربعًا واحدًا فقط في أي اتجاه. اجمع الدرج — البطء والأمان يفوزان!" },
-      "goalText": { "en": "Climb the stairs: collect all 3 stars.", "fr": "Montez l'escalier : ramassez les 3 étoiles.", "ar": "اصعد الدرج: اجمع النجوم الثلاث." },
-      "fen": "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
-      "movePieces": ["k"],
-      "goal": { "collect": ["e2", "e3", "e4"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "One square per move — no rushing, even for kings.", "fr": "Une case par coup — pas de précipitation, même pour les rois.", "ar": "مربع واحد كل نقلة — لا استعجال حتى للملوك." },
-        { "en": "Straight up the e-file.", "fr": "Tout droit sur la colonne e.", "ar": "مباشرة في العمود e." },
-        { "en": "Play e2, e3, e4.", "fr": "Jouez e2, e3, e4.", "ar": "العب e2 ثم e3 ثم e4." }
+      "stage": 1,
+      "group": "king",
+      "themes": [
+        "king",
+        "movement"
       ],
-      "explain": { "en": "Three stairs, three steps: the king's pace sets the par.", "fr": "Trois marches, trois pas : le rythme du roi fixe le par.", "ar": "ثلاث درجات وثلاث خطوات: إيقاع الملك يحدد العدد." },
-      "success": { "en": "Steady climb — a careful king lives long!", "fr": "Montée tranquille — un roi prudent vit longtemps !", "ar": "صعود ثابت — الملك الحذر يعيش طويلًا!" },
-      "failHint": { "en": "Up, up, up: e2, e3, e4.", "fr": "Haut, haut, haut : e2, e3, e4.", "ar": "اصعد اصعد اصعد: e2 ثم e3 ثم e4." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "King: one step at a time",
+        "fr": "Roi : un pas à la fois",
+        "ar": "الملك: خطوة واحدة كل مرة"
+      },
+      "intro": {
+        "en": "The king moves exactly one square in any direction. Collect the stairs — slow and safe wins!",
+        "fr": "Le roi avance d'exactement une case dans toute direction. Ramassez l'escalier — doucement et sûrement !",
+        "ar": "يتحرك الملك مربعًا واحدًا فقط في أي اتجاه. اجمع الدرج — البطء والأمان يفوزان!"
+      },
+      "goalText": {
+        "en": "Climb the stairs: collect all 3 stars.",
+        "fr": "Montez l'escalier : ramassez les 3 étoiles.",
+        "ar": "اصعد الدرج: اجمع النجوم الثلاث."
+      },
+      "fen": "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "collect": [
+          "e2",
+          "e3",
+          "e4"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "One square per move — no rushing, even for kings.",
+          "fr": "Une case par coup — pas de précipitation, même pour les rois.",
+          "ar": "مربع واحد كل نقلة — لا استعجال حتى للملوك."
+        },
+        {
+          "en": "Straight up the e-file.",
+          "fr": "Tout droit sur la colonne e.",
+          "ar": "مباشرة في العمود e."
+        },
+        {
+          "en": "Play e2, e3, e4.",
+          "fr": "Jouez e2, e3, e4.",
+          "ar": "العب e2 ثم e3 ثم e4."
+        }
+      ],
+      "explain": {
+        "en": "Three stairs, three steps: the king's pace sets the par.",
+        "fr": "Trois marches, trois pas : le rythme du roi fixe le par.",
+        "ar": "ثلاث درجات وثلاث خطوات: إيقاع الملك يحدد العدد."
+      },
+      "success": {
+        "en": "Steady climb — a careful king lives long!",
+        "fr": "Montée tranquille — un roi prudent vit longtemps !",
+        "ar": "صعود ثابت — الملك الحذر يعيش طويلًا!"
+      },
+      "failHint": {
+        "en": "Up, up, up: e2, e3, e4.",
+        "fr": "Haut, haut, haut : e2, e3, e4.",
+        "ar": "اصعد اصعد اصعد: e2 ثم e3 ثم e4."
+      },
       "xp": 10
     },
     {
       "id": "s1k-2",
-      "stage": 1, "group": "king", "themes": ["king", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "King: around the corner", "fr": "Roi : autour du coin", "ar": "الملك: حول الزاوية" },
-      "goalText": { "en": "Collect all 3 stars around the corner.", "fr": "Ramassez les 3 étoiles autour du coin.", "ar": "اجمع النجوم الثلاث حول الزاوية." },
-      "fen": "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
-      "movePieces": ["k"],
-      "goal": { "collect": ["d1", "d2", "e2"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "The king turns corners one square at a time.", "fr": "Le roi tourne les coins une case à la fois.", "ar": "ينعطف الملك مربعًا مربعًا." },
-        { "en": "Left, up, right.", "fr": "Gauche, haut, droite.", "ar": "يسار ثم صعود ثم يمين." },
-        { "en": "Play d1, d2, e2.", "fr": "Jouez d1, d2, e2.", "ar": "العب d1 ثم d2 ثم e2." }
+      "stage": 1,
+      "group": "king",
+      "themes": [
+        "king",
+        "movement"
       ],
-      "explain": { "en": "Kings zigzag: every neighboring square is one move away.", "fr": "Les rois zigzaguent : chaque case voisine est à un coup.", "ar": "الملوك تتحرك متعرجة: كل مربع مجاور على بعد نقلة." },
-      "success": { "en": "Corner rounded perfectly!", "fr": "Virage parfait !", "ar": "انعطاف مثالي!" },
-      "failHint": { "en": "d1, then d2, then e2.", "fr": "d1, puis d2, puis e2.", "ar": "d1 ثم d2 ثم e2." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "King: around the corner",
+        "fr": "Roi : autour du coin",
+        "ar": "الملك: حول الزاوية"
+      },
+      "goalText": {
+        "en": "Collect all 3 stars around the corner.",
+        "fr": "Ramassez les 3 étoiles autour du coin.",
+        "ar": "اجمع النجوم الثلاث حول الزاوية."
+      },
+      "fen": "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "collect": [
+          "d1",
+          "d2",
+          "e2"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "The king turns corners one square at a time.",
+          "fr": "Le roi tourne les coins une case à la fois.",
+          "ar": "ينعطف الملك مربعًا مربعًا."
+        },
+        {
+          "en": "Left, up, right.",
+          "fr": "Gauche, haut, droite.",
+          "ar": "يسار ثم صعود ثم يمين."
+        },
+        {
+          "en": "Play d1, d2, e2.",
+          "fr": "Jouez d1, d2, e2.",
+          "ar": "العب d1 ثم d2 ثم e2."
+        }
+      ],
+      "explain": {
+        "en": "Kings zigzag: every neighboring square is one move away.",
+        "fr": "Les rois zigzaguent : chaque case voisine est à un coup.",
+        "ar": "الملوك تتحرك متعرجة: كل مربع مجاور على بعد نقلة."
+      },
+      "success": {
+        "en": "Corner rounded perfectly!",
+        "fr": "Virage parfait !",
+        "ar": "انعطاف مثالي!"
+      },
+      "failHint": {
+        "en": "d1, then d2, then e2.",
+        "fr": "d1, puis d2, puis e2.",
+        "ar": "d1 ثم d2 ثم e2."
+      },
       "xp": 10
     },
     {
       "id": "s1k-3",
-      "stage": 1, "group": "king", "themes": ["king", "blocked-path"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "King: the pawn in the way", "fr": "Roi : le pion gênant", "ar": "الملك: البيدق المعترض" },
-      "goalText": { "en": "Your pawn on e2 blocks the stairs. Reach e4 anyway.", "fr": "Votre pion en e2 bloque l'escalier. Atteignez e4 quand même.", "ar": "بيدقك في e2 يسد الدرج. اصِل إلى e4 رغم ذلك." },
-      "fen": "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1",
-      "movePieces": ["k"],
-      "goal": { "collect": ["e3", "e4"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "e2 is occupied — step around your own pawn.", "fr": "e2 est occupée — contournez votre propre pion.", "ar": "e2 مشغول — التفّ حول بيدقك." },
-        { "en": "Sidestep to d2 first.", "fr": "Écartez-vous en d2 d'abord.", "ar": "انحرف إلى d2 أولًا." },
-        { "en": "Play d2, e3, e4.", "fr": "Jouez d2, e3, e4.", "ar": "العب d2 ثم e3 ثم e4." }
+      "stage": 1,
+      "group": "king",
+      "themes": [
+        "king",
+        "blocked-path"
       ],
-      "explain": { "en": "Friendly pieces block too — sidestep and rejoin the road.", "fr": "Les pièces amies bloquent aussi — écartez-vous et rejoignez la route.", "ar": "القطع الصديقة تعترض أيضًا — انحرف وعُد إلى الطريق." },
-      "success": { "en": "Pawn politely sidestepped!", "fr": "Pion poliment contourné !", "ar": "التففت حول البيدق بأدب!" },
-      "failHint": { "en": "Around the pawn: d2, e3, e4.", "fr": "Autour du pion : d2, e3, e4.", "ar": "حول البيدق: d2 ثم e3 ثم e4." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "King: the pawn in the way",
+        "fr": "Roi : le pion gênant",
+        "ar": "الملك: البيدق المعترض"
+      },
+      "goalText": {
+        "en": "Your pawn on e2 blocks the stairs. Reach e4 anyway.",
+        "fr": "Votre pion en e2 bloque l'escalier. Atteignez e4 quand même.",
+        "ar": "بيدقك في e2 يسد الدرج. اصِل إلى e4 رغم ذلك."
+      },
+      "fen": "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "collect": [
+          "e3",
+          "e4"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "e2 is occupied — step around your own pawn.",
+          "fr": "e2 est occupée — contournez votre propre pion.",
+          "ar": "e2 مشغول — التفّ حول بيدقك."
+        },
+        {
+          "en": "Sidestep to d2 first.",
+          "fr": "Écartez-vous en d2 d'abord.",
+          "ar": "انحرف إلى d2 أولًا."
+        },
+        {
+          "en": "Play d2, e3, e4.",
+          "fr": "Jouez d2, e3, e4.",
+          "ar": "العب d2 ثم e3 ثم e4."
+        }
+      ],
+      "explain": {
+        "en": "Friendly pieces block too — sidestep and rejoin the road.",
+        "fr": "Les pièces amies bloquent aussi — écartez-vous et rejoignez la route.",
+        "ar": "القطع الصديقة تعترض أيضًا — انحرف وعُد إلى الطريق."
+      },
+      "success": {
+        "en": "Pawn politely sidestepped!",
+        "fr": "Pion poliment contourné !",
+        "ar": "التففت حول البيدق بأدب!"
+      },
+      "failHint": {
+        "en": "Around the pawn: d2, e3, e4.",
+        "fr": "Autour du pion : d2, e3, e4.",
+        "ar": "حول البيدق: d2 ثم e3 ثم e4."
+      },
       "xp": 15
     },
     {
       "id": "s1k-4",
-      "stage": 1, "group": "king", "themes": ["king", "capture"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "King: eat the pawns", "fr": "Roi : mangez les pions", "ar": "الملك: كُل البيادق" },
-      "goalText": { "en": "Capture both black pawns. Pawns defend each other — take the lonely one first!", "fr": "Capturez les deux pions noirs. Les pions se défendent — prenez le solitaire d'abord !", "ar": "التقط البيدقين الأسودين. البيادق تحمي بعضها — خذ المنعزل أولًا!" },
-      "fen": "k7/8/8/8/8/5p2/3p4/4K3 w - - 0 1",
-      "movePieces": ["k"],
-      "goal": { "capture": ["d2", "f3"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "d2 is undefended — but f3 is watched by no one either. Start close.", "fr": "d2 est sans défense — f3 non plus. Commencez près.", "ar": "d2 بلا حماية — وf3 أيضًا. ابدأ من القريب." },
-        { "en": "After xd2, step to e3 to reach f3.", "fr": "Après xd2, passez par e3 pour atteindre f3.", "ar": "بعد xd2 مر عبر e3 لتصل f3." },
-        { "en": "Play xd2, e3, xf3.", "fr": "Jouez xd2, e3, xf3.", "ar": "العب xd2 ثم e3 ثم xf3." }
+      "stage": 1,
+      "group": "king",
+      "themes": [
+        "king",
+        "capture"
       ],
-      "explain": { "en": "Never capture a defended piece with your king — take the free one, then step over.", "fr": "Ne capturez jamais une pièce défendue avec le roi — prenez la gratuite, puis avancez.", "ar": "لا تلتقط أبدًا قطعة محمية بملكك — خذ الحرة ثم تقدّم." },
-      "success": { "en": "Safe feasts only — royal wisdom!", "fr": "Festins sûrs uniquement — sagesse royale !", "ar": "ولائم آمنة فقط — حكمة ملكية!" },
-      "failHint": { "en": "xd2 first (it's free), transit e3, then xf3.", "fr": "xd2 d'abord (gratuit), transit e3, puis xf3.", "ar": "xd2 أولًا (مجاني) ثم عبور e3 ثم xf3." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "King: eat the pawns",
+        "fr": "Roi : mangez les pions",
+        "ar": "الملك: كُل البيادق"
+      },
+      "goalText": {
+        "en": "Capture both black pawns. Pawns defend each other — take the lonely one first!",
+        "fr": "Capturez les deux pions noirs. Les pions se défendent — prenez le solitaire d'abord !",
+        "ar": "التقط البيدقين الأسودين. البيادق تحمي بعضها — خذ المنعزل أولًا!"
+      },
+      "fen": "k7/8/8/8/8/5p2/3p4/4K3 w - - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "capture": [
+          "d2",
+          "f3"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "d2 is undefended — but f3 is watched by no one either. Start close.",
+          "fr": "d2 est sans défense — f3 non plus. Commencez près.",
+          "ar": "d2 بلا حماية — وf3 أيضًا. ابدأ من القريب."
+        },
+        {
+          "en": "After xd2, step to e3 to reach f3.",
+          "fr": "Après xd2, passez par e3 pour atteindre f3.",
+          "ar": "بعد xd2 مر عبر e3 لتصل f3."
+        },
+        {
+          "en": "Play xd2, e3, xf3.",
+          "fr": "Jouez xd2, e3, xf3.",
+          "ar": "العب xd2 ثم e3 ثم xf3."
+        }
+      ],
+      "explain": {
+        "en": "Never capture a defended piece with your king — take the free one, then step over.",
+        "fr": "Ne capturez jamais une pièce défendue avec le roi — prenez la gratuite, puis avancez.",
+        "ar": "لا تلتقط أبدًا قطعة محمية بملكك — خذ الحرة ثم تقدّم."
+      },
+      "success": {
+        "en": "Safe feasts only — royal wisdom!",
+        "fr": "Festins sûrs uniquement — sagesse royale !",
+        "ar": "ولائم آمنة فقط — حكمة ملكية!"
+      },
+      "failHint": {
+        "en": "xd2 first (it's free), transit e3, then xf3.",
+        "fr": "xd2 d'abord (gratuit), transit e3, puis xf3.",
+        "ar": "xd2 أولًا (مجاني) ثم عبور e3 ثم xf3."
+      },
       "xp": 15
     },
     {
       "id": "s1k-5",
-      "stage": 1, "group": "king", "themes": ["king", "danger"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "King: danger squares", "fr": "Roi : cases dangereuses", "ar": "الملك: المربعات الخطرة" },
-      "goalText": { "en": "The bishop covers e2 and f1 — a king may never enter danger. Collect both stars.", "fr": "Le fou couvre e2 et f1 — un roi n'entre jamais en danger. Ramassez les étoiles.", "ar": "الفيل يغطي e2 وf1 — الملك لا يدخل الخطر أبدًا. اجمع النجمتين." },
-      "fen": "k7/8/8/8/8/3b4/8/4K3 w - - 0 1",
-      "movePieces": ["k"],
-      "goal": { "collect": ["d2", "f2"] },
-      "avoidAttacked": true,
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "e2 and f1 are attacked — the level rejects them.", "fr": "e2 et f1 sont attaquées — le niveau les refuse.", "ar": "e2 وf1 مهددتان — المستوى يرفضهما." },
-        { "en": "Safe roads only: d2 is safe, and so is f2.", "fr": "Routes sûres uniquement : d2 est sûre, f2 aussi.", "ar": "الطرق الآمنة فقط: d2 آمن وf2 آمن." },
-        { "en": "Play d2, e3, f2 — or f2, e3, d2.", "fr": "Jouez d2, e3, f2 — ou f2, e3, d2.", "ar": "العب d2 ثم e3 ثم f2 — أو f2 ثم e3 ثم d2." }
+      "stage": 1,
+      "group": "king",
+      "themes": [
+        "king",
+        "danger"
       ],
-      "explain": { "en": "Kings never step onto attacked squares — the rule is built into every king move.", "fr": "Les rois ne vont jamais sur des cases attaquées — la règle est dans chaque coup de roi.", "ar": "الملوك لا تخطو أبدًا على مربعات مهددة — القاعدة في كل حركة ملك." },
-      "success": { "en": "Danger read perfectly — royal safety first!", "fr": "Danger lu parfaitement — sécurité royale d'abord !", "ar": "قرأت الخطر تمامًا — سلامة الملك أولًا!" },
-      "failHint": { "en": "e2 and f1 burn. Walk d2–e3–f2.", "fr": "e2 et f1 brûlent. Marchez d2–e3–f2.", "ar": "e2 وf1 تحرقان. امشِ d2–e3–f2." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "King: danger squares",
+        "fr": "Roi : cases dangereuses",
+        "ar": "الملك: المربعات الخطرة"
+      },
+      "goalText": {
+        "en": "The bishop covers e2 and f1 — a king may never enter danger. Collect both stars.",
+        "fr": "Le fou couvre e2 et f1 — un roi n'entre jamais en danger. Ramassez les étoiles.",
+        "ar": "الفيل يغطي e2 وf1 — الملك لا يدخل الخطر أبدًا. اجمع النجمتين."
+      },
+      "fen": "k7/8/8/8/8/3b4/8/4K3 w - - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "collect": [
+          "d2",
+          "f2"
+        ]
+      },
+      "avoidAttacked": true,
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "e2 and f1 are attacked — the level rejects them.",
+          "fr": "e2 et f1 sont attaquées — le niveau les refuse.",
+          "ar": "e2 وf1 مهددتان — المستوى يرفضهما."
+        },
+        {
+          "en": "Safe roads only: d2 is safe, and so is f2.",
+          "fr": "Routes sûres uniquement : d2 est sûre, f2 aussi.",
+          "ar": "الطرق الآمنة فقط: d2 آمن وf2 آمن."
+        },
+        {
+          "en": "Play d2, e3, f2 — or f2, e3, d2.",
+          "fr": "Jouez d2, e3, f2 — ou f2, e3, d2.",
+          "ar": "العب d2 ثم e3 ثم f2 — أو f2 ثم e3 ثم d2."
+        }
+      ],
+      "explain": {
+        "en": "Kings never step onto attacked squares — the rule is built into every king move.",
+        "fr": "Les rois ne vont jamais sur des cases attaquées — la règle est dans chaque coup de roi.",
+        "ar": "الملوك لا تخطو أبدًا على مربعات مهددة — القاعدة في كل حركة ملك."
+      },
+      "success": {
+        "en": "Danger read perfectly — royal safety first!",
+        "fr": "Danger lu parfaitement — sécurité royale d'abord !",
+        "ar": "قرأت الخطر تمامًا — سلامة الملك أولًا!"
+      },
+      "failHint": {
+        "en": "e2 and f1 burn. Walk d2–e3–f2.",
+        "fr": "e2 et f1 brûlent. Marchez d2–e3–f2.",
+        "ar": "e2 وf1 تحرقان. امشِ d2–e3–f2."
+      },
       "xp": 15
     },
     {
       "id": "s1k-6",
-      "stage": 1, "group": "king", "themes": ["king", "route"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "King: the royal patrol", "fr": "Roi : la patrouille royale", "ar": "الملك: الدورية الملكية" },
-      "goalText": { "en": "Patrol all 4 corners of your little square. Plan the loop!", "fr": "Patrouillez les 4 coins de votre petit carré. Planifiez la boucle !", "ar": "اجُب الزوايا الأربع لمربعك الصغير. خطط الدورة!" },
-      "fen": "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
-      "movePieces": ["k"],
-      "goal": { "collect": ["d1", "d2", "f2", "f1"] },
-      "par": 5, "maxMoves": 12,
-      "hints": [
-        { "en": "Four corners need four visits plus one crossing.", "fr": "Quatre coins exigent quatre visites plus une traversée.", "ar": "الزوايا الأربع تحتاج أربع زيارات زائد عبور." },
-        { "en": "Sweep one side, cross over, sweep back.", "fr": "Balayez un côté, traversez, revenez.", "ar": "امسح جهة ثم اعبر ثم عُد." },
-        { "en": "One loop: d1, d2, e3, f2, f1.", "fr": "Une boucle : d1, d2, e3, f2, f1.", "ar": "دورة واحدة: d1 ثم d2 ثم e3 ثم f2 ثم f1." }
+      "stage": 1,
+      "group": "king",
+      "themes": [
+        "king",
+        "route"
       ],
-      "explain": { "en": "Crossing between clusters costs a move — minimize crossings.", "fr": "Traverser entre groupes coûte un coup — minimisez les traversées.", "ar": "العبور بين المجموعات يكلّف نقلة — قلّل العبور." },
-      "success": { "en": "Patrol complete in 5 — every corner salutes!", "fr": "Patrouille terminée en 5 — chaque coin salue !", "ar": "اكتملت الدورية في ٥ — كل زاوية تحيّي!" },
-      "failHint": { "en": "d1–d2, cross via e3, f2–f1.", "fr": "d1–d2, traversez par e3, f2–f1.", "ar": "d1–d2 ثم اعبر عبر e3 ثم f2–f1." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "King: the royal patrol",
+        "fr": "Roi : la patrouille royale",
+        "ar": "الملك: الدورية الملكية"
+      },
+      "goalText": {
+        "en": "Patrol all 4 corners of your little square. Plan the loop!",
+        "fr": "Patrouillez les 4 coins de votre petit carré. Planifiez la boucle !",
+        "ar": "اجُب الزوايا الأربع لمربعك الصغير. خطط الدورة!"
+      },
+      "fen": "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "collect": [
+          "d1",
+          "d2",
+          "f2",
+          "f1"
+        ]
+      },
+      "par": 5,
+      "maxMoves": 12,
+      "hints": [
+        {
+          "en": "Four corners need four visits plus one crossing.",
+          "fr": "Quatre coins exigent quatre visites plus une traversée.",
+          "ar": "الزوايا الأربع تحتاج أربع زيارات زائد عبور."
+        },
+        {
+          "en": "Sweep one side, cross over, sweep back.",
+          "fr": "Balayez un côté, traversez, revenez.",
+          "ar": "امسح جهة ثم اعبر ثم عُد."
+        },
+        {
+          "en": "One loop: d1, d2, e3, f2, f1.",
+          "fr": "Une boucle : d1, d2, e3, f2, f1.",
+          "ar": "دورة واحدة: d1 ثم d2 ثم e3 ثم f2 ثم f1."
+        }
+      ],
+      "explain": {
+        "en": "Crossing between clusters costs a move — minimize crossings.",
+        "fr": "Traverser entre groupes coûte un coup — minimisez les traversées.",
+        "ar": "العبور بين المجموعات يكلّف نقلة — قلّل العبور."
+      },
+      "success": {
+        "en": "Patrol complete in 5 — every corner salutes!",
+        "fr": "Patrouille terminée en 5 — chaque coin salue !",
+        "ar": "اكتملت الدورية في ٥ — كل زاوية تحيّي!"
+      },
+      "failHint": {
+        "en": "d1–d2, cross via e3, f2–f1.",
+        "fr": "d1–d2, traversez par e3, f2–f1.",
+        "ar": "d1–d2 ثم اعبر عبر e3 ثم f2–f1."
+      },
       "xp": 20
     },
     {
       "id": "s1n-1",
-      "stage": 1, "group": "knight", "themes": ["knight", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Knight: the L jump", "fr": "Cavalier : le saut en L", "ar": "الحصان: قفزة L" },
-      "intro": { "en": "The knight jumps in an L and over everything. Collect the stars — fewer jumps, more points!", "fr": "Le cavalier saute en L et par-dessus tout. Ramassez les étoiles — moins de sauts, plus de points !", "ar": "يقفز الحصان على شكل L وفوق كل شيء. اجمع النجوم — قفزات أقل تعني نقاطًا أكثر!" },
-      "goalText": { "en": "Collect both stars with the knight.", "fr": "Ramassez les 2 étoiles avec le cavalier.", "ar": "اجمع النجمتين بالحصان." },
-      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
-      "movePieces": ["n"],
-      "goal": { "collect": ["f3", "h4"] },
-      "par": 2, "maxMoves": 8,
-      "hints": [
-        { "en": "L means two squares one way, one square sideways.", "fr": "L signifie deux cases dans un sens, une sur le côté.", "ar": "يعني L مربعين في اتجاه ومربعًا جانبًا." },
-        { "en": "From g1, f3 is one L away.", "fr": "Depuis g1, f3 est à un L.", "ar": "من g1 تبلغ f3 بقفزة L واحدة." },
-        { "en": "Play f3, then h4.", "fr": "Jouez f3, puis h4.", "ar": "العب f3 ثم h4." }
+      "stage": 1,
+      "group": "knight",
+      "themes": [
+        "knight",
+        "movement"
       ],
-      "explain": { "en": "Each landing must be an L away — count two-plus-one every time.", "fr": "Chaque arrivée doit être à un L — comptez deux-plus-un à chaque fois.", "ar": "كل وقفة يجب أن تبعد L — احسب اثنين زائد واحد كل مرة." },
-      "success": { "en": "Two clean Ls — the knight's dance begins!", "fr": "Deux beaux L — la danse du cavalier commence !", "ar": "حرفا L نظيفان — بدأت رقصة الحصان!" },
-      "failHint": { "en": "g1 to f3 to h4 — two Ls.", "fr": "g1 vers f3 vers h4 — deux L.", "ar": "g1 إلى f3 إلى h4 — حرفا L." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Knight: the L jump",
+        "fr": "Cavalier : le saut en L",
+        "ar": "الحصان: قفزة L"
+      },
+      "intro": {
+        "en": "The knight jumps in an L and over everything. Collect the stars — fewer jumps, more points!",
+        "fr": "Le cavalier saute en L et par-dessus tout. Ramassez les étoiles — moins de sauts, plus de points !",
+        "ar": "يقفز الحصان على شكل L وفوق كل شيء. اجمع النجوم — قفزات أقل تعني نقاطًا أكثر!"
+      },
+      "goalText": {
+        "en": "Collect both stars with the knight.",
+        "fr": "Ramassez les 2 étoiles avec le cavalier.",
+        "ar": "اجمع النجمتين بالحصان."
+      },
+      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "collect": [
+          "f3",
+          "h4"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "L means two squares one way, one square sideways.",
+          "fr": "L signifie deux cases dans un sens, une sur le côté.",
+          "ar": "يعني L مربعين في اتجاه ومربعًا جانبًا."
+        },
+        {
+          "en": "From g1, f3 is one L away.",
+          "fr": "Depuis g1, f3 est à un L.",
+          "ar": "من g1 تبلغ f3 بقفزة L واحدة."
+        },
+        {
+          "en": "Play f3, then h4.",
+          "fr": "Jouez f3, puis h4.",
+          "ar": "العب f3 ثم h4."
+        }
+      ],
+      "explain": {
+        "en": "Each landing must be an L away — count two-plus-one every time.",
+        "fr": "Chaque arrivée doit être à un L — comptez deux-plus-un à chaque fois.",
+        "ar": "كل وقفة يجب أن تبعد L — احسب اثنين زائد واحد كل مرة."
+      },
+      "success": {
+        "en": "Two clean Ls — the knight's dance begins!",
+        "fr": "Deux beaux L — la danse du cavalier commence !",
+        "ar": "حرفا L نظيفان — بدأت رقصة الحصان!"
+      },
+      "failHint": {
+        "en": "g1 to f3 to h4 — two Ls.",
+        "fr": "g1 vers f3 vers h4 — deux L.",
+        "ar": "g1 إلى f3 إلى h4 — حرفا L."
+      },
       "xp": 10
     },
     {
       "id": "s1n-2",
-      "stage": 1, "group": "knight", "themes": ["knight", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Knight: zigzag climb", "fr": "Cavalier : montée en zigzag", "ar": "الحصان: صعود متعرج" },
-      "goalText": { "en": "Zigzag up the board collecting all 3 stars.", "fr": "Montez en zigzag en ramassant les 3 étoiles.", "ar": "اصعد متعرجًا جامعًا النجوم الثلاث." },
-      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
-      "movePieces": ["n"],
-      "goal": { "collect": ["e2", "f4", "d5"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "Knights zigzag: each jump changes direction.", "fr": "Les cavaliers zigzaguent : chaque saut change de direction.", "ar": "الحصان يتعرج: كل قفزة تغيّر الاتجاه." },
-        { "en": "e2 is one L from g1.", "fr": "e2 est à un L de g1.", "ar": "e2 على بعد L واحدة من g1." },
-        { "en": "Play e2, f4, d5.", "fr": "Jouez e2, f4, d5.", "ar": "العب e2 ثم f4 ثم d5." }
+      "stage": 1,
+      "group": "knight",
+      "themes": [
+        "knight",
+        "movement"
       ],
-      "explain": { "en": "Chain Ls tip-to-tail: the landing square aims the next jump.", "fr": "Enchaînez les L bout à bout : l'arrivée vise le saut suivant.", "ar": "سلسِل L طرفًا بطرف: مربع الوصول يوجّه القفزة التالية." },
-      "success": { "en": "Zigzag perfect — three landings, three stars!", "fr": "Zigzag parfait — trois arrivées, trois étoiles !", "ar": "تعرج مثالي — ثلاث وقفات وثلاث نجوم!" },
-      "failHint": { "en": "e2, then f4, then d5.", "fr": "e2, puis f4, puis d5.", "ar": "e2 ثم f4 ثم d5." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Knight: zigzag climb",
+        "fr": "Cavalier : montée en zigzag",
+        "ar": "الحصان: صعود متعرج"
+      },
+      "goalText": {
+        "en": "Zigzag up the board collecting all 3 stars.",
+        "fr": "Montez en zigzag en ramassant les 3 étoiles.",
+        "ar": "اصعد متعرجًا جامعًا النجوم الثلاث."
+      },
+      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "collect": [
+          "e2",
+          "f4",
+          "d5"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Knights zigzag: each jump changes direction.",
+          "fr": "Les cavaliers zigzaguent : chaque saut change de direction.",
+          "ar": "الحصان يتعرج: كل قفزة تغيّر الاتجاه."
+        },
+        {
+          "en": "e2 is one L from g1.",
+          "fr": "e2 est à un L de g1.",
+          "ar": "e2 على بعد L واحدة من g1."
+        },
+        {
+          "en": "Play e2, f4, d5.",
+          "fr": "Jouez e2, f4, d5.",
+          "ar": "العب e2 ثم f4 ثم d5."
+        }
+      ],
+      "explain": {
+        "en": "Chain Ls tip-to-tail: the landing square aims the next jump.",
+        "fr": "Enchaînez les L bout à bout : l'arrivée vise le saut suivant.",
+        "ar": "سلسِل L طرفًا بطرف: مربع الوصول يوجّه القفزة التالية."
+      },
+      "success": {
+        "en": "Zigzag perfect — three landings, three stars!",
+        "fr": "Zigzag parfait — trois arrivées, trois étoiles !",
+        "ar": "تعرج مثالي — ثلاث وقفات وثلاث نجوم!"
+      },
+      "failHint": {
+        "en": "e2, then f4, then d5.",
+        "fr": "e2, puis f4, puis d5.",
+        "ar": "e2 ثم f4 ثم d5."
+      },
       "xp": 10
     },
     {
       "id": "s1n-3",
-      "stage": 1, "group": "knight", "themes": ["knight", "blocked-path"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Knight: the covered square", "fr": "Cavalier : la case couverte", "ar": "الحصان: المربع المغطى" },
-      "goalText": { "en": "e2 is covered — knights can't land there. Collect both stars anyway.", "fr": "e2 est couverte — impossible d'y atterrir. Ramassez les étoiles quand même.", "ar": "e2 مغطى — لا يمكن الوقوف عليه. اجمع النجمتين رغم ذلك." },
-      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
-      "movePieces": ["n"],
-      "goal": { "collect": ["f3", "d4"] },
-      "obstacles": ["e2"],
-      "par": 2, "maxMoves": 8,
-      "hints": [
-        { "en": "Knights jump OVER blockers — only the landing square matters.", "fr": "Les cavaliers sautent PAR-DESSUS — seule l'arrivée compte.", "ar": "الحصان يقفز فوق العوائق — مربع الوصول وحده يهم." },
-        { "en": "e2 is lava for landing, but f3 is free.", "fr": "e2 est de la lave pour atterrir, mais f3 est libre.", "ar": "e2 حمم للوقوف لكن f3 حر." },
-        { "en": "Play f3, then d4.", "fr": "Jouez f3, puis d4.", "ar": "العب f3 ثم d4." }
+      "stage": 1,
+      "group": "knight",
+      "themes": [
+        "knight",
+        "blocked-path"
       ],
-      "explain": { "en": "Nothing blocks a knight mid-jump — obstacles only deny landings.", "fr": "Rien ne bloque un cavalier en l'air — les obstacles nient seulement les arrivées.", "ar": "لا شيء يعترض الحصان في الهواء — العوائق تمنع الوقوف فقط." },
-      "success": { "en": "Jumped clean over the trouble!", "fr": "Sauté par-dessus les ennuis !", "ar": "قفزت فوق المتاعب بنظافة!" },
-      "failHint": { "en": "Forget e2 — fly f3, then d4.", "fr": "Oubliez e2 — volez vers f3, puis d4.", "ar": "انسَ e2 — طِر إلى f3 ثم d4." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Knight: the covered square",
+        "fr": "Cavalier : la case couverte",
+        "ar": "الحصان: المربع المغطى"
+      },
+      "goalText": {
+        "en": "e2 is covered — knights can't land there. Collect both stars anyway.",
+        "fr": "e2 est couverte — impossible d'y atterrir. Ramassez les étoiles quand même.",
+        "ar": "e2 مغطى — لا يمكن الوقوف عليه. اجمع النجمتين رغم ذلك."
+      },
+      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "collect": [
+          "f3",
+          "d4"
+        ]
+      },
+      "obstacles": [
+        "e2"
+      ],
+      "par": 2,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Knights jump OVER blockers — only the landing square matters.",
+          "fr": "Les cavaliers sautent PAR-DESSUS — seule l'arrivée compte.",
+          "ar": "الحصان يقفز فوق العوائق — مربع الوصول وحده يهم."
+        },
+        {
+          "en": "e2 is lava for landing, but f3 is free.",
+          "fr": "e2 est de la lave pour atterrir, mais f3 est libre.",
+          "ar": "e2 حمم للوقوف لكن f3 حر."
+        },
+        {
+          "en": "Play f3, then d4.",
+          "fr": "Jouez f3, puis d4.",
+          "ar": "العب f3 ثم d4."
+        }
+      ],
+      "explain": {
+        "en": "Nothing blocks a knight mid-jump — obstacles only deny landings.",
+        "fr": "Rien ne bloque un cavalier en l'air — les obstacles nient seulement les arrivées.",
+        "ar": "لا شيء يعترض الحصان في الهواء — العوائق تمنع الوقوف فقط."
+      },
+      "success": {
+        "en": "Jumped clean over the trouble!",
+        "fr": "Sauté par-dessus les ennuis !",
+        "ar": "قفزت فوق المتاعب بنظافة!"
+      },
+      "failHint": {
+        "en": "Forget e2 — fly f3, then d4.",
+        "fr": "Oubliez e2 — volez vers f3, puis d4.",
+        "ar": "انسَ e2 — طِر إلى f3 ثم d4."
+      },
       "xp": 15
     },
     {
       "id": "s1n-4",
-      "stage": 1, "group": "knight", "themes": ["knight", "capture"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Knight: the capture ladder", "fr": "Cavalier : l'échelle des captures", "ar": "الحصان: سلم الالتقاط" },
-      "goalText": { "en": "Capture all 3 black pawns climbing the ladder.", "fr": "Capturez les 3 pions noirs en montant l'échelle.", "ar": "التقط البيادق السوداء الثلاثة صاعدًا السلم." },
-      "fen": "k7/3p4/8/4p3/8/5p2/8/4K1N1 w - - 0 1",
-      "movePieces": ["n"],
-      "goal": { "capture": ["f3", "e5", "d7"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "Each pawn sits exactly one L from the last.", "fr": "Chaque pion est à exactement un L du précédent.", "ar": "كل بيدق على بعد L واحدة من سابقه." },
-        { "en": "Start at the bottom: f3.", "fr": "Commencez en bas : f3.", "ar": "ابدأ من الأسفل: f3." },
-        { "en": "Play xxf3, xxe5, xxd7.", "fr": "Jouez xxf3, xxe5, xxd7.", "ar": "العب xxf3 ثم xxe5 ثم xxd7." }
+      "stage": 1,
+      "group": "knight",
+      "themes": [
+        "knight",
+        "capture"
       ],
-      "explain": { "en": "Captures chain when each victim aims the next L.", "fr": "Les captures s'enchaînent quand chaque victime vise le L suivant.", "ar": "تتسلسل الالتقاطات عندما توجّه كل ضحية L التالية." },
-      "success": { "en": "Ladder climbed, three pawns eaten!", "fr": "Échelle grimpée, trois pions mangés !", "ar": "صعدت السلم وأكلت ثلاثة بيادق!" },
-      "failHint": { "en": "Up the ladder: f3, e5, d7.", "fr": "Montez l'échelle : f3, e5, d7.", "ar": "اصعد السلم: f3 ثم e5 ثم d7." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Knight: the capture ladder",
+        "fr": "Cavalier : l'échelle des captures",
+        "ar": "الحصان: سلم الالتقاط"
+      },
+      "goalText": {
+        "en": "Capture all 3 black pawns climbing the ladder.",
+        "fr": "Capturez les 3 pions noirs en montant l'échelle.",
+        "ar": "التقط البيادق السوداء الثلاثة صاعدًا السلم."
+      },
+      "fen": "k7/3p4/8/4p3/8/5p2/8/4K1N1 w - - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "capture": [
+          "f3",
+          "e5",
+          "d7"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Each pawn sits exactly one L from the last.",
+          "fr": "Chaque pion est à exactement un L du précédent.",
+          "ar": "كل بيدق على بعد L واحدة من سابقه."
+        },
+        {
+          "en": "Start at the bottom: f3.",
+          "fr": "Commencez en bas : f3.",
+          "ar": "ابدأ من الأسفل: f3."
+        },
+        {
+          "en": "Play xxf3, xxe5, xxd7.",
+          "fr": "Jouez xxf3, xxe5, xxd7.",
+          "ar": "العب xxf3 ثم xxe5 ثم xxd7."
+        }
+      ],
+      "explain": {
+        "en": "Captures chain when each victim aims the next L.",
+        "fr": "Les captures s'enchaînent quand chaque victime vise le L suivant.",
+        "ar": "تتسلسل الالتقاطات عندما توجّه كل ضحية L التالية."
+      },
+      "success": {
+        "en": "Ladder climbed, three pawns eaten!",
+        "fr": "Échelle grimpée, trois pions mangés !",
+        "ar": "صعدت السلم وأكلت ثلاثة بيادق!"
+      },
+      "failHint": {
+        "en": "Up the ladder: f3, e5, d7.",
+        "fr": "Montez l'échelle : f3, e5, d7.",
+        "ar": "اصعد السلم: f3 ثم e5 ثم d7."
+      },
       "xp": 15
     },
     {
       "id": "s1n-5",
-      "stage": 1, "group": "knight", "themes": ["knight", "obstacles"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Knight: the obvious square burns", "fr": "Cavalier : la case évidente brûle", "ar": "الحصان: المربع الواضح يحرق" },
-      "goalText": { "en": "f3 looks tempting but it's lava. Collect all 3 stars the long way.", "fr": "f3 semble tentante mais c'est de la lave. Ramassez les étoiles par le long chemin.", "ar": "f3 يبدو مغريًا لكنه حمم. اجمع النجوم الثلاث بالطريق الطويل." },
-      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
-      "movePieces": ["n"],
-      "goal": { "collect": ["e2", "g3", "h5"] },
-      "obstacles": ["f3"],
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "f3 burns — take the quiet e2 road instead.", "fr": "f3 brûle — prenez plutôt la route tranquille e2.", "ar": "f3 تحرق — اسلك طريق e2 الهادئ بدلًا منها." },
-        { "en": "e2, g3, h5 link tip-to-tail.", "fr": "e2, g3, h5 s'enchaînent.", "ar": "e2 وg3 وh5 تتسلسل." },
-        { "en": "Play e2, g3, h5.", "fr": "Jouez e2, g3, h5.", "ar": "العب e2 ثم g3 ثم h5." }
+      "stage": 1,
+      "group": "knight",
+      "themes": [
+        "knight",
+        "obstacles"
       ],
-      "explain": { "en": "The flashiest square is often bait — the quiet road collects more.", "fr": "La case la plus voyante est souvent un appât — la route discrète rapporte plus.", "ar": "المربع الأبرز غالبًا طُعم — الطريق الهادئ يجمع أكثر." },
-      "success": { "en": "Bait ignored — patient knight wins!", "fr": "Appât ignoré — le cavalier patient gagne !", "ar": "تجاهلت الطعم — الحصان الصبور يفوز!" },
-      "failHint": { "en": "Around the lava: e2, g3, h5.", "fr": "Autour de la lave : e2, g3, h5.", "ar": "حول الحمم: e2 ثم g3 ثم h5." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Knight: the obvious square burns",
+        "fr": "Cavalier : la case évidente brûle",
+        "ar": "الحصان: المربع الواضح يحرق"
+      },
+      "goalText": {
+        "en": "f3 looks tempting but it's lava. Collect all 3 stars the long way.",
+        "fr": "f3 semble tentante mais c'est de la lave. Ramassez les étoiles par le long chemin.",
+        "ar": "f3 يبدو مغريًا لكنه حمم. اجمع النجوم الثلاث بالطريق الطويل."
+      },
+      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "collect": [
+          "e2",
+          "g3",
+          "h5"
+        ]
+      },
+      "obstacles": [
+        "f3"
+      ],
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "f3 burns — take the quiet e2 road instead.",
+          "fr": "f3 brûle — prenez plutôt la route tranquille e2.",
+          "ar": "f3 تحرق — اسلك طريق e2 الهادئ بدلًا منها."
+        },
+        {
+          "en": "e2, g3, h5 link tip-to-tail.",
+          "fr": "e2, g3, h5 s'enchaînent.",
+          "ar": "e2 وg3 وh5 تتسلسل."
+        },
+        {
+          "en": "Play e2, g3, h5.",
+          "fr": "Jouez e2, g3, h5.",
+          "ar": "العب e2 ثم g3 ثم h5."
+        }
+      ],
+      "explain": {
+        "en": "The flashiest square is often bait — the quiet road collects more.",
+        "fr": "La case la plus voyante est souvent un appât — la route discrète rapporte plus.",
+        "ar": "المربع الأبرز غالبًا طُعم — الطريق الهادئ يجمع أكثر."
+      },
+      "success": {
+        "en": "Bait ignored — patient knight wins!",
+        "fr": "Appât ignoré — le cavalier patient gagne !",
+        "ar": "تجاهلت الطعم — الحصان الصبور يفوز!"
+      },
+      "failHint": {
+        "en": "Around the lava: e2, g3, h5.",
+        "fr": "Autour de la lave : e2, g3, h5.",
+        "ar": "حول الحمم: e2 ثم g3 ثم h5."
+      },
       "xp": 15
     },
     {
       "id": "s1n-6",
-      "stage": 1, "group": "knight", "themes": ["knight", "route"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Knight: the five-jump tour", "fr": "Cavalier : le tour en cinq sauts", "ar": "الحصان: جولة القفزات الخمس" },
-      "goalText": { "en": "Collect all 5 stars. Every jump must land a star — plan it!", "fr": "Ramassez les 5 étoiles. Chaque saut doit rapporter — planifiez !", "ar": "اجمع النجوم الخمس. كل قفزة يجب أن تجمع — خطط!" },
-      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
-      "movePieces": ["n"],
-      "goal": { "collect": ["f3", "h4", "f5", "e3", "d5"] },
-      "par": 5, "maxMoves": 12,
-      "hints": [
-        { "en": "Five stars, five landings — zero transit allowed.", "fr": "Cinq étoiles, cinq arrivées — aucun transit permis.", "ar": "خمس نجوم وخمس وقفات — لا عبور مسموح." },
-        { "en": "Start f3–h4 along the edge, then turn inward.", "fr": "Commencez f3–h4 le long du bord, puis rentrez.", "ar": "ابدأ f3–h4 على الحافة ثم ادخل." },
-        { "en": "One tour: f3, h4, f5, e3, d5.", "fr": "Un parcours : f3, h4, f5, e3, d5.", "ar": "جولة واحدة: f3 ثم h4 ثم f5 ثم e3 ثم d5." }
+      "stage": 1,
+      "group": "knight",
+      "themes": [
+        "knight",
+        "route"
       ],
-      "explain": { "en": "Perfect tours never land empty: each arrival aims the next.", "fr": "Les parcours parfaits n'arrivent jamais à vide : chaque arrivée vise la suivante.", "ar": "الجولات المثالية لا تقف فارغة أبدًا: كل وصول يوجّه التالي." },
-      "success": { "en": "Five jumps, five stars — knight grandmaster!", "fr": "Cinq sauts, cinq étoiles — grand maître cavalier !", "ar": "خمس قفزات وخمس نجوم — أستاذ حصان كبير!" },
-      "failHint": { "en": "f3–h4–f5–e3–d5: every landing counts.", "fr": "f3–h4–f5–e3–d5 : chaque arrivée compte.", "ar": "f3–h4–f5–e3–d5: كل وقفة محسوبة." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Knight: the five-jump tour",
+        "fr": "Cavalier : le tour en cinq sauts",
+        "ar": "الحصان: جولة القفزات الخمس"
+      },
+      "goalText": {
+        "en": "Collect all 5 stars. Every jump must land a star — plan it!",
+        "fr": "Ramassez les 5 étoiles. Chaque saut doit rapporter — planifiez !",
+        "ar": "اجمع النجوم الخمس. كل قفزة يجب أن تجمع — خطط!"
+      },
+      "fen": "4k3/8/8/8/8/8/8/4K1N1 w - - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "collect": [
+          "f3",
+          "h4",
+          "f5",
+          "e3",
+          "d5"
+        ]
+      },
+      "par": 5,
+      "maxMoves": 12,
+      "hints": [
+        {
+          "en": "Five stars, five landings — zero transit allowed.",
+          "fr": "Cinq étoiles, cinq arrivées — aucun transit permis.",
+          "ar": "خمس نجوم وخمس وقفات — لا عبور مسموح."
+        },
+        {
+          "en": "Start f3–h4 along the edge, then turn inward.",
+          "fr": "Commencez f3–h4 le long du bord, puis rentrez.",
+          "ar": "ابدأ f3–h4 على الحافة ثم ادخل."
+        },
+        {
+          "en": "One tour: f3, h4, f5, e3, d5.",
+          "fr": "Un parcours : f3, h4, f5, e3, d5.",
+          "ar": "جولة واحدة: f3 ثم h4 ثم f5 ثم e3 ثم d5."
+        }
+      ],
+      "explain": {
+        "en": "Perfect tours never land empty: each arrival aims the next.",
+        "fr": "Les parcours parfaits n'arrivent jamais à vide : chaque arrivée vise la suivante.",
+        "ar": "الجولات المثالية لا تقف فارغة أبدًا: كل وصول يوجّه التالي."
+      },
+      "success": {
+        "en": "Five jumps, five stars — knight grandmaster!",
+        "fr": "Cinq sauts, cinq étoiles — grand maître cavalier !",
+        "ar": "خمس قفزات وخمس نجوم — أستاذ حصان كبير!"
+      },
+      "failHint": {
+        "en": "f3–h4–f5–e3–d5: every landing counts.",
+        "fr": "f3–h4–f5–e3–d5 : chaque arrivée compte.",
+        "ar": "f3–h4–f5–e3–d5: كل وقفة محسوبة."
+      },
       "xp": 20
     },
     {
       "id": "s1p-1",
-      "stage": 1, "group": "pawn", "themes": ["pawn", "movement"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Pawn: march ahead", "fr": "Pion : en avant", "ar": "البيدق: إلى الأمام" },
-      "intro": { "en": "Pawns march straight ahead, never back. Collect the stairs — steady pawns win points!", "fr": "Les pions avancent tout droit, jamais en arrière. Ramassez l'escalier — les pions réguliers gagnent !", "ar": "تتقدم البيادق للأمام فقط ولا تعود أبدًا. اجمع الدرج — البيادق الثابتة تكسب!" },
-      "goalText": { "en": "March up and collect both stars.", "fr": "Avancez et ramassez les deux étoiles.", "ar": "تقدّم واجمع النجمتين." },
-      "fen": "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1",
-      "movePieces": ["p"],
-      "goal": { "collect": ["e3", "e4"] },
-      "par": 2, "maxMoves": 8,
-      "hints": [
-        { "en": "Pawns step one square straight ahead.", "fr": "Les pions avancent d'une case tout droit.", "ar": "يتقدم البيدق مربعًا واحدًا للأمام." },
-        { "en": "Don't double-jump: you'd skip e3 forever.", "fr": "Pas de double saut : vous rateriez e3 pour toujours.", "ar": "لا تقفز قفزة مزدوجة: ستفوت e3 للأبد." },
-        { "en": "Play e3, then e4.", "fr": "Jouez e3, puis e4.", "ar": "العب e3 ثم e4." }
+      "stage": 1,
+      "group": "pawn",
+      "themes": [
+        "pawn",
+        "movement"
       ],
-      "explain": { "en": "Pawns never move backward — skipped stars stay skipped.", "fr": "Les pions ne reculent jamais — les étoiles ratées restent ratées.", "ar": "البيادق لا تتراجع أبدًا — النجوم الفائتة تبقى فائتة." },
-      "success": { "en": "Steady march — no star left behind!", "fr": "Marche régulière — aucune étoile oubliée !", "ar": "مسيرة ثابتة — لا نجمة تُركت!" },
-      "failHint": { "en": "One step at a time: e3, then e4.", "fr": "Un pas à la fois : e3, puis e4.", "ar": "خطوة كل مرة: e3 ثم e4." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Pawn: march ahead",
+        "fr": "Pion : en avant",
+        "ar": "البيدق: إلى الأمام"
+      },
+      "intro": {
+        "en": "Pawns march straight ahead, never back. Collect the stairs — steady pawns win points!",
+        "fr": "Les pions avancent tout droit, jamais en arrière. Ramassez l'escalier — les pions réguliers gagnent !",
+        "ar": "تتقدم البيادق للأمام فقط ولا تعود أبدًا. اجمع الدرج — البيادق الثابتة تكسب!"
+      },
+      "goalText": {
+        "en": "March up and collect both stars.",
+        "fr": "Avancez et ramassez les deux étoiles.",
+        "ar": "تقدّم واجمع النجمتين."
+      },
+      "fen": "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "collect": [
+          "e3",
+          "e4"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Pawns step one square straight ahead.",
+          "fr": "Les pions avancent d'une case tout droit.",
+          "ar": "يتقدم البيدق مربعًا واحدًا للأمام."
+        },
+        {
+          "en": "Don't double-jump: you'd skip e3 forever.",
+          "fr": "Pas de double saut : vous rateriez e3 pour toujours.",
+          "ar": "لا تقفز قفزة مزدوجة: ستفوت e3 للأبد."
+        },
+        {
+          "en": "Play e3, then e4.",
+          "fr": "Jouez e3, puis e4.",
+          "ar": "العب e3 ثم e4."
+        }
+      ],
+      "explain": {
+        "en": "Pawns never move backward — skipped stars stay skipped.",
+        "fr": "Les pions ne reculent jamais — les étoiles ratées restent ratées.",
+        "ar": "البيادق لا تتراجع أبدًا — النجوم الفائتة تبقى فائتة."
+      },
+      "success": {
+        "en": "Steady march — no star left behind!",
+        "fr": "Marche régulière — aucune étoile oubliée !",
+        "ar": "مسيرة ثابتة — لا نجمة تُركت!"
+      },
+      "failHint": {
+        "en": "One step at a time: e3, then e4.",
+        "fr": "Un pas à la fois : e3, puis e4.",
+        "ar": "خطوة كل مرة: e3 ثم e4."
+      },
       "xp": 10
     },
     {
       "id": "s1p-2",
-      "stage": 1, "group": "pawn", "themes": ["pawn", "capture"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Pawn: take diagonally", "fr": "Pion : prendre en diagonale", "ar": "البيدق: الالتقاط قطريًا" },
-      "goalText": { "en": "Capture the pawn, then collect the star.", "fr": "Capturez le pion, puis ramassez l'étoile.", "ar": "التقط البيدق ثم اجمع النجمة." },
-      "fen": "4k3/8/8/8/8/3p4/4P3/4K3 w - - 0 1",
-      "movePieces": ["p"],
-      "goal": { "capture": ["d3"], "collect": ["d4"] },
-      "par": 2, "maxMoves": 8,
-      "hints": [
-        { "en": "Pawns walk straight but capture one square diagonally.", "fr": "Les pions marchent droit mais capturent d'une case en diagonale.", "ar": "تمشي البيادق مستقيمة لكنها تلتقط قطريًا بمربع واحد." },
-        { "en": "The d3 pawn stands on your diagonal.", "fr": "Le pion d3 est sur votre diagonale.", "ar": "بيدق d3 على قطرك." },
-        { "en": "Play exd3, then d4.", "fr": "Jouez exd3, puis d4.", "ar": "العب exd3 ثم d4." }
+      "stage": 1,
+      "group": "pawn",
+      "themes": [
+        "pawn",
+        "capture"
       ],
-      "explain": { "en": "Straight to walk, diagonal to eat — the pawn's two rules.", "fr": "Droit pour marcher, diagonale pour manger — les deux règles du pion.", "ar": "مستقيم للمشي وقطري للأكل — قاعدتا البيدق." },
-      "success": { "en": "Take and march — pawn essentials!", "fr": "Prendre et marcher — l'essentiel du pion !", "ar": "التقط وتقدّم — أساسيات البيدق!" },
-      "failHint": { "en": "Eat first (exd3), then march (d4).", "fr": "Mangez d'abord (exd3), puis marchez (d4).", "ar": "كُل أولًا (exd3) ثم تقدّم (d4)." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Pawn: take diagonally",
+        "fr": "Pion : prendre en diagonale",
+        "ar": "البيدق: الالتقاط قطريًا"
+      },
+      "goalText": {
+        "en": "Capture the pawn, then collect the star.",
+        "fr": "Capturez le pion, puis ramassez l'étoile.",
+        "ar": "التقط البيدق ثم اجمع النجمة."
+      },
+      "fen": "4k3/8/8/8/8/3p4/4P3/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "capture": [
+          "d3"
+        ],
+        "collect": [
+          "d4"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Pawns walk straight but capture one square diagonally.",
+          "fr": "Les pions marchent droit mais capturent d'une case en diagonale.",
+          "ar": "تمشي البيادق مستقيمة لكنها تلتقط قطريًا بمربع واحد."
+        },
+        {
+          "en": "The d3 pawn stands on your diagonal.",
+          "fr": "Le pion d3 est sur votre diagonale.",
+          "ar": "بيدق d3 على قطرك."
+        },
+        {
+          "en": "Play exd3, then d4.",
+          "fr": "Jouez exd3, puis d4.",
+          "ar": "العب exd3 ثم d4."
+        }
+      ],
+      "explain": {
+        "en": "Straight to walk, diagonal to eat — the pawn's two rules.",
+        "fr": "Droit pour marcher, diagonale pour manger — les deux règles du pion.",
+        "ar": "مستقيم للمشي وقطري للأكل — قاعدتا البيدق."
+      },
+      "success": {
+        "en": "Take and march — pawn essentials!",
+        "fr": "Prendre et marcher — l'essentiel du pion !",
+        "ar": "التقط وتقدّم — أساسيات البيدق!"
+      },
+      "failHint": {
+        "en": "Eat first (exd3), then march (d4).",
+        "fr": "Mangez d'abord (exd3), puis marchez (d4).",
+        "ar": "كُل أولًا (exd3) ثم تقدّم (d4)."
+      },
       "xp": 10
     },
     {
       "id": "s1p-3",
-      "stage": 1, "group": "pawn", "themes": ["pawn", "blocked-path"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Pawn: blocked road", "fr": "Pion : route bloquée", "ar": "البيدق: طريق مسدود" },
-      "goalText": { "en": "An enemy pawn blocks your file. Go around it and collect both stars.", "fr": "Un pion ennemi bloque votre colonne. Contournez-le et ramassez les étoiles.", "ar": "بيدق عدو يسد عمودك. التفّ حوله واجمع النجمتين." },
-      "fen": "4k3/8/8/8/8/3pp3/4P3/4K3 w - - 0 1",
-      "movePieces": ["p"],
-      "goal": { "collect": ["d4", "d5"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "e3 blocks every straight push.", "fr": "e3 bloque toute poussée droite.", "ar": "e3 يسد كل دفعة مستقيمة." },
-        { "en": "But d3 is capturable — take it and switch files.", "fr": "Mais d3 est prenable — prenez-le et changez de colonne.", "ar": "لكن d3 قابل للالتقاط — خذه وغيّر العمود." },
-        { "en": "Play exd3, d4, d5.", "fr": "Jouez exd3, d4, d5.", "ar": "العب exd3 ثم d4 ثم d5." }
+      "stage": 1,
+      "group": "pawn",
+      "themes": [
+        "pawn",
+        "blocked-path"
       ],
-      "explain": { "en": "A capture can change files — the pawn's only way around a wall.", "fr": "Une capture peut changer de colonne — le seul contournement du pion.", "ar": "الالتقاط قد يغيّر العمود — المخرج الوحيد للبيدق حول الجدار." },
-      "success": { "en": "Wall outflanked by capture!", "fr": "Mur contourné par capture !", "ar": "التففت على الجدار بالالتقاط!" },
-      "failHint": { "en": "Straight is dead — capture to d3, then climb.", "fr": "Tout droit est mort — capturez en d3, puis montez.", "ar": "المستقيم ميت — التقط إلى d3 ثم اصعد." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Pawn: blocked road",
+        "fr": "Pion : route bloquée",
+        "ar": "البيدق: طريق مسدود"
+      },
+      "goalText": {
+        "en": "An enemy pawn blocks your file. Go around it and collect both stars.",
+        "fr": "Un pion ennemi bloque votre colonne. Contournez-le et ramassez les étoiles.",
+        "ar": "بيدق عدو يسد عمودك. التفّ حوله واجمع النجمتين."
+      },
+      "fen": "4k3/8/8/8/8/3pp3/4P3/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "collect": [
+          "d4",
+          "d5"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "e3 blocks every straight push.",
+          "fr": "e3 bloque toute poussée droite.",
+          "ar": "e3 يسد كل دفعة مستقيمة."
+        },
+        {
+          "en": "But d3 is capturable — take it and switch files.",
+          "fr": "Mais d3 est prenable — prenez-le et changez de colonne.",
+          "ar": "لكن d3 قابل للالتقاط — خذه وغيّر العمود."
+        },
+        {
+          "en": "Play exd3, d4, d5.",
+          "fr": "Jouez exd3, d4, d5.",
+          "ar": "العب exd3 ثم d4 ثم d5."
+        }
+      ],
+      "explain": {
+        "en": "A capture can change files — the pawn's only way around a wall.",
+        "fr": "Une capture peut changer de colonne — le seul contournement du pion.",
+        "ar": "الالتقاط قد يغيّر العمود — المخرج الوحيد للبيدق حول الجدار."
+      },
+      "success": {
+        "en": "Wall outflanked by capture!",
+        "fr": "Mur contourné par capture !",
+        "ar": "التففت على الجدار بالالتقاط!"
+      },
+      "failHint": {
+        "en": "Straight is dead — capture to d3, then climb.",
+        "fr": "Tout droit est mort — capturez en d3, puis montez.",
+        "ar": "المستقيم ميت — التقط إلى d3 ثم اصعد."
+      },
       "xp": 15
     },
     {
       "id": "s1p-4",
-      "stage": 1, "group": "pawn", "themes": ["pawn", "capture"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Pawn: the capture trail", "fr": "Pion : la piste des captures", "ar": "البيدق: درب الالتقاط" },
-      "goalText": { "en": "Capture both black pawns.", "fr": "Capturez les deux pions noirs.", "ar": "التقط البيدقين الأسودين." },
-      "fen": "4k3/8/8/1p6/8/2p5/3P4/4K3 w - - 0 1",
-      "movePieces": ["p"],
-      "goal": { "capture": ["c3", "b5"] },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "Captures zigzag the pawn across files.", "fr": "Les captures font zigzaguer le pion entre les colonnes.", "ar": "الالتقاطات تجعل البيدق يتعرج بين الأعمدة." },
-        { "en": "d2 takes c3 first.", "fr": "d2 prend c3 d'abord.", "ar": "d2 يأخذ c3 أولًا." },
-        { "en": "Play dxc3, c4, cxb5.", "fr": "Jouez dxc3, c4, cxb5.", "ar": "العب dxc3 ثم c4 ثم cxb5." }
+      "stage": 1,
+      "group": "pawn",
+      "themes": [
+        "pawn",
+        "capture"
       ],
-      "explain": { "en": "Two captures, one transit: zigzag costs a middle step.", "fr": "Deux captures, un transit : le zigzag coûte un pas intermédiaire.", "ar": "التقاطان وعبور واحد: التعرج يكلّف خطوة وسطى." },
-      "success": { "en": "Trail of captures complete!", "fr": "Piste des captures terminée !", "ar": "اكتمل درب الالتقاط!" },
-      "failHint": { "en": "c3, step, b5: dxc3, c4, cxb5.", "fr": "c3, pas, b5 : dxc3, c4, cxb5.", "ar": "c3 ثم خطوة ثم b5: dxc3 ثم c4 ثم cxb5." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Pawn: the capture trail",
+        "fr": "Pion : la piste des captures",
+        "ar": "البيدق: درب الالتقاط"
+      },
+      "goalText": {
+        "en": "Capture both black pawns.",
+        "fr": "Capturez les deux pions noirs.",
+        "ar": "التقط البيدقين الأسودين."
+      },
+      "fen": "4k3/8/8/1p6/8/2p5/3P4/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "capture": [
+          "c3",
+          "b5"
+        ]
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Captures zigzag the pawn across files.",
+          "fr": "Les captures font zigzaguer le pion entre les colonnes.",
+          "ar": "الالتقاطات تجعل البيدق يتعرج بين الأعمدة."
+        },
+        {
+          "en": "d2 takes c3 first.",
+          "fr": "d2 prend c3 d'abord.",
+          "ar": "d2 يأخذ c3 أولًا."
+        },
+        {
+          "en": "Play dxc3, c4, cxb5.",
+          "fr": "Jouez dxc3, c4, cxb5.",
+          "ar": "العب dxc3 ثم c4 ثم cxb5."
+        }
+      ],
+      "explain": {
+        "en": "Two captures, one transit: zigzag costs a middle step.",
+        "fr": "Deux captures, un transit : le zigzag coûte un pas intermédiaire.",
+        "ar": "التقاطان وعبور واحد: التعرج يكلّف خطوة وسطى."
+      },
+      "success": {
+        "en": "Trail of captures complete!",
+        "fr": "Piste des captures terminée !",
+        "ar": "اكتمل درب الالتقاط!"
+      },
+      "failHint": {
+        "en": "c3, step, b5: dxc3, c4, cxb5.",
+        "fr": "c3, pas, b5 : dxc3, c4, cxb5.",
+        "ar": "c3 ثم خطوة ثم b5: dxc3 ثم c4 ثم cxb5."
+      },
       "xp": 15
     },
     {
       "id": "s1p-5",
-      "stage": 1, "group": "pawn", "themes": ["pawn", "capture"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Pawn: capture and promote-march", "fr": "Pion : capturer puis monter", "ar": "البيدق: التقط ثم اصعد" },
-      "goalText": { "en": "Capture twice, then march the star home.", "fr": "Capturez deux fois, puis ramenez l'étoile.", "ar": "التقط مرتين ثم اصعد بالنجمة." },
-      "fen": "4k3/8/8/1p6/8/2p5/3P4/4K3 w - - 0 1",
-      "movePieces": ["p"],
-      "goal": { "capture": ["c3", "b5"], "collect": ["b7"] },
-      "par": 5, "maxMoves": 12,
-      "hints": [
-        { "en": "Same trail as before — then keep marching.", "fr": "Même piste qu'avant — puis continuez à monter.", "ar": "نفس الدرب السابق — ثم واصل الصعود." },
-        { "en": "After b5, single steps only: moved pawns lose the double push.", "fr": "Après b5, que des petits pas : un pion déplacé perd la double poussée.", "ar": "بعد b5 خطوات مفردة فقط: البيدق المتحرك يفقد الدفعة المزدوجة." },
-        { "en": "Play dxc3, c4, cxb5, b6, b7.", "fr": "Jouez dxc3, c4, cxb5, b6, b7.", "ar": "العب dxc3 ثم c4 ثم cxb5 ثم b6 ثم b7." }
+      "stage": 1,
+      "group": "pawn",
+      "themes": [
+        "pawn",
+        "capture"
       ],
-      "explain": { "en": "The double push is one-time-only: plan around single steps after.", "fr": "La double poussée est unique : prévoyez des petits pas ensuite.", "ar": "الدفعة المزدوجة لمرة واحدة: خطط لخطوات مفردة بعدها." },
-      "success": { "en": "Five-move masterpiece march!", "fr": "Marche chef-d'œuvre en cinq coups !", "ar": "مسيرة رائعة في خمس نقلات!" },
-      "failHint": { "en": "dxc3, c4, cxb5, b6, b7.", "fr": "dxc3, c4, cxb5, b6, b7.", "ar": "dxc3 ثم c4 ثم cxb5 ثم b6 ثم b7." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Pawn: capture and promote-march",
+        "fr": "Pion : capturer puis monter",
+        "ar": "البيدق: التقط ثم اصعد"
+      },
+      "goalText": {
+        "en": "Capture twice, then march the star home.",
+        "fr": "Capturez deux fois, puis ramenez l'étoile.",
+        "ar": "التقط مرتين ثم اصعد بالنجمة."
+      },
+      "fen": "4k3/8/8/1p6/8/2p5/3P4/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "capture": [
+          "c3",
+          "b5"
+        ],
+        "collect": [
+          "b7"
+        ]
+      },
+      "par": 5,
+      "maxMoves": 12,
+      "hints": [
+        {
+          "en": "Same trail as before — then keep marching.",
+          "fr": "Même piste qu'avant — puis continuez à monter.",
+          "ar": "نفس الدرب السابق — ثم واصل الصعود."
+        },
+        {
+          "en": "After b5, single steps only: moved pawns lose the double push.",
+          "fr": "Après b5, que des petits pas : un pion déplacé perd la double poussée.",
+          "ar": "بعد b5 خطوات مفردة فقط: البيدق المتحرك يفقد الدفعة المزدوجة."
+        },
+        {
+          "en": "Play dxc3, c4, cxb5, b6, b7.",
+          "fr": "Jouez dxc3, c4, cxb5, b6, b7.",
+          "ar": "العب dxc3 ثم c4 ثم cxb5 ثم b6 ثم b7."
+        }
+      ],
+      "explain": {
+        "en": "The double push is one-time-only: plan around single steps after.",
+        "fr": "La double poussée est unique : prévoyez des petits pas ensuite.",
+        "ar": "الدفعة المزدوجة لمرة واحدة: خطط لخطوات مفردة بعدها."
+      },
+      "success": {
+        "en": "Five-move masterpiece march!",
+        "fr": "Marche chef-d'œuvre en cinq coups !",
+        "ar": "مسيرة رائعة في خمس نقلات!"
+      },
+      "failHint": {
+        "en": "dxc3, c4, cxb5, b6, b7.",
+        "fr": "dxc3, c4, cxb5, b6, b7.",
+        "ar": "dxc3 ثم c4 ثم cxb5 ثم b6 ثم b7."
+      },
       "xp": 15
     },
     {
       "id": "s1p-6",
-      "stage": 1, "group": "pawn", "themes": ["pawn", "promotion"],
-      "mode": "free-move", "type": "free-move",
-      "title": { "en": "Pawn: promote and conquer", "fr": "Pion : promouvoir et conquérir", "ar": "البيدق: رقِّ واسُد" },
-      "goalText": { "en": "Push to the last rank, promote, then rule h8.", "fr": "Poussez jusqu'au bout, promovez, puis régnez sur h8.", "ar": "ادفع حتى الصف الأخير ورقِّ ثم احكم h8." },
-      "fen": "8/7k/P7/8/8/8/8/4K3 w - - 0 1",
-      "movePieces": ["p", "q", "r", "b", "n"],
-      "goal": { "reach": { "square": "h8" } },
-      "par": 3, "maxMoves": 8,
-      "hints": [
-        { "en": "A pawn on its 7th rank is one step from glory.", "fr": "Un pion au 7e rang est à un pas de la gloire.", "ar": "البيدق في الصف السابع على بعد خطوة من المجد." },
-        { "en": "Promote first — almost always to queen.", "fr": "Promovez d'abord — presque toujours en dame.", "ar": "رقِّ أولًا — غالبًا إلى ملكة." },
-        { "en": "Play a7, a8=Q, Qh8.", "fr": "Jouez a7, a8=D, Dh8.", "ar": "العب a7 ثم a8=Q ثم Qh8." }
+      "stage": 1,
+      "group": "pawn",
+      "themes": [
+        "pawn",
+        "promotion"
       ],
-      "explain": { "en": "Promotion turns your weakest piece into your strongest — then it rules.", "fr": "La promotion change votre pièce la plus faible en plus forte — puis elle règne.", "ar": "الترقية تحوّل أضعف قطعك إلى أقواها — ثم تحكم." },
-      "success": { "en": "Crowned! From pawn to ruler of h8!", "fr": "Couronné ! De pion à maître de h8 !", "ar": "تُوّجت! من بيدق إلى حاكم h8!" },
-      "failHint": { "en": "Climb, crown, conquer: a7, a8, h8.", "fr": "Montez, couronnez, conquérez : a7, a8, h8.", "ar": "اصعد وتوَّج واسُد: a7 ثم a8 ثم h8." },
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Pawn: promote and conquer",
+        "fr": "Pion : promouvoir et conquérir",
+        "ar": "البيدق: رقِّ واسُد"
+      },
+      "goalText": {
+        "en": "Push to the last rank, promote, then rule h8.",
+        "fr": "Poussez jusqu'au bout, promovez, puis régnez sur h8.",
+        "ar": "ادفع حتى الصف الأخير ورقِّ ثم احكم h8."
+      },
+      "fen": "8/4k3/P7/8/8/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "p",
+        "q",
+        "r",
+        "b",
+        "n"
+      ],
+      "goal": {
+        "reach": {
+          "square": "h8"
+        }
+      },
+      "par": 3,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "A pawn on its 7th rank is one step from glory.",
+          "fr": "Un pion au 7e rang est à un pas de la gloire.",
+          "ar": "البيدق في الصف السابع على بعد خطوة من المجد."
+        },
+        {
+          "en": "Promote first — almost always to queen.",
+          "fr": "Promovez d'abord — presque toujours en dame.",
+          "ar": "رقِّ أولًا — غالبًا إلى ملكة."
+        },
+        {
+          "en": "Play a7, a8=Q, Qh8.",
+          "fr": "Jouez a7, a8=D, Dh8.",
+          "ar": "العب a7 ثم a8=Q ثم Qh8."
+        }
+      ],
+      "explain": {
+        "en": "Promotion turns your weakest piece into your strongest — then it rules.",
+        "fr": "La promotion change votre pièce la plus faible en plus forte — puis elle règne.",
+        "ar": "الترقية تحوّل أضعف قطعك إلى أقواها — ثم تحكم."
+      },
+      "success": {
+        "en": "Crowned! From pawn to ruler of h8!",
+        "fr": "Couronné ! De pion à maître de h8 !",
+        "ar": "تُوّجت! من بيدق إلى حاكم h8!"
+      },
+      "failHint": {
+        "en": "Climb, crown, conquer: a7, a8, h8.",
+        "fr": "Montez, couronnez, conquérez : a7, a8, h8.",
+        "ar": "اصعد وتوَّج واسُد: a7 ثم a8 ثم h8."
+      },
       "xp": 20
     }
   ]

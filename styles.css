@@ -412,6 +412,62 @@ body {
     box-shadow: none;
 }
 
+/* "Advance" CTA — the board-level next-stage button on Lessons and Learn.
+   Same weight as a primary button, but its OWN class so the primary action of
+   a screen (Complete Lesson / Complete) stays uniquely identifiable. */
+.btn-cta {
+    --glow: 0 6px 22px rgba(16, 185, 129, 0.22);
+    --glow-hover: 0 10px 30px rgba(16, 185, 129, 0.38);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+    color: white;
+    border: none;
+    padding: 0.9rem 2.2rem;
+    min-height: 48px;
+    font-size: 0.97rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    box-shadow: var(--glow);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+}
+.btn-cta::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+    opacity: 0;
+    transition: var(--transition);
+}
+/* Sheen sweep on hover — transform-only, so it never costs layout. */
+.btn-cta:hover:not(:disabled)::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; left: -60%;
+    width: 45%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent);
+    transform: skewX(-18deg);
+    animation: ctaSheen .75s ease-out forwards;
+    pointer-events: none;
+}
+.btn-cta:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--glow-hover); }
+.btn-cta:hover:not(:disabled)::before { opacity: 1; }
+.btn-cta:active:not(:disabled) { transform: translateY(-1px); }
+/* Locked next step: reads as "not yet", not "broken" — dashed outline, no
+   fill, and the arrow is dimmed so the eye goes to the primary action. */
+.btn-cta:disabled {
+    background: transparent;
+    color: var(--text-muted-dim);
+    border: 1.5px dashed var(--glass-border);
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: .8;
+}
+@keyframes ctaSheen { to { left: 130%; } }
+
 /* ── How-it-works strip (first-run orientation, real workflow) ──── */
 .how-strip {
     display: grid;
@@ -592,6 +648,42 @@ body {
     /* min() keeps a single column fitting at 320px viewports */
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
     gap: 2rem;
+}
+
+/* ── Lichess-leaning surfaces ─────────────────────────────────────────
+   Lichess reads as calm because it has: no glow, no gradient sheen, no
+   raised shadow, one border colour, and radius only where it means
+   something. We keep the site's palette and typography (brand) and borrow
+   that restraint for the cards and boards. */
+.lesson-card,
+.lvl-card {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    box-shadow: none;
+    transition: border-color .15s ease, background-color .15s ease;
+}
+
+.lesson-card:hover:not(.locked),
+.lvl-card:hover { border-color: var(--accent); background: var(--bg-elevated); }
+
+.lesson-header { background: var(--bg-main); }
+.lesson-card .btn-primary,
+.lvl-card .btn-primary {
+    background: var(--accent);
+    box-shadow: none;
+    transition: filter .15s ease;
+}
+.lesson-card .btn-primary:hover:not(:disabled),
+.lvl-card .btn-primary:hover:not(:disabled) { filter: brightness(1.1); transform: none; }
+.lesson-card .btn-primary::before,
+.lvl-card .btn-primary::before { content: none; }
+
+/* Board frame: flat, no floating shadow. */
+#chess-board-wrapper,
+#play-board-wrap {
+    box-shadow: none;
+    border: 1px solid var(--glass-border);
 }
 
 .lesson-card {
@@ -969,16 +1061,20 @@ body {
 }
 
 /* ── Board Container (was missing — board rendered as vertical stack) ── */
+/* Board frame — bigger than before: lichess/chess.com run the board at the
+   full width of their content column (~840px on desktop), and a cramped
+   board makes every piece ambiguous. One shared frame for lesson + Learn. */
 #chess-board-wrapper {
-    max-width: 760px;
+    max-width: 840px;
     /* Single width declaration (was duplicated). min() keeps the square
        board inside the live viewport on short desktop windows. */
-    width: min(100%, calc(100vh - 290px), 760px);
+    width: min(100%, calc(100vh - 250px), 840px);
     margin: 0 auto;
     padding: 12px;
     background: var(--bg-card);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.4);
 }
 
 #chess-board {
@@ -1113,7 +1209,12 @@ body {
     to   { opacity: 1; transform: scale(1); }
 }
 
-/* Pieces (custom image set in assets/pieces/) */
+/* Pieces (custom image set in assets/pieces/)
+   NOTE: no `filter: drop-shadow` per piece — a filter on every one of 64
+   images forces the whole board to re-composite on each move. Each piece SVG
+   already carries a painted outline for separation, and a single soft shadow
+   is applied to the BOARD layer instead (see #chess-board / #play-board
+   box-shadow), which is one composited element instead of 64. */
 .chess-piece {
     width: 85%;
     height: 85%;
@@ -1122,22 +1223,14 @@ body {
     pointer-events: none;
     user-select: none;
     -webkit-user-drag: none;
-    /* One soft grounding shadow. Separation comes from each piece's own
-       painted outline (dark on white pieces, light on black pieces). */
-    filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
     transition: transform 0.12s ease;
 }
 
 .chess-square:hover .chess-piece { transform: scale(1.06); }
 .chess-square.selected .chess-piece { transform: scale(1.08); }
 
-.chess-piece.white {
-    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.18)) drop-shadow(0 6px 8px rgba(0,0,0,0.22)) drop-shadow(0 0 0.5px rgba(0,0,0,0.28));
-}
-
-.chess-piece.black {
-    filter: drop-shadow(0 1px 1px rgba(255,255,255,0.16)) drop-shadow(0 7px 10px rgba(0,0,0,0.28)) drop-shadow(0 0 0.5px rgba(255,255,255,0.12));
-}
+.chess-piece.white,
+.chess-piece.black { filter: none; }
 
 /* Flyover clone: glides above every square while a move animates */
 .fly-piece {
@@ -1260,6 +1353,8 @@ body {
 }
 
 /* ── Feedback ─────────────────────────────────────────────────── */
+/* Action row. The advance CTA sits on its own line below the other controls
+   so it never squeezes them and stays the visual end of the flow. */
 .lesson-actions {
     display: flex;
     justify-content: center;
@@ -1267,6 +1362,16 @@ body {
     gap: 1rem;
     margin-top: 2rem;
     flex-wrap: wrap;
+}
+/* Lessons only: the advance CTA gets its own centred row so it never
+   squeezes the other controls. The Learn screen keeps a denser inline row
+   (see index.html .lv-actions), because levels are advanced far more often. */
+#lesson-screen .lesson-actions .btn-cta {
+    flex-basis: 100%;
+    margin-top: .35rem;
+    width: fit-content;
+    min-width: 260px;
+    margin-inline: auto;
 }
 
 .diff-label {
@@ -1830,6 +1935,12 @@ body[data-theme='day'] .nav { background: #ffffff; }
 /* Single touch-action for squares (was conflicting: manipulation vs pan-y).
    manipulation = no double-tap zoom delay, vertical scroll still works. */
 .chess-square { touch-action: manipulation; }
+
+/* While a finger is dragging a piece the board must own the gesture. Under
+   `manipulation` the browser claims the touch for panning and fires
+   pointercancel on the first move, which silently aborted every touch drag. */
+.dragging-touch, .dragging-touch .chess-square { touch-action: none !important; }
+.dragging-touch .chess-piece { opacity: .25; }
 
 /* Game-over result card (free game). */
 #gameover-card {

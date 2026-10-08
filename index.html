@@ -8,43 +8,485 @@
     <meta name="theme-color" content="#0d1526">
     <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=33">
+    <link rel="stylesheet" href="styles.css?v=39">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; upgrade-insecure-requests">
     <style>
-    /* Learn screen (levels): picker + level layout + goal markers */
-    .picker-group h2 { margin: 18px 0 8px; font-size: 1rem; text-transform: capitalize; }
-    .picker-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-    .lvl-btn { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
-      color: var(--text-main); padding: 10px; cursor: pointer; min-height: 44px; text-align: left; }
-    .lvl-btn:hover { border-color: var(--accent); }
-    .lvl-btn .stars { color: var(--gold); font-size: .85rem; letter-spacing: 2px; }
-    .level-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
-    @media (max-width: 860px) { .level-layout { grid-template-columns: 1fr; } }
-    #play-board-wrap { max-width: 640px; width: 100%; margin: 0 auto; }
-    #play-board { position: relative; display: grid; grid-template-columns: repeat(8, 1fr);
-      width: 100%; aspect-ratio: 1/1; }
-    .goal-mark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      font-size: 1.6rem; pointer-events: none; z-index: 6; }
-    .goal-mark[data-kind="star"] { color: #fbbf24; text-shadow: 0 0 6px rgba(0,0,0,.7); }
-    .goal-mark[data-kind="target"] { color: #f87171; }
-    .chess-square.is-obstacle::after { content: ''; position: absolute; inset: 0;
-      background: repeating-linear-gradient(45deg, rgba(220,50,50,.35) 0 6px, transparent 6px 12px); }
-    .chess-square.is-reach { outline: 3px solid var(--accent-bright); outline-offset: -3px; }
-    .panel { background: var(--bg-card); border: 1px solid var(--glass-border);
-      border-radius: var(--radius-md); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-    .counter { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-    .counter .par { color: var(--text-muted); font-weight: 600; }
+    /* ══ Learn screen ══════════════════════════════════════════════════════
+       Deliberately the SAME anatomy as the Lessons screen (#lesson-screen):
+       .lesson-detail-header → .lesson-content(1fr/400px) → .arena + dashboard,
+       one board frame, one .lesson-actions row. Only the level-specific bits
+       (goal card, move log, result card) are Learn-only. */
+    #learn-screen .container { max-width: 1300px; }
+
+    /* ── Level picker: the SAME card anatomy as the Lessons grid ────────────
+       .lvl-card reuses .lesson-card / .lesson-header / .lesson-body /
+       .lesson-footer so a level and a lesson are visibly the same object.
+       Only the meta line differs (stars + par instead of "Lesson N"). */
+    .picker-group { margin-bottom: .5rem; }
+    .picker-group h2 { margin: 1.75rem 0 .75rem; font-size: 1.05rem; text-transform: capitalize;
+      letter-spacing: .01em; color: var(--text-main); font-weight: 800; }
+    .picker-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 1rem; }
+
+    .lvl-card { display: flex; flex-direction: column; overflow: hidden;
+      animation: lvCardIn .34s cubic-bezier(.22,.68,.24,1) backwards; }
+    .lvl-card .lesson-header { padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: .5rem; }
+    .lvl-card .lesson-header h3 { font-size: .98rem; margin-bottom: 0; }
+    .lvl-card .lesson-meta { gap: .5rem; }
+    .lvl-card .stars { display: inline-flex; gap: 2px; font-size: .82rem; line-height: 1; }
+    .lvl-card .stars .on { color: var(--gold); text-shadow: 0 0 8px rgba(251,191,36,.75); }
+    .lvl-card .stars .off { color: var(--text-muted-dim); opacity: .4; }
+    .lvl-par { font-size: .72rem; font-weight: 700; color: var(--text-muted-dim);
+      border: 1px solid var(--glass-border); border-radius: 20px; padding: .12rem .5rem; }
+    .lvl-card .lesson-body { padding: 1rem 1.15rem; }
+    .lvl-card .lesson-body p { font-size: .85rem; line-height: 1.55; margin: 0; }
+    .lvl-card .lesson-footer { padding: .75rem 1.15rem; }
+    .lvl-open { width: 100%; padding: .6rem 1.2rem; font-size: .88rem; }
+    .lvl-card.solved .lesson-header { border-bottom-color: rgba(16,185,129,.4); }
+    .lvl-card:hover:not(.locked) { border-color: var(--accent); transform: translateY(-2px); }
+    .lvl-card:active { transform: translateY(0); }
+    .lvl-card.locked { opacity: .55; filter: grayscale(55%); }
+    /* Staggered entrance — cheap (opacity+translate only, no layout). */
+    @keyframes lvCardIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+    /* ── Level header ── */
+    .lv-chip { display: inline-block; background: var(--accent-dim); color: #fff; font-size: .72rem;
+      font-weight: 800; text-transform: uppercase; letter-spacing: .08em; padding: .3rem .7rem;
+      border-radius: 20px; }
+    .teacher-info .lv-stars { display: inline-flex; gap: 3px; font-size: 1.05rem; line-height: 1; }
+    .teacher-info .lv-stars .on { color: var(--gold); text-shadow: 0 0 10px rgba(251,191,36,.8);
+      animation: starPop .5s cubic-bezier(.3,1.6,.4,1) backwards; }
+    .teacher-info .lv-stars .off { color: var(--text-muted-dim); opacity: .45; }
+
+    /* ── Goal card (replaces the opponent card) ── */
+    .lv-goal-card { border-left: 3px solid var(--accent); }
+    .lv-avatar { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 1.5rem; background: rgba(251,191,36,.14);
+      border: 2px solid var(--gold); color: var(--gold); }
+    .lv-avatar.you { background: rgba(16,185,129,.16); border-color: var(--accent); color: var(--accent-bright); }
+    #lv-goal-track { display: flex; gap: 6px; margin-top: .4rem; flex-wrap: wrap; }
+    #lv-goal-track .pip { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--gold);
+      background: transparent; transition: var(--transition); }
+    #lv-goal-track .pip.done { background: var(--gold); box-shadow: 0 0 10px rgba(251,191,36,.8); }
+    #lv-goal-track .pip.target { border-color: var(--accent-bright); }
+    #lv-goal-track .pip.target.done { background: var(--accent-bright); box-shadow: 0 0 10px rgba(52,211,153,.8); }
+    .lv-counter { font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums;
+      padding: .35rem .8rem; border-radius: 20px; background: var(--glass-bg);
+      border: 1px solid var(--glass-border); }
+    .lv-counter .par { color: var(--text-muted); font-weight: 600; }
+
+    /* Captured-material tray: piece + its square, struck through once taken. */
+    #lv-caps { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+    .cap-item { display: inline-flex; align-items: center; gap: .25rem; padding: .15rem .45rem .15rem .2rem;
+      border-radius: 20px; background: rgba(0,0,0,.22); border: 1px solid var(--glass-border);
+      transition: var(--transition); }
+    .cap-item img { width: 20px; height: 20px; display: block; }
+    .cap-item em { font-style: normal; font-size: .7rem; font-weight: 700; color: var(--text-muted-dim);
+      font-family: 'Inter', sans-serif; }
+    .cap-item .cap-unknown { width: 20px; height: 20px; border-radius: 50%;
+      border: 2px dashed var(--text-muted-dim); display: block; }
+    /* Taken = desaturated with a red wash: reads instantly as "gone". */
+    .cap-item.taken { background: rgba(248,113,113,.16); border-color: rgba(248,113,113,.45); }
+    .cap-item.taken img { filter: grayscale(1) brightness(.7); opacity: .55; }
+    .cap-item.taken em { color: #f87171; text-decoration: line-through; }
+
+    /* Achievement strip above the board: your stars for this level, then the
+       score line once you finish. One compact row, and it collapses to just
+       the stars when there is no result yet — an empty pill above the board
+       is chrome the player does not need. */
+    .lv-achieve { display: flex; align-items: center; justify-content: center; gap: .5rem;
+      flex-wrap: wrap; margin-bottom: .5rem; padding: .3rem .75rem;
+      background: var(--bg-card); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md); }
+    .lv-achieve-stars { display: inline-flex; gap: 3px; font-size: 1.05rem; line-height: 1; }
+    .lv-achieve-stars .on { color: var(--gold); text-shadow: 0 0 10px rgba(251,191,36,.8);
+      animation: starPop .5s cubic-bezier(.3,1.6,.4,1) backwards; }
+    .lv-achieve-stars .off { color: var(--text-muted-dim); opacity: .35; }
+    .lv-achieve-text { font-size: .82rem; font-weight: 700; color: var(--text-muted);
+      font-variant-numeric: tabular-nums; }
+    .lv-achieve-text:empty { display: none; }
+    .lv-achieve-text .pts { color: var(--accent-bright); }
+    /* No result yet → stars only, no empty box. */
+    .lv-achieve:not(.scored) { padding: .2rem .6rem; background: transparent;
+      border-color: transparent; }
+    .lv-achieve.scored { border-color: rgba(251,191,36,.45); background: rgba(251,191,36,.07); }
+
+    /* ── Board frame: shared geometry with #chess-board-wrapper ── */
+    #play-board-wrap {
+      width: min(100%, calc(100vh - 300px), 780px);
+      margin: 0 auto;
+      padding: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      box-shadow: 0 18px 44px rgba(0,0,0,.4);
+    }
+    #play-board {
+      position: relative; display: grid; grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr); width: 100%; aspect-ratio: 1/1;
+      border-radius: 8px; overflow: hidden; border: 2px solid var(--glass-border);
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+      touch-action: manipulation;
+      /* Selection reads instantly instead of fading: the old 0.12s filter
+         transition made a move feel like it lagged behind the click. */
+      transition: box-shadow .16s ease;
+    }
+    /* A lift + inner ring so the selected square is obvious without colour. */
+    #play-board .chess-square.selected {
+      background-color: var(--board-selected) !important;
+      box-shadow: inset 0 0 0 3px rgba(255,255,255,.85), 0 0 22px rgba(232,160,46,.55);
+      z-index: 2;
+    }
+    #play-board .chess-square.selected .chess-piece {
+      transform: scale(1.1);
+      filter: drop-shadow(0 0 10px rgba(255,214,120,.85));
+    }
+    #play-board .chess-square.last-move { box-shadow: inset 0 0 0 2px rgba(232,160,46,.55); }
+    /* Slightly larger pieces here: the level board is the whole task. */
+    #play-board .chess-piece { width: 88%; height: 88%; }
+
+    .lv-actions { gap: .6rem; margin-top: 1rem; }
+    /* Keep the advance CTA on the right so it reads as "what's next" without
+       changing the row's vertical rhythm. */
+    .lv-actions #next-lvl-btn { margin-left: auto; min-width: 172px; }
+
+    /* ── Sticky action bar ──────────────────────────────────────────────
+       Shown on small screens only, where the full action row sits ~1100px
+       down an 844px viewport. position: sticky + bottom:0 pins it to the
+       viewport bottom once the board scrolls up to it.
+
+       `align-self: flex-start` matters: the bar lives inside a flex COLUMN
+       (.arena) whose default align-items is stretch, and a stretched sticky
+       element resolves against the stretched height instead of pinning. */
+    /* Icon-only toggle: square, flat, 40px tap target (WCAG 2.5.8 minimum). */
+    .icon-btn { display: inline-flex; align-items: center; justify-content: center;
+      width: 44px; height: 44px; flex: 0 0 auto; padding: 0; cursor: pointer;
+      background: transparent; color: var(--text-muted);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+      transition: var(--transition); }
+    .icon-btn svg { width: 20px; height: 20px; }
+    .icon-btn:hover { color: var(--text-main); border-color: var(--accent); background: var(--bg-elevated); }
+    .icon-btn[aria-expanded="false"] { color: var(--accent-bright); border-color: var(--accent); }
+
+    /* ── Focus mode (maximise the board) ──────────────────────────────────
+       One class on the level wrapper hides every panel: header, goal card,
+       speech bubble, status strip, action row, player card, dashboard, and
+       the whole next-level bar. What stays is the board, the achievement
+       strip and a SINGLE bar carrying undo + next + the restore button, so
+           the board gets the entire viewport and next is still one tap away.
+
+       Applied on phones only (see the media query); on desktop there is
+           room for everything and hiding it would be a downgrade. */
+    /* Anything tagged data-focus-hide is chrome the player can dismiss. */
+    [data-focus-hide] { transition: opacity .18s ease; }
+    .lv-focus [data-focus-hide] { display: none !important; }
+    @media (max-width: 860px) {
+      .lv-focus #lv-focus-toggle svg { transform: rotate(90deg); }
+      .lv-focus #lv-sticky { position: static; margin-top: .4rem; }
+      /* Kill the leftover scroll. .screen carries 40px top + 80px bottom padding
+         and a min-height; left in place the page stayed ~115px taller than
+         the viewport, so minimizing still left a dead scrollable strip under
+         the board that looked like the panels had not gone away. */
+      /* `.lv-focus` is ON the .screen element itself, not an ancestor, so
+         this must be `.lv-focus.screen` — the descendant selector silently
+         matched nothing and the old padding/min-height survived. */
+      .lv-focus.screen { padding: 0 !important; min-height: 0 !important; }
+      /* When focus mode is on, pin the sticky bar to the TOP of the board
+         so Undo/Restart/Next are immediately visible without scrolling. */
+      .lv-focus #lv-sticky { position: sticky; top: .4rem; }
+      .lv-focus .arena { justify-content: flex-start; }
+      /* The board is already as wide as the phone allows (a square board
+         cannot exceed the viewport width), so the win here is VERTICAL:
+         centre it in the space that is left. */
+      .lv-focus #learn-screen .container,
+      .lv-focus #lesson-screen .container { padding-top: .5rem; padding-bottom: .5rem; }
+      .lv-focus #levelview { display: flex; flex-direction: column;
+        min-height: calc(100dvh - 76px); }
+      .lv-focus .lesson-content { grid-template-columns: 1fr !important; gap: .6rem; flex: 1; }
+      /* Fill the width: the wrapper padding + container padding are the only
+         things between the viewport edge and the board. */
+      .lv-focus #play-board-wrap,
+      .lv-focus #chess-board-wrapper { width: 100%; max-width: 100%; padding: 3px; margin: 0; }
+      .lv-focus #play-board,
+      .lv-focus #chess-board { border-width: 1px; box-shadow: none; }
+      /* Keep the bars edge to edge with the board, not floating inside it. */
+      .lv-focus #learn-screen .container,
+      .lv-focus #lesson-screen .container { padding-left: .5rem; padding-right: .5rem; }
+      .lv-focus .lesson-detail-header { display: none; }
+      /* Keep the layout honest: the dashboard column goes away entirely. */
+      .lv-focus .lesson-dashboard { display: none !important; }
+    }
+
+    /* When focus mode is active, stick the control bar to the top of the
+       board so Undo/Restart/Next are visible immediately. */
+    .lv-focus .sticky-actions {
+      position: sticky; top: 0; bottom: auto;
+    }
+
+    .sticky-actions { display: none; }
+    @media (max-width: 860px) {
+      /* Lessons keeps this bar above the board too (app.js markup). */
+      #lesson-screen .sticky-actions {
+        display: flex; position: sticky; bottom: 0; align-self: flex-start;
+        width: 100%; box-sizing: border-box; z-index: 40;
+        align-items: center; gap: .25rem; margin-top: .3rem;
+        flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding: .35rem .5rem calc(.35rem + env(safe-area-inset-bottom, 0px));
+        background: rgba(15,23,42,.96);
+        -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        box-shadow: 0 -6px 22px rgba(0,0,0,.5);
+      }
+      #lesson-screen .sticky-actions::-webkit-scrollbar { display: none; }
+      #lesson-screen .sticky-actions .sticky-label { font-size: .68rem; font-weight: 800;
+        color: var(--text-muted); letter-spacing: .01em; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; max-width: 32%; }
+      #lesson-screen .sticky-actions .sticky-count { margin-left: auto; font-size: .8rem;
+        font-weight: 800; color: var(--accent-bright); font-variant-numeric: tabular-nums;
+        white-space: nowrap; padding-right: .2rem; }
+      #lesson-screen .sticky-actions button { flex: 0 0 auto; }
+      #lesson-screen .btn-cta.sm { padding: .4rem .8rem; min-height: 36px; font-size: .82rem; }
+    }
+
+    @media (max-width: 700px) {
+      .sticky-actions {
+        display: flex; position: sticky; bottom: 0; align-self: flex-start;
+        width: 100%; box-sizing: border-box; z-index: 40;
+        align-items: center; gap: .25rem; margin-top: .3rem;
+        flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding: .35rem .5rem calc(.35rem + env(safe-area-inset-bottom, 0px));
+        background: rgba(15,23,42,.96);
+        -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        box-shadow: 0 -6px 22px rgba(0,0,0,.5);
+      }
+      .sticky-actions::-webkit-scrollbar { display: none; }
+      .sticky-actions .sticky-label { font-size: .68rem; font-weight: 800; color: var(--text-muted);
+        letter-spacing: .01em; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; max-width: 32%; }
+      .sticky-actions .sticky-count { margin-left: auto; font-size: .8rem; font-weight: 800;
+        color: var(--accent-bright); font-variant-numeric: tabular-nums; white-space: nowrap;
+        padding-right: .2rem; }
+      .sticky-actions button { flex: 0 0 auto; }
+      .sticky-actions .btn-cta { margin-left: .15rem; }
+      .btn-cta.sm { padding: .4rem .8rem; min-height: 36px; font-size: .82rem; }
+      /* Cute pill buttons inside sticky bars */
+      .sticky-actions .sm, #lesson-screen .sticky-actions .sm {
+        display: inline-flex; align-items: center; gap: .25rem;
+        padding: .3rem .55rem; min-height: 34px; font-size: .76rem;
+        font-weight: 700; border-radius: 999px; white-space: nowrap;
+      }
+      .sticky-actions .btn-secondary.sm, #lesson-screen .sticky-actions .btn-secondary.sm {
+        background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
+        color: var(--text-main);
+      }
+      .sticky-actions .btn-secondary.sm:hover, #lesson-screen .sticky-actions .btn-secondary.sm:hover {
+        background: rgba(255,255,255,.16); border-color: var(--accent);
+      }
+      .sticky-actions .btn-primary.sm, #lesson-screen .sticky-actions .btn-primary.sm {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: #fff; border: 1px solid rgba(52,211,153,.5);
+        box-shadow: 0 0 10px rgba(16,185,129,.35);
+      }
+      .sticky-actions .btn-primary.sm:disabled, #lesson-screen .sticky-actions .btn-primary.sm:disabled {
+        opacity: .42; cursor: not-allowed; box-shadow: none;
+        background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1);
+        color: var(--text-muted);
+      }
+      .sticky-actions .icon-btn { width: 36px; height: 34px; border-radius: 999px; }
+      #lesson-screen .sticky-actions .icon-btn { width: 36px; height: 34px; border-radius: 999px; }
+      .btn-icon { font-size: .85rem; line-height: 1; }
+
+      @media (max-width: 430px) {
+        .sticky-actions .sticky-label { display: none; }
+        .sticky-actions .sticky-count { margin-left: 0; margin-right: auto; }
+        #lesson-screen .sticky-actions .sticky-label { display: none; }
+        #lesson-screen .sticky-actions .sticky-count { margin-left: 0; margin-right: auto; }
+      }
+
+      /* Lessons: keep essential controls above the board and remove bottom clutter */
+      #lesson-screen .arena { gap: .5rem; }
+      #lesson-sticky { order: 1; }
+      #lesson-focus-toggle { order: 9; }
+      #lesson-screen #chess-board-wrapper { order: 2; }
+      #lesson-screen #promotion-picker { order: 3; }
+      #lesson-feedback { order: 4; }
+      #lesson-screen #speech { order: 5; }
+      #lesson-screen #profile-opp { display: none !important; }
+      #lesson-screen .lesson-actions { display: none !important; }
+      #lesson-screen #profile-you { display: none !important; }
+      #lesson-screen .lesson-detail-header { padding: .75rem .9rem; margin-bottom: .9rem;
+        border-radius: var(--radius-sm); }
+      #lesson-screen .lesson-title { gap: .7rem; align-items: center; }
+      #lesson-screen .lesson-title .lesson-number { min-width: 34px; height: 34px; font-size: .9rem; }
+      #lesson-screen .lesson-title h2 { font-size: 1.02rem; margin-bottom: .1rem; }
+      #lesson-screen .lesson-title p { font-size: .78rem; line-height: 1.4; }
+      #lesson-screen .teacher-info { padding: .3rem .5rem; gap: .4rem; border-radius: 20px; }
+      #lesson-screen .profile-card { padding: .6rem .7rem; border-radius: var(--radius-sm); }
+      #lesson-screen .profile-card .avatar { width: 38px; height: 38px; }
+      #lesson-screen .speech-bubble { padding: .6rem .8rem; font-size: .82rem;
+        border-radius: var(--radius-sm); }
+      #lesson-screen #chess-board-wrapper { width: 100%; padding: 6px; border-radius: var(--radius-sm); }
+      #lesson-screen .coord-file, #lesson-screen .coord-rank { font-size: .58rem; }
+      #lesson-screen .feedback { padding: .8rem 1rem; font-size: .88rem; margin-top: 1rem; }
+    }
+
+    /* ── Goal markers ── */
+    .goal-mark { position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; font-size: 1.7rem; pointer-events: none; z-index: 6; }
+    .goal-mark[data-kind="star"] { color: #fbbf24; text-shadow: 0 2px 6px rgba(0,0,0,.75);
+      animation: goalStarFloat 1.9s ease-in-out infinite; }
+    .goal-mark[data-kind="target"] { color: #f87171; text-shadow: 0 2px 6px rgba(0,0,0,.75);
+      animation: goalTargetPulse 1.5s ease-in-out infinite; }
+    /* Goal glow. Promoted to its own compositor layer (will-change: opacity) so
+       the pulsing repaints NOTHING — animating opacity on a gradient
+       without the hint makes the browser re-rasterise the gradient on every
+       frame, which showed up as multi-frame stutter on the move. */
+    .chess-square.has-star::after, .chess-square.has-target::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+      background: radial-gradient(circle at 50% 50%, rgba(251,191,36,.42), transparent 68%);
+      will-change: opacity;
+      animation: goalGlow 2.4s ease-in-out infinite;
+    }
+    .chess-square.has-target::after {
+      background: radial-gradient(circle at 50% 50%, rgba(248,113,113,.45), transparent 68%);
+      animation-duration: 1.7s;
+    }
+    /* Landing flash — added by board.js on a scored square. */
+    .chess-square.goal-hit::before { content: ''; position: absolute; inset: 0; z-index: 7;
+      pointer-events: none; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.9), rgba(255,255,255,0) 70%);
+      animation: goalHit .6s ease-out forwards; }
+
+    /* Celebration burst (board.js spawns .goal-burst with 8 <i> sparks). */
+    .goal-burst { position: absolute; inset: 0; z-index: 8; pointer-events: none;
+      display: flex; align-items: center; justify-content: center; }
+    .goal-burst-glyph { font-size: 1.9rem; color: var(--gold);
+      text-shadow: 0 0 12px rgba(251,191,36,.9); animation: burstGlyph .62s cubic-bezier(.3,1.5,.4,1) forwards; }
+    .goal-burst[data-kind="target"] .goal-burst-glyph { color: #f87171; text-shadow: 0 0 12px rgba(248,113,113,.9); }
+    .goal-burst i { position: absolute; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--gold); box-shadow: 0 0 8px rgba(251,191,36,.9);
+      animation: burstSpark .6s cubic-bezier(.2,.8,.3,1) var(--sd, 0ms) forwards; }
+    .goal-burst[data-kind="target"] i { background: #f87171; box-shadow: 0 0 8px rgba(248,113,113,.9); }
+
+    /* ── Level goals ── */
+    .chess-square.is-obstacle::before { content: ''; position: absolute; inset: 0; z-index: 1;
+      background: repeating-linear-gradient(45deg, rgba(220,50,50,.38) 0 6px, transparent 6px 12px);
+      animation: lavaSlide 1.4s linear infinite; }
+    .chess-square.is-reach::before { content: ''; position: absolute; inset: 0; z-index: 2;
+      pointer-events: none; box-shadow: inset 0 0 0 3px var(--accent-bright), inset 0 0 20px rgba(52,211,153,.55);
+      animation: reachBreathe 1.6s ease-in-out infinite; }
+
+    /* ── Dashboard extras ── */
+    .dashboard-section .dash-h { color: var(--accent-bright); font-family: 'Inter', system-ui, sans-serif;
+      margin-bottom: .75rem; }
+    #hint-text:not(:empty) { margin-top: .75rem; padding: .7rem .9rem; border-radius: var(--radius-sm);
+      background: rgba(14,165,233,.12); border: 1px solid rgba(14,165,233,.28); color: #7dd3fc; font-size: .9rem; }
+    #solve-text:not(:empty) { margin-top: .5rem; }
+    .kbd { font-size: .75rem; color: var(--text-muted-dim); margin-top: .75rem; }
+    .lv-result-card { text-align: center; animation: resultIn .38s cubic-bezier(.2,.9,.3,1) backwards; }
+    #result .big-stars { display: flex; justify-content: center; gap: 6px; font-size: 2.1rem; line-height: 1; }
+    #result .big-stars .on { display: inline-block; color: var(--gold); text-shadow: 0 0 14px rgba(251,191,36,.85);
+      animation: starPop .55s cubic-bezier(.3,1.7,.4,1) backwards; }
+    #result .big-stars .off { display: inline-block; color: var(--text-muted-dim); opacity: .35; }
+    #r-text { margin: .5rem 0 1rem; color: var(--text-muted); font-size: .93rem; }
     .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
     .btnrow button { min-height: 44px; }
     .btnrow[hidden] { display: none; }
-    .lv-nav { justify-content: space-between; align-items: center; }
-    .lv-nav #next-lvl-btn[disabled] { opacity: .5; cursor: default; }
-    #hint-text, #fb-text { min-height: 1.4em; font-size: .92rem; color: var(--text-muted); }
-    #promo-row button { font-size: 1.4rem; padding: 6px 12px; }
-    #result { display: none; text-align: center; }
-    #result.show { display: block; }
-    #result .big-stars { font-size: 2rem; color: var(--gold); letter-spacing: 4px; }
-    .kbd { font-size: .75rem; color: var(--text-muted-dim); }
+    .promo-glyph { font-size: 1.7rem; line-height: 1; }
+
+    /* ── Keyframes ── */
+    @keyframes lvCardIn { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+    @keyframes starPop { 0% { opacity: 0; transform: scale(.2) rotate(-40deg); }
+                         60% { opacity: 1; transform: scale(1.35) rotate(8deg); }
+                         100% { opacity: 1; transform: scale(1) rotate(0); } }
+    @keyframes goalStarFloat {
+      0%, 100% { transform: translateY(0) scale(1) rotate(-6deg); opacity: .92; }
+      50% { transform: translateY(-16%) scale(1.14) rotate(6deg); opacity: 1; }
+    }
+    @keyframes goalTargetPulse {
+      0%, 100% { transform: scale(.9); opacity: .8; }
+      50% { transform: scale(1.16); opacity: 1; }
+    }
+    /* Opacity-only keyframes: compositable, so the browser never re-rasterises. */
+    @keyframes goalGlow { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+    @keyframes goalHit { 0% { opacity: .95; transform: scale(.35); } 100% { opacity: 0; transform: scale(1.1); } }
+    @keyframes burstGlyph {
+      0% { opacity: 0; transform: scale(.3) rotate(-30deg); }
+      55% { opacity: 1; transform: scale(1.5) rotate(6deg); }
+      100% { opacity: 0; transform: scale(1.9) translateY(-24%) rotate(14deg); }
+    }
+    @keyframes burstSpark {
+      0% { opacity: 1; transform: translate(0, 0) scale(1); }
+      100% { opacity: 0; transform: translate(var(--dx, 0), var(--dy, 0)) scale(.2); }
+    }
+    @keyframes lavaSlide { to { background-position: 12px 0; } }
+    @keyframes reachBreathe {
+      0%, 100% { opacity: .6; } 50% { opacity: 1; }
+    }
+    @keyframes resultIn { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+
+    /* Respect the OS setting: no decorative motion, no glide (JS checks too). */
+    @media (prefers-reduced-motion: reduce) {
+      #learn-screen *, #learn-screen *::before, #learn-screen *::after {
+        animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+      }
+    }
+
+    @media (max-width: 1000px) {
+      #learn-screen .lesson-content { grid-template-columns: 1fr; }
+      #play-board-wrap { width: min(100%, calc(100vh - 340px), 620px); }
+    }
+    /* ── Phone: get out of the board's way ───────────────────────────
+       On a small screen the BOARD is the whole task. Lichess does the same
+       thing: a compact title line, then the board, and every explanation
+       pushed below it.
+
+       The .arena is a flex column, so reordering is pure `order` — no DOM
+       moves, no duplicated markup, and the desktop order is untouched. */
+    @media (max-width: 700px) {
+      /* Board + its compact bars come first. */
+      .lv-achieve    { order: 1; }
+      #lv-sticky     { order: 2; }
+      #play-board-wrap { order: 3; }
+      #promo-row     { order: 4; }
+      #lv-feedback   { order: 5; }
+      /* Secondary info below the board: redundant controls removed */
+      #fb-text       { order: 6; }
+      .lv-goal-card  { display: none !important; }
+      .lv-actions    { display: none !important; }
+      #lv-you        { order: 9; }
+
+      .lesson-detail-header { padding: .75rem .9rem; margin-bottom: .9rem; border-radius: var(--radius-sm); }
+      .lesson-title { gap: .7rem; align-items: center; }
+      .lesson-title .lesson-number { min-width: 34px; height: 34px; font-size: .9rem; }
+      .lesson-title h2 { font-size: 1.02rem; margin-bottom: .1rem; }
+      .lesson-title p { font-size: .78rem; line-height: 1.4; }
+      .teacher-info { padding: .3rem .5rem; gap: .4rem; border-radius: 20px; }
+      .teacher-info .lv-chip { font-size: .62rem; padding: .18rem .45rem; }
+      .teacher-info .lv-stars { font-size: .82rem; gap: 2px; }
+      /* Goal card: single compact row. */
+      .lv-goal-card { padding: .6rem .7rem; gap: .6rem; border-radius: var(--radius-sm); }
+      .lv-avatar { width: 38px; height: 38px; font-size: 1.05rem; }
+      .profile-card .info .name { font-size: .88rem; }
+      .profile-card .info .sub { font-size: .7rem; }
+      .lv-counter { font-size: .88rem; padding: .22rem .55rem; }
+      .speech-bubble { padding: .6rem .8rem; font-size: .82rem; border-radius: var(--radius-sm); }
+      .lv-achieve { margin-bottom: .4rem; padding: .25rem .6rem; }
+      .lv-achieve-stars { font-size: .95rem; }
+      .lv-achieve-text { font-size: .74rem; }
+      /* Board: full-bleed, square, edge to edge. */
+      #play-board-wrap { width: 100%; padding: 6px; border-radius: var(--radius-sm); }
+      #play-board .coord-file, #play-board .coord-rank { font-size: .58rem; }
+      #play-board .goal-mark { font-size: 1.35rem; }
+      /* Actions 2-up under the board; the sticky bar handles "next". */
+      .lv-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: 1rem; }
+      .lv-actions #next-lvl-btn { grid-column: 1 / -1; width: 100%; margin-left: 0; }
+      .feedback { padding: .8rem 1rem; font-size: .88rem; margin-top: 1rem; }
+    }
     </style>
 </head>
 <body>
@@ -166,46 +608,140 @@
                 </div>
             </div>
 
-            <!-- Learn Screen: free-move curriculum (36 levels, Stage 1) -->
+            <!-- Learn Screen: free-move curriculum (36 levels, Stage 1)
+                 Same arena layout as the Lessons screen on purpose: one shared
+                 board frame, one action row, one dashboard. Level-specific
+                 pieces only add a goal card + move log in the dashboard. -->
             <div id="learn-screen" class="screen" tabindex="-1">
                 <div class="container">
-                    <h2>Learn — Stage 1: The Pieces</h2>
+                    <h2 id="learn-heading">Learn — Stage 1: The Pieces</h2>
                     <div id="picker"></div>
                     <div id="levelview" hidden>
-                        <div class="btnrow lv-nav" style="margin-bottom:10px">
-                            <button class="btn-secondary" id="back-btn" type="button">← All levels</button>
-                            <button class="btn-primary" id="next-lvl-btn" type="button">Next →</button>
-                        </div>
-                        <div class="level-layout">
-                            <div id="play-board-wrap"><div id="play-board"></div></div>
-                            <div class="panel">
-                                <h2 id="lv-title"></h2>
-                                <p id="lv-goal"></p>
-                                <div class="counter"><span id="mv">0</span> <span class="par">/ par <span id="par">–</span></span></div>
-                                <div id="fb-text" role="status" aria-live="polite"></div>
-                                <div id="hint-text" aria-live="polite"></div>
-                                <div class="btnrow" id="promo-row" hidden>
-                                    <button type="button" data-promo="q" aria-label="Promote to queen">♕</button>
-                                    <button type="button" data-promo="r" aria-label="Promote to rook">♖</button>
-                                    <button type="button" data-promo="b" aria-label="Promote to bishop">♗</button>
-                                    <button type="button" data-promo="n" aria-label="Promote to knight">♘</button>
+                        <div class="lesson-detail-header" data-focus-hide>
+                            <div class="lesson-title">
+                                <div class="lesson-number" id="lv-num">1</div>
+                                <div>
+                                    <h2 id="lv-title"></h2>
+                                    <p id="lv-goal"></p>
                                 </div>
-                                <div class="btnrow">
+                            </div>
+                            <div class="teacher-info">
+                                <span class="lv-chip" id="lv-group">Rook</span>
+                                <span class="lv-stars" id="lv-stars" aria-label="Stars earned">☆☆☆</span>
+                            </div>
+                        </div>
+
+                        <div class="lesson-content">
+                            <div class="arena">
+                                <!-- Goal card: stands in for the opponent card -->
+                                <div class="profile-card opponent lv-goal-card" id="lv-goalcard" data-focus-hide>
+                                    <div class="avatar lv-avatar" aria-hidden="true">★</div>
+                                    <div class="info">
+                                        <span class="name" id="lv-opp-name">Goal</span>
+                                        <span class="sub" id="lv-opp-sub">Reach the marked squares</span>
+                                        <div class="captured-row" id="lv-goal-track" aria-hidden="true"></div>
+                                    </div>
+                                    <div class="turn-indicator lv-progress" id="lv-opp-turn">0 / 3</div>
+                                </div>
+
+                                <div class="speech-bubble" id="fb-text" role="status" aria-live="polite" data-focus-hide></div>
+
+                                <!-- Achievement strip: sits directly ABOVE the board so the
+                                     stars and the score line are on screen the moment the
+                                     level opens — on a phone the board already fills the
+                                     viewport, so anything below it is invisible. -->
+                                <div class="lv-achieve" id="lv-achieve">
+                                    <span class="lv-achieve-stars" id="lv-achieve-stars" aria-hidden="true">★★★</span>
+                                    <span class="lv-achieve-text" id="lv-achieve-text"></span>
+                                </div>
+
+                                <!-- Compact bar, ABOVE the board. Holds what must never be
+                                     off-screen on a phone: the move counter, undo, "next
+                                     stage", and the focus-mode toggle.
+                                     position: sticky + bottom:0 pins it to the viewport
+                                     bottom once the board reaches it; because it sits
+                                     ABOVE the board it can never cover a rank. -->
+                                <div class="sticky-actions" id="lv-sticky">
+                                    <span class="sticky-label" id="lv-sticky-label">Level 1</span>
+                                    <span class="sticky-count"><span id="lv-sticky-mv">0</span>/<span id="lv-sticky-par">–</span></span>
+                                    <button class="btn-secondary sm" id="lv-sticky-undo" type="button" title="Undo move"><span class="btn-icon">↶</span> Undo</button>
+                                    <button class="btn-secondary sm" id="lv-sticky-restart" type="button" title="Restart level"><span class="btn-icon">↺</span> Reset</button>
+                                    <button class="btn-secondary sm" id="lv-sticky-hint" type="button" title="Hint"><span class="btn-icon">💡</span> Hint</button>
+                                    <button class="btn-cta sm" id="lv-sticky-next" type="button">Next →</button>
+                                    <button class="icon-btn" id="lv-focus-toggle" data-focus-toggle type="button"
+                                            aria-expanded="true" aria-controls="levelview"
+                                            aria-label="Hide everything except the board" title="Focus mode">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M16 3v18"/></g></svg>
+                                    </button>
+                                </div>
+
+                                <div id="play-board-wrap"><div id="play-board" role="group" aria-label="Chess board"></div></div>
+
+                                <div id="promo-row" class="promotion-picker" hidden>
+                                    <div class="promotion-label">Choose your promotion piece</div>
+                                    <div class="promotion-options">
+                                        <button class="promotion-btn" type="button" data-promo="q" aria-label="Promote to queen"><span class="promo-glyph">♕</span><span>Queen</span></button>
+                                        <button class="promotion-btn" type="button" data-promo="r" aria-label="Promote to rook"><span class="promo-glyph">♖</span><span>Rook</span></button>
+                                        <button class="promotion-btn" type="button" data-promo="b" aria-label="Promote to bishop"><span class="promo-glyph">♗</span><span>Bishop</span></button>
+                                        <button class="promotion-btn" type="button" data-promo="n" aria-label="Promote to knight"><span class="promo-glyph">♘</span><span>Knight</span></button>
+                                    </div>
+                                </div>
+
+                                <div id="lv-feedback" class="feedback info" role="status" aria-live="polite" data-focus-hide>Pick your piece to begin.</div>
+
+                                <div class="lesson-actions lv-actions" data-focus-hide>
                                     <button class="btn-secondary" id="hint-btn" type="button">Hint (H)</button>
                                     <button class="btn-secondary" id="undo-btn" type="button">Undo (U)</button>
                                     <button class="btn-secondary" id="restart-btn" type="button">Restart (R)</button>
                                     <button class="btn-secondary" id="solve-btn" type="button">Solution</button>
+                                    <button class="btn-secondary" id="back-btn" type="button">← All levels</button>
+                                    <!-- Next stage lives with the board. On a phone the page
+                                         is much taller than the viewport, so it is ALSO
+                                         mirrored into the sticky bar placed ABOVE the
+                                         board — a sticky bar below the board would not be
+                                         on screen until you scrolled past the board. -->
+                                    <button class="btn-cta" id="next-lvl-btn" type="button">Next stage →</button>
                                 </div>
-                                <div id="solve-text" class="kbd"></div>
-                                <div id="result">
-                                    <div class="big-stars" id="r-stars"></div>
+
+                                <!-- Player card: mirrors the Lessons screen footer -->
+                                <div class="profile-card player your-turn" id="lv-you" data-focus-hide>
+                                    <div class="avatar lv-avatar you" aria-hidden="true">♟</div>
+                                    <div class="info">
+                                        <span class="name">You</span>
+                                        <span class="sub" id="lv-you-sub">White · move 0</span>
+                                        <div class="captured-row" id="lv-caps" aria-hidden="true"></div>
+                                    </div>
+                                    <div class="counter lv-counter"><span id="mv">0</span> <span class="par">/ par <span id="par">–</span></span></div>
+                                </div>
+                            </div>
+
+                            <div class="lesson-dashboard" data-focus-hide>
+                                <div class="dashboard-section">
+                                    <h4 class="dash-h">Brief</h4>
+                                    <div class="lesson-explanation">
+                                        <h4>Why</h4>
+                                        <p id="lv-explain"></p>
+                                    </div>
+                                    <div class="exercise-instructions">
+                                        <h4>Goal</h4>
+                                        <p id="lv-brief"></p>
+                                    </div>
+                                    <div id="hint-text" aria-live="polite"></div>
+                                    <div id="solve-text" class="kbd"></div>
+                                    <p class="kbd">Enter/Space: move · Arrows: cursor · U undo · R restart · H hint · N next stage</p>
+                                </div>
+                                <div class="dashboard-section">
+                                    <h4 class="dash-h">Move Log</h4>
+                                    <div class="move-log" id="lv-log" role="log" aria-live="polite" aria-label="Move log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
+                                </div>
+                                <div class="dashboard-section lv-result-card" id="result" hidden>
+                                    <div class="big-stars" id="r-stars" aria-hidden="true"></div>
                                     <p id="r-text"></p>
                                     <div class="btnrow" style="justify-content:center">
                                         <button class="btn-secondary" id="retry-btn" type="button">Retry</button>
                                         <button class="btn-primary" id="next-btn" type="button">Next →</button>
                                     </div>
                                 </div>
-                                <p class="kbd">Enter/Space: move · Arrows: cursor · U undo · R restart · H hint · N next level</p>
                             </div>
                         </div>
                     </div>
@@ -271,7 +807,7 @@
          meta-CSP (inline) and by file:// (CORS), which is why levels never
          loaded. Classic + external is allowed in both. Built from js/*.js by
          tools/build-learn.mjs — edit the sources, then rebuild. -->
-    <script defer src="js/learn.bundle.js?v=2"></script>
+    <script defer src="js/learn.bundle.js?v=3"></script>
 
 </body>
 </html>
