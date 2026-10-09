@@ -149,6 +149,7 @@ class ChessCourseApp {
         window.showLesson   = () => this.showLesson();
         window.showOnline   = () => this.showOnline();
         window.showProfile  = () => this.showProfile();
+        window.showStudy    = () => this.showStudy();
         window.toggleTheme  = (el) => this.toggleTheme(el);
         window.app          = this;
         this._applyTheme(this._resolveTheme(), false);
@@ -243,6 +244,14 @@ class ChessCourseApp {
                 else if (a === 'profile-signin') this._profileSignIn();
                 else if (a === 'manage-account') this.openUserProfile();
                 else if (a === 'logout') this.signOut();
+                else if (a === 'goto-online') this.showOnline();
+                else if (a === 'hist-more') this._histPage(10);
+                else if (a === 'hist-less') this._histPage(-10);
+                else if (a === 'hist-open') this._histOpen(action.dataset.game);
+                else if (a === 'hist-close') this._histClose();
+                else if (a === 'hist-nav') this._histNav(action.dataset.where);
+                else if (a === 'hist-goto') this._histGoto(parseInt(action.dataset.ply, 10));
+                else if (a === 'hist-to-study') { if (window.DoChessStudy) window.DoChessStudy.importGame(action.dataset.game); }
             });
         }
     }
@@ -299,6 +308,8 @@ class ChessCourseApp {
     getPieceSVG(p) { return this._svg(p); }
 
     // Small drawn stat icons, one consistent 24px stroke set.
+    // Profile-only additions (check/sliders/bolt/cal/flag/up/down/lock/play/star)
+    // follow the same stroke language so the dossier reads as one system.
     _tileIcon(name) {
         const paths = {
             book: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20"/>',
@@ -308,7 +319,17 @@ class ChessCourseApp {
             board: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/>',
             trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a3 3 0 0 0 3 5M17 6h3a3 3 0 0 1-3 5M12 14v4M8 21h8"/>',
             medal: '<circle cx="12" cy="14" r="5"/><path d="M9 9L6 3h4l2 4 2-4h4l-3 6"/>',
-            list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>'
+            list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+            check: '<path d="M4 12.5l5 5L20 6.5"/>',
+            sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/>',
+            bolt: '<path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/>',
+            cal: '<rect x="4" y="6" width="16" height="14" rx="2"/><path d="M4 10.5h16M8.5 3v5M15.5 3v5"/>',
+            flag: '<path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/>',
+            up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+            down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+            lock: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+            play: '<path d="M7 4l13 8-13 8z"/>',
+            star: '<path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2-5.6-3.2-5.6 3.2 1.3-6.2L3 9.5l6.3-.7z"/>'
         };
         return `<span class="stat-ic"><svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.target}</svg></span>`;
     }
@@ -462,6 +483,8 @@ class ChessCourseApp {
         this._studySince = Date.now();
         this.userId = userId || null;
         this.progress = this._loadProgress();
+        this._histShown = 10; // history paging is per player
+        this._studyGameId = null; this._studyPly = null; // study viewer is per player
         this._syncProgress();
         if (document.getElementById('lessons-screen')?.classList.contains('active')) this._renderLessons();
         if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
@@ -3450,6 +3473,7 @@ class ChessCourseApp {
     showLesson()   { this._go('lesson-screen'); }
     showProgress() { this._go('progress-screen'); this._syncProgress(); }
     showProfile()  { this._go('profile-screen');  this._renderProfile(); }
+    showStudy()    { this._go('study-screen'); if (window.DoChessStudy) window.DoChessStudy.open(); }
 
     openUserProfile() {
         if (this._clerk && this._clerk.user) {
@@ -3614,63 +3638,100 @@ class ChessCourseApp {
         btn.title = isDay ? 'Switch to night mode' : 'Switch to day mode';
     }
 
+    /* ══════════════════════════════════════════════════════════════
+       PROFILE — DoChess command center (profile page only)
+       One identity panel, one study band, a battle dossier with a
+       ratings rail, an honest match history and a lesson timeline.
+       Every number is real device data; nothing is mocked. Shared
+       contracts kept: .profile-id h3 (xss test), .stat-value (elo
+       test), [data-open-lesson], [data-action=profile-signin/
+       manage-account/logout/goto-online].
+    ══════════════════════════════════════════════════════════════ */
     _renderProfile() {
         const box = document.getElementById('profile-content');
         if (!box) return;
         const user = this._clerk?.user || null;
         if (!user) {
             box.innerHTML = `
-                <div class="profile-card profile-hero">
-                    <img class="profile-avatar" src="assets/pieces/white-king.svg?${ChessCourseApp.assetV()}" width="96" height="96" alt="Guest">
-                    <div class="profile-id">
-                        <h3>Guest learner</h3>
-                        <p>Sign in to track this course across devices — progress stays on this browser until then.</p>
-                        <p class="profile-joined"><span class="presence-dot"></span>${this._lastSeenText()}</p>
-                    </div>
-                </div>
-                ${this._profileStatsHTML('Guest learner')}
-                <div class="profile-card block">
-                    <h4 class="profile-sub">Lesson record</h4>
-                    <div class="profile-lessons">${this._profileLessonsHTML()}</div>
-                </div>
-                <div class="profile-actions">
-                    <button class="btn-primary btn-glow-strong" data-action="profile-signin">Sign in / Join</button>
-                </div>`;
+            <div class="dc-profile">
+                ${this._profileIdentityHTML(null)}
+                ${this._profileStudyHTML()}
+                ${this._profileLessonsHTML()}
+            </div>`;
             return;
+        }
+        box.innerHTML = `
+            <div class="dc-profile">
+                ${this._profileIdentityHTML(user)}
+                ${this._profileStudyHTML()}
+                <div class="dc-split">
+                    ${this._profileBattleHTML()}
+                    ${this._profileRatingsHTML()}
+                </div>
+                ${this._profileGamesHTML()}
+                ${this._profileLessonsHTML()}
+                <div class="dc-actions">
+                    <button class="btn-secondary" data-action="manage-account" type="button">Manage account</button>
+                    <button class="btn-secondary" data-action="logout" type="button">Log out</button>
+                </div>
+            </div>`;
+        this._bindHistPics();
+        this._paintStudy();
+    }
+
+    /* Identity: avatar with presence, name, email, membership, live
+       status, current Blitz chip with a genuine last-game trend, and
+       earned-only distinctions. The side CTA is the real next action. */
+    _profileIdentityHTML(user) {
+        const seen = esc(this._lastSeenText());
+        if (!user) {
+            return `
+            <section class="dc-panel dc-id" aria-label="Player identity">
+                <div class="dc-avatar">
+                    <img class="dc-avatar-img" src="assets/pieces/white-king.svg?${ChessCourseApp.assetV()}" width="88" height="88" alt="Guest learner">
+                    <span class="dc-presence" title="${seen}"></span>
+                </div>
+                <div class="profile-id dc-id-main">
+                    <h3>Guest learner</h3>
+                    <p class="dc-line">Sign in to track this course across devices — progress stays on this browser until then.</p>
+                    <p class="dc-meta"><span class="presence-dot" aria-hidden="true"></span>${seen}</p>
+                </div>
+                <div class="dc-id-side">
+                    <button class="btn-primary" data-action="profile-signin" type="button">Sign in / Join</button>
+                </div>
+            </section>`;
         }
         const name = user.fullName || user.username || (user.primaryEmailAddress?.emailAddress) || 'Player';
         const email = user.primaryEmailAddress?.emailAddress || '';
-        const img = (typeof user.imageUrl === 'string' && /^https:/.test(user.imageUrl)) ? user.imageUrl : `assets/pieces/white-king.svg?${ChessCourseApp.assetV()}`;
+        const rawImg = user.imageUrl;
+        const img = (typeof rawImg === 'string' && /^https:/.test(rawImg)) ? rawImg : null;
+        const av = img
+            ? `<img class="dc-avatar-img" src="${esc(img)}" width="88" height="88" alt="${esc(name)}">`
+            : `<span class="dc-avatar-letter" aria-hidden="true">${esc((name || 'P')[0].toUpperCase())}</span>`;
         let joined = '';
         try { if (user.createdAt) joined = new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }); } catch (_) {}
-        box.innerHTML = `
-            <div class="profile-card profile-hero">
-                <img class="profile-avatar" src="${esc(img)}" width="96" height="96" alt="${esc(name)}">
-                <div class="profile-id">
+        const blitz = OnlineRatings.get(this.userId, 'blitz');
+        const trend = this._blitzTrend();
+        const trendChip = !trend || trend.d === 0 ? '' :
+            `<span class="dc-trend ${trend.d > 0 ? 'up' : 'down'}" title="Last Blitz game: ${trend.d > 0 ? '+' : ''}${trend.d} vs ${trend.opp}">
+                <svg viewBox="0 0 8 8" aria-hidden="true"><path d="${trend.d > 0 ? 'M4 1l3 5H1z' : 'M4 7L1 2h6z'}"/></svg>${trend.d > 0 ? '+' : ''}${trend.d}
+            </span>`;
+        return `
+            <section class="dc-panel dc-id" aria-label="Player identity">
+                <div class="dc-avatar">${av}<span class="dc-presence" title="${seen}"></span></div>
+                <div class="profile-id dc-id-main">
                     <h3>${esc(name)}</h3>
-                    ${email ? `<p>${esc(email)}</p>` : ''}
-                    ${joined ? `<p class="profile-joined">Playing since ${esc(joined)}</p>` : ''}
-                    <p class="profile-joined"><span class="presence-dot"></span>${esc(this._lastSeenText())}</p>
+                    ${email ? `<p class="dc-line">${esc(email)}</p>` : ''}
+                    <p class="dc-meta">
+                        ${joined ? `<span>Playing since ${esc(joined)}</span><span class="dc-sep" aria-hidden="true">·</span>` : ''}
+                        <span><span class="presence-dot" aria-hidden="true"></span>${seen}</span>
+                        <span class="dc-sep" aria-hidden="true">·</span>
+                        <span class="dc-rate-chip" title="Current Blitz rating">Blitz <strong>${blitz}</strong>${trendChip}</span>
+                    </p>
+                    ${this._profileBadgesHTML()}
                 </div>
-            </div>
-            ${this._profileStatsHTML(name)}
-            ${this._profileBattleHTML()}
-            <div class="profile-card block">
-                <h4 class="profile-sub">Online ratings</h4>
-                <div class="progress-stats">
-                    ${ChessCourseApp.onlineControls().map(c => `
-                        <div class="stat"><span class="stat-label">${c.name} ${c.label}</span><span class="stat-value" style="font-size:1.75rem">${OnlineRatings.get(this.userId, c.id)}</span></div>`).join('')}
-                </div>
-                <p style="font-size:.82rem;color:var(--text-muted-dim);margin-top:.75rem">Elo per time control, updated after every rated online game. Ratings live on this device.</p>
-            </div>
-            <div class="profile-card block">
-                <h4 class="profile-sub">Lesson record</h4>
-                <div class="profile-lessons">${this._profileLessonsHTML()}</div>
-            </div>
-            <div class="profile-actions">
-                <button class="btn-secondary" data-action="manage-account">Manage account</button>
-                <button class="btn-secondary" data-action="logout">Log out</button>
-            </div>`;
+                <div class="dc-id-side">${this._profileNextHTML()}</div>
+            </section>`;
     }
 
     _profileSignIn() {
@@ -3678,63 +3739,556 @@ class ChessCourseApp {
         this._fb('Sign-in is unavailable right now.', 'error');
     }
 
-    _profileStatsHTML(name) {
-        const n = this.progress.done.length, total = this.lessons.length;
-        const pct = Math.round((n / total) * 100);
-        return `
-            <div class="progress-overview profile-stats">
-                <h3>${name === 'Guest learner' ? 'Course stats' : 'Stats'}</h3>
-                <div class="progress-stats">
-                    <div class="stat">${this._tileIcon('book')}<span class="stat-label">Lessons Completed</span><span class="stat-value">${n}</span></div>
-                    <div class="stat">${this._tileIcon('layers')}<span class="stat-label">Total Lessons</span><span class="stat-value">${total}</span></div>
-                    <div class="stat">${this._tileIcon('target')}<span class="stat-label">Completion</span><span class="stat-value">${pct}%</span></div>
-                    <div class="stat">${this._tileIcon('clock')}<span class="stat-label">Time Studied</span><span class="stat-value" style="font-size:1.75rem">${this._fmtDuration(this._studyTotal())}</span></div>
-                </div>
-            </div>`;
+    /* Earned distinctions only: course completion and the rating
+       system's own provisional/established state. No titles invented. */
+    _profileBadgesHTML() {
+        const out = [];
+        if (this.lessons.length && this.progress.done.length === this.lessons.length) {
+            out.push(`<span class="dc-badge gold">${this._tileIcon('star')}Course graduate</span>`);
+        }
+        try {
+            const b = OnlineRatings.record(this.userId, 'blitz');
+            if (b.games >= 10) out.push('<span class="dc-badge">Established · Blitz</span>');
+            else if (b.games > 0) out.push(`<span class="dc-badge">Provisional · ${b.games}/10</span>`);
+        } catch (_) {}
+        return out.length ? `<div class="dc-badges">${out.join('')}</div>` : '';
     }
 
+    /* Last rated Blitz delta, for the identity trend chip. Null when
+       there is no genuine rated game to point at. */
+    _blitzTrend() {
+        try {
+            const h = OnlineRatings.history(this.userId) || [];
+            const g = h.find(x => this._histControlId(x) === 'blitz' && x.delta !== null && x.delta !== undefined);
+            if (!g) return null;
+            const d = Math.trunc(+g.delta);
+            if (!Number.isFinite(d)) return null;
+            return { d, opp: this._histOppName(g) };
+        } catch (_) { return null; }
+    }
+
+    /* The real next step: first open-but-incomplete lesson, or the
+       full game once the course is done. */
+    _profileNextHTML() {
+        const cur = this._currentLesson();
+        if (!cur) return `<button class="btn-primary" data-open-lesson="10" type="button">Play a full game</button>`;
+        const label = this.progress.done.length === 0 ? `Start Lesson ${cur.id}` : `Continue · Lesson ${cur.id}`;
+        return `<button class="btn-primary" data-open-lesson="${cur.id}" type="button">${label}</button>
+            <span class="dc-next-sub">${esc(cur.title)}</span>`;
+    }
+
+    /* Study band: one panel, three divider-separated facts. All four
+       course metrics live here: done count, total, percent, time. */
+    _profileStudyHTML() {
+        const n = this.progress.done.length, total = this.lessons.length;
+        const pct = total ? Math.round((n / total) * 100) : 0;
+        const cur = this._currentLesson();
+        return `
+            <section class="dc-panel dc-study" aria-label="Course progress">
+                <div class="dc-cell dc-cell-main">
+                    <div class="dc-cell-top">${this._tileIcon('book')}<span class="dc-label">Lessons completed</span></div>
+                    <div class="dc-num"><span class="stat-value">${n}</span><span class="dc-of">of ${total}</span></div>
+                    <div class="dc-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Course completion, ${pct} percent" title="${pct}% complete"><span style="width:${pct}%"></span></div>
+                </div>
+                <div class="dc-cell">
+                    <div class="dc-cell-top">${this._tileIcon('target')}<span class="dc-label">Completion</span></div>
+                    <div class="dc-num"><span class="stat-value">${pct}%</span></div>
+                    <div class="dc-sub">${cur ? esc(`Up next · Lesson ${cur.id}`) : 'Course complete'}</div>
+                </div>
+                <div class="dc-cell">
+                    <div class="dc-cell-top">${this._tileIcon('clock')}<span class="dc-label">Time studied</span></div>
+                    <div class="dc-num"><span class="stat-value">${esc(this._fmtDuration(this._studyTotal()))}</span></div>
+                    <div class="dc-sub">on this device</div>
+                </div>
+            </section>`;
+    }
+
+    /* Battle dossier: headline figures with distinct treatments plus
+       a genuine W–D–L proportion bar. Blitz-scoped where the legacy
+       metrics are Blitz-scoped; labelled so. */
     _profileBattleHTML() {
         const cats = ChessCourseApp.onlineControls();
         const recs = cats.map(c => ({ c, r: OnlineRatings.record(this.userId, c.id) }));
         const games = recs.reduce((a, x) => a + x.r.games, 0);
+        const head = `<div class="dc-head"><h3>Battle record</h3>${games ? `<span class="dc-count">${games} rated game${games === 1 ? '' : 's'}</span>` : ''}</div>`;
+        if (!games) {
+            return `
+            <section class="dc-panel dc-battle" aria-label="Battle record">${head}
+                <div class="dc-empty"><p>No rated games yet — challenge a friend to open your battle record.</p>
+                <button class="btn-secondary sm" data-action="goto-online" type="button">Play online</button></div>
+            </section>`;
+        }
         const blitz = recs.find(x => x.c.id === 'blitz').r;
-        const tiles = `
-            <div class="stat">${this._tileIcon('board')}<span class="stat-label">Games</span><span class="stat-value">${games}</span></div>
-            <div class="stat">${this._tileIcon('trophy')}<span class="stat-label">Win Rate</span><span class="stat-value">${blitz.games ? blitz.winRate + '%' : '—'}</span></div>
-            <div class="stat">${this._tileIcon('medal')}<span class="stat-label">Best Blitz</span><span class="stat-value" style="font-size:1.75rem">${blitz.games ? blitz.best : '—'}</span></div>
-            <div class="stat">${this._tileIcon('list')}<span class="stat-label">Record (B)</span><span class="stat-value" style="font-size:1.5rem">${blitz.games ? `${blitz.w}–${blitz.l}–${blitz.d}` : '—'}</span></div>`;
-        const hist = OnlineRatings.history(this.userId);
-        const rows = hist.length ? hist.map(g => {
-            const badge = g.result === 'win' ? '<span class="res-badge res-win">W</span>' : g.result === 'loss' ? '<span class="res-badge res-loss">L</span>' : '<span class="res-badge res-draw">D</span>';
-            const ctrl = (cats.find(c => c.id === g.control) || { name: g.control }).name;
-            const when = new Date(g.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-            const d = (g.delta === null || g.delta === undefined) ? '' : `<span class="delta ${g.delta >= 0 ? 'up' : 'down'}">${g.delta >= 0 ? '+' : ''}${g.delta}</span>`;
-            return `<div class="profile-lesson-row">${badge}<span class="profile-lesson-title">vs ${esc(g.opp)}</span><span class="recent-meta">${esc(ctrl)} · ${Math.ceil((g.plies || 0) / 2)} moves · ${esc(when)}</span>${d}</div>`;
-        }).join('') : '<p class="board-empty">No games yet — open the Online tab and take on a friend to start your record.</p>';
-        return `
-            <div class="profile-card block">
-                <h4 class="profile-sub">Battle record</h4>
-                <div class="progress-stats">${tiles}</div>
-            </div>
-            <div class="profile-card block">
-                <h4 class="profile-sub">Recent games</h4>
-                <div class="profile-lessons">${rows}</div>
+        const wr = blitz.games ? `${blitz.winRate}%` : '—';
+        const wrHint = blitz.games ? `${blitz.w}W · ${blitz.l}L · ${blitz.d}D across ${blitz.games} Blitz` : 'No Blitz games yet';
+        const tot = Math.max(1, blitz.w + blitz.l + blitz.d);
+        const seg = `<div class="dc-segbar" role="img" aria-label="Blitz record: ${blitz.w} wins, ${blitz.l} losses, ${blitz.d} draws">
+                <span class="seg-w" style="width:${(blitz.w / tot * 100).toFixed(1)}%"></span><span class="seg-d" style="width:${(blitz.d / tot * 100).toFixed(1)}%"></span><span class="seg-l" style="width:${(blitz.l / tot * 100).toFixed(1)}%"></span>
             </div>`;
+        const trend = this._blitzTrend();
+        const bestChip = trend && trend.d !== 0
+            ? `<span class="dc-trend ${trend.d > 0 ? 'up' : 'down'}" title="Last Blitz game ${trend.d > 0 ? '+' : ''}${trend.d} vs ${trend.opp}">${trend.d > 0 ? '+' : ''}${trend.d}</span>` : '';
+        return `
+            <section class="dc-panel dc-battle" aria-label="Battle record">${head}
+                <div class="dc-battle-top">
+                    <div class="dc-feat">
+                        <span class="dc-feat-ic">${this._tileIcon('board')}</span>
+                        <span class="stat-value dc-feat-num">${games}</span>
+                        <span class="dc-label">Games played</span>
+                    </div>
+                    <div class="dc-feat">
+                        <span class="dc-feat-ic">${this._tileIcon('trophy')}</span>
+                        <span class="stat-value dc-feat-num">${wr}</span>
+                        <span class="dc-label">Blitz win rate</span>
+                        ${blitz.games ? `<span class="dc-meter" aria-hidden="true"><span style="width:${blitz.winRate}%"></span></span>` : ''}
+                    </div>
+                    <div class="dc-feat">
+                        <span class="dc-feat-ic">${this._tileIcon('medal')}</span>
+                        <span class="dc-feat-num"><span class="stat-value">${blitz.games ? blitz.best : '—'}</span>${bestChip}</span>
+                        <span class="dc-label">Best Blitz</span>
+                    </div>
+                </div>
+                ${seg}
+                <p class="dc-legend" title="${esc(wrHint)}">${esc(wrHint)}</p>
+            </section>`;
     }
 
+    /* Ratings rail: one honest row per time control. */
+    _profileRatingsHTML() {
+        const rows = ChessCourseApp.onlineControls().map(c => {
+            const r = OnlineRatings.get(this.userId, c.id);
+            let gms = 0;
+            try { gms = OnlineRatings.record(this.userId, c.id).games || 0; } catch (_) {}
+            const sub = gms === 1 ? '1 game' : `${gms} games`;
+            const ic = c.id === 'bullet' ? 'bolt' : c.id === 'blitz' ? 'flag' : 'clock';
+            return `<li class="dc-rate-row" title="${c.name} ${c.label}: rated ${r} after ${sub}">
+                <span class="dc-rate-id"><span class="dc-rate-ic">${this._tileIcon(ic)}</span>
+                <span><span class="dc-rate-name">${c.name}</span> <span class="dc-rate-lab">${c.label}</span></span></span>
+                <span class="dc-rate-games">${sub}</span>
+                <span class="stat-value dc-rate-num">${r}</span>
+            </li>`;
+        }).join('');
+        return `
+            <section class="dc-panel dc-rates" aria-label="Online ratings">
+                <div class="dc-head"><h3>Online ratings</h3></div>
+                <ul class="dc-rate-list">${rows}</ul>
+                <p class="dc-note">Elo per time control, updated after every rated online game. Ratings live on this device.</p>
+            </section>`;
+    }
+
+    /* ── History field readers: stored shapes are mixed (control is an
+       object {id,base,inc} in current writes, a string in legacy rows;
+       opp is a name string today but an object in older rows). Reading
+       them structurally is what fixes the "[object Object]" rows. ── */
+    _histOppName(g) {
+        const o = g ? g.opp : null;
+        if (typeof o === 'string' && o.trim()) return o.trim().slice(0, 24);
+        if (o && typeof o === 'object') {
+            const nm = o.name || o.fullName || o.username;
+            if (typeof nm === 'string' && nm.trim()) return nm.trim().slice(0, 24);
+        }
+        return 'Opponent';
+    }
+    _histControlId(g) {
+        const c = g ? g.control : null;
+        if (typeof c === 'string') return c;
+        if (c && typeof c === 'object') {
+            if (typeof c.id === 'string' && c.id) return c.id;
+            if (typeof c.name === 'string' && c.name) return c.name.toLowerCase();
+        }
+        return '';
+    }
+    _histControlLabel(g, cats) {
+        const id = this._histControlId(g);
+        const meta = (cats || []).find(c => c.id === id);
+        if (meta) return `${meta.name} ${meta.label}`;
+        const c = g ? g.control : null;
+        if (c && typeof c === 'object') {
+            const nm = (typeof c.name === 'string' && c.name) ? c.name : (typeof c.id === 'string' ? c.id : '');
+            const lb = (typeof c.label === 'string') ? c.label : '';
+            const s = `${nm} ${lb}`.trim();
+            if (s) return s;
+        }
+        if (id) return id.charAt(0).toUpperCase() + id.slice(1);
+        return 'Casual game';
+    }
+    _histDate(g) {
+        try {
+            const t = new Date(g.date);
+            if (!isNaN(t)) return t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        } catch (_) {}
+        return '';
+    }
+    /* Zero delta renders "0", never a fake "+0" (see the draw test). */
+    _deltaChip(d) {
+        if (d === null || d === undefined) return '';
+        const n = Math.trunc(+d);
+        if (!Number.isFinite(n)) return '';
+        const cls = n > 0 ? 'up' : n < 0 ? 'down' : 'flat';
+        const txt = n > 0 ? `+${n}` : `${n}`;
+        const label = n > 0 ? `Rating gain ${txt}` : n < 0 ? `Rating change ${txt}` : 'Rating unchanged';
+        return `<span class="delta ${cls}" title="${label}">${txt}</span>`;
+    }
+
+    /* Page the history by 10: first 10, "more" reveals 10 at a
+       time, "less" collapses back to the first 10. */
+    _histPage(step) {
+        const cur = this._histShown || 10;
+        this._histShown = step < 0 ? 10 : cur + step;
+        if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
+    }
+
+    /* Match history as a grouped table: one band per game, with a
+       time-control gutter, a You / opponent player column, mirrored
+       scores (a win for you is a loss for them), your honest rating
+       delta, move count and date. Columns without genuine data
+       (engine accuracy, flags, favourites) are omitted, never faked.
+       No replay button: the only review action in the app belongs to
+       a live game, and a dead link would be worse than none. */
+    _profileGamesHTML() {
+        const cats = ChessCourseApp.onlineControls();
+        let hist = [];
+        try { hist = OnlineRatings.history(this.userId) || []; } catch (_) {}
+        const head = `<div class="dc-head"><h3>Recent games</h3>${hist.length ? `<span class="dc-count">last ${hist.length}</span>` : ''}</div>`;
+        if (!hist.length) {
+            return `
+            <section class="dc-panel dc-games" aria-label="Recent games">${head}
+                <div class="dc-empty"><p>No rated games yet — challenge a friend to start your match history.</p>
+                <button class="btn-secondary sm" data-action="goto-online" type="button">Play online</button></div>
+            </section>`;
+        }
+        const rows = hist.slice(0, this._histShown || 10).map(g => {
+            const opp = this._histOppName(g);
+            const tc = this._histMinutes(g, cats);
+            const plies = (g && Number.isFinite(+g.plies)) ? Math.max(0, Math.trunc(+g.plies)) : 0;
+            const moves = Math.ceil(plies / 2);
+            const movesTxt = `${moves} move${moves === 1 ? '' : 's'}`;
+            const when = this._histDate(g);
+            const meta = [tc.full, movesTxt, when].filter(Boolean).join(' · ');
+            const res = g && g.result === 'win' ? 'win' : g && g.result === 'loss' ? 'loss' : g && g.result === 'draw' ? 'draw' : '';
+            const youScore = res === 'win' ? '1' : res === 'loss' ? '0' : res === 'draw' ? '½' : '–';
+            const oppScore = res === 'win' ? '0' : res === 'loss' ? '1' : res === 'draw' ? '½' : '–';
+            const ind = res === 'win'
+                ? '<span class="dc-hist-ind win" role="img" aria-label="Won"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1v10M1 6h10"/></svg></span>'
+                : res === 'loss'
+                ? '<span class="dc-hist-ind loss" role="img" aria-label="Lost"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6h10"/></svg></span>'
+                : res === 'draw'
+                ? '<span class="dc-hist-ind draw" role="img" aria-label="Drew"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1 4h10M1 8h10"/></svg></span>' : '';
+            const resWord = res === 'win' ? 'Win' : res === 'loss' ? 'Loss' : res === 'draw' ? 'Draw' : 'Game';
+            const d = (g && g.delta !== null && g.delta !== undefined && Number.isFinite(Math.trunc(+g.delta))) ? Math.trunc(+g.delta) : null;
+            const dTxt = d === null ? '–' : d > 0 ? `+${d}` : `${d}`;
+            const dCls = d === null ? 'flat' : d > 0 ? 'up' : d < 0 ? 'down' : 'flat';
+            const rec = this._histRec(g ? g.gameId : null);
+            const openLabel = `${resWord} against ${opp}, ${meta}. Open to study this game.`;
+            return `<li class="dc-hist-li"><button type="button" class="dc-hist" data-action="hist-open" data-game="${esc(g && g.gameId ? g.gameId : '')}" title="${esc(`Open to study: ${resWord} vs ${opp} — ${meta}`)}" aria-label="${esc(openLabel)}">
+                <span class="dc-hist-tc" title="${esc(tc.full)}" aria-hidden="true"><span class="dc-hist-clock">${this._tileIcon('clock')}</span><span>${esc(tc.min)}</span></span>
+                <span class="dc-hist-players" aria-hidden="true">
+                    <span class="dc-hist-p you">${this._histPicHTML('you', null, rec)}<span class="dc-hist-name">You</span></span>
+                    <span class="dc-hist-p">${this._histPicHTML('opp', opp, rec)}<span class="dc-hist-name">${esc(opp)}</span></span>
+                </span>
+                <span class="dc-hist-scores" aria-hidden="true"><span class="dc-hist-score">${youScore}${ind}</span><span class="dc-hist-score dim">${oppScore}</span></span>
+                <span class="dc-hist-rate" aria-hidden="true">${this._deltaChip(g ? g.delta : null)}</span>
+                <span class="dc-hist-moves" aria-hidden="true">${moves}</span>
+                <span class="dc-hist-date" aria-hidden="true">${esc(when || '–')}</span>
+                <span class="dc-hist-meta" aria-hidden="true"><span class="delta ${dCls}">${dTxt}</span><span> · ${esc(movesTxt)} · ${esc(when || '–')}</span></span>
+            </button></li>`;
+        }).join('');
+        const shown = Math.min(hist.length, this._histShown || 10);
+        const rest = hist.length - shown;
+        const foot = (rest > 0 || shown > 10)
+            ? `<div class="dc-hist-foot">
+                ${rest > 0 ? `<button class="btn-secondary sm" data-action="hist-more" type="button">Show more (${rest} more)</button>` : ''}
+                ${shown > 10 ? `<button class="btn-secondary sm" data-action="hist-less" type="button">Show less</button>` : ''}
+            </div>` : '';
+        return `
+            <section class="dc-panel dc-games" aria-label="Recent games">${head}
+                <ul class="dc-hist-list" aria-live="polite">
+                    <li class="dc-hist-head" aria-hidden="true"><span></span><span>Players</span><span>Result</span><span>Rating</span><span>Moves</span><span>Date</span></li>
+                    ${rows}
+                </ul>
+                ${foot}
+                ${this._histStudyHTML(hist)}
+            </section>`;
+    }
+
+    /* ── Game study: a read-only replay of a stored old game ──
+       Finished games on this device keep their full move list in
+       OnlineStore (saved on every move), so stepping through one is
+       genuine review, not reconstruction. Games whose moves were
+       never stored (pruned, legacy, another device) say so plainly. */
+    _histRec(gameId) {
+        try {
+            if (typeof OnlineStore === 'undefined' || !gameId) return null;
+            const r = OnlineStore.loadGame(gameId);
+            return (r && typeof r === 'object') ? r : null;
+        } catch (_) { return null; }
+    }
+    /* Avatar tile for a history row: the real photo when one is on
+       file (yours today, the opponent's as saved with that game),
+       otherwise the initial-letter tile. Photos are https-only and
+       fall back to the letter tile if they cannot load. */
+    _histPicHTML(which, name, rec) {
+        let src = null, nm = which === 'you' ? 'You' : (name || 'Opponent');
+        try {
+            if (which === 'you') {
+                const me = this._meTag();
+                src = me.img || null;
+                if (me.name) nm = me.name;
+            } else if (rec && rec.opp && typeof rec.opp.img === 'string' && /^https:/.test(rec.opp.img)) {
+                src = rec.opp.img.slice(0, 2048);
+            }
+        } catch (_) { src = null; }
+        const letter = esc((((nm || '?')[0] || '?')).toUpperCase());
+        if (src) return `<img class="dc-opp-pic${which === 'you' ? ' you' : ''}" src="${esc(src)}" width="30" height="30" alt="" aria-hidden="true" data-pic="${which}" data-letter="${letter}">`;
+        return `<span class="dc-opp-av${which === 'you' ? ' you-av' : ''}" aria-hidden="true">${letter}</span>`;
+    }
+    // CSP-safe broken-photo fallback for history tiles (same pattern
+    // as the match avatar fallback; inline onerror is CSP-banned).
+    _bindHistPics() {
+        document.querySelectorAll('#profile-content img.dc-opp-pic[data-pic]').forEach(img => {
+            if (img.dataset.picBound) return;
+            img.dataset.picBound = '1';
+            img.addEventListener('error', () => {
+                const span = document.createElement('span');
+                span.className = 'dc-opp-av' + (img.dataset.pic === 'you' ? ' you-av' : '');
+                span.setAttribute('aria-hidden', 'true');
+                span.textContent = img.dataset.letter || '?';
+                img.replaceWith(span);
+            });
+        });
+    }
+    _histOpen(gameId) {
+        this._studyGameId = gameId || null;
+        this._studyPly = null;
+        if (!document.getElementById('profile-screen')?.classList.contains('active')) return;
+        this._renderProfile();
+        this._bindHistPics();
+        this._paintStudy();
+        try {
+            const el = document.getElementById('dc-review');
+            if (el) {
+                const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                el.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+            }
+        } catch (_) {}
+    }
+    _histClose() {
+        this._studyGameId = null; this._studyPly = null;
+        if (document.getElementById('profile-screen')?.classList.contains('active')) {
+            this._renderProfile();
+            this._bindHistPics();
+        }
+    }
+    _histNav(where) {
+        const rec = this._histRec(this._studyGameId);
+        const total = rec && Array.isArray(rec.moves) ? rec.moves.length : 0;
+        if (!total) return;
+        let v = (this._studyPly == null) ? total : this._studyPly;
+        if (where === 'start') v = 0;
+        else if (where === 'prev') v = Math.max(0, v - 1);
+        else if (where === 'next') v = Math.min(total, v + 1);
+        else v = total;
+        this._studyPly = v;
+        this._paintStudy();
+    }
+    _histGoto(ply) {
+        const rec = this._histRec(this._studyGameId);
+        const total = rec && Array.isArray(rec.moves) ? rec.moves.length : 0;
+        if (!total || !Number.isFinite(+ply)) return;
+        this._studyPly = Math.max(0, Math.min(total, Math.trunc(+ply)));
+        this._paintStudy();
+    }
+    _studyMoves(rec) {
+        if (!rec || !Array.isArray(rec.moves)) return [];
+        return rec.moves.filter(m => m && typeof m.from === 'string' && typeof m.to === 'string');
+    }
+    _histStudyHTML(hist) {
+        const id = this._studyGameId;
+        if (!id) return '';
+        const cats = ChessCourseApp.onlineControls();
+        const g = (hist || []).find(x => x && x.gameId === id) || null;
+        const rec = this._histRec(id);
+        const opp = g ? this._histOppName(g) : ((rec && rec.opp && rec.opp.name) || 'Opponent');
+        const moves = this._studyMoves(rec);
+        const res = g && (g.result === 'win' || g.result === 'loss' || g.result === 'draw') ? g.result
+            : rec && (rec.result === 'win' || rec.result === 'loss' || rec.result === 'draw') ? rec.result : '';
+        const resWord = res === 'win' ? 'You win' : res === 'loss' ? 'You lose' : res === 'draw' ? 'Draw' : 'Game';
+        const ctrlFull = g ? this._histControlLabel(g, cats)
+            : rec && rec.control ? this._histControlLabel({ control: rec.control }, cats) : '';
+        const when = g ? this._histDate(g) : '';
+        let reason = '';
+        try { reason = this._reasonText(rec && rec.reason) || ''; } catch (_) {}
+        const d = g ? g.delta : null;
+        const sub = [ctrlFull, when, reason].filter(Boolean).join(' · ');
+        const head = `<div class="dc-head"><h3>Game study</h3><span class="dc-study-hbtns"><button class="btn-secondary sm" data-action="hist-to-study" data-game="${esc(id)}" type="button" title="Open this game in the Study workspace">Open in Study</button><button class="btn-secondary sm" data-action="hist-close" type="button">Close</button></span></div>
+            <p class="dc-review-sub"><strong>${esc(resWord)}</strong> vs ${esc(opp)}${sub ? ` · ${esc(sub)}` : ''} ${this._deltaChip(d)}</p>`;
+        if (!moves.length) {
+            return `<div class="dc-panel dc-review" id="dc-review" role="region" aria-label="Game study">${head}
+                <div class="dc-empty"><p>Only the result was saved for this game — its moves weren't stored on this device, so there is no board to step through.</p></div>
+            </div>`;
+        }
+        const navBtn = (where, label, path) => `<button class="icon-btn" data-action="hist-nav" data-where="${where}" type="button" title="${label}" aria-label="${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg></button>`;
+        return `<div class="dc-panel dc-review" id="dc-review" role="region" aria-label="Game study: ${esc(`${resWord} versus ${opp}`)}">${head}
+            <div class="dc-review-grid">
+                <div class="dc-review-board" id="dc-study-board" role="img" aria-label="Board position"></div>
+                <div class="dc-review-side">
+                    <div class="movenav" role="group" aria-label="Step through the game">
+                        ${navBtn('start', 'First move', 'M6 5v14M18 5l-8 7 8 7')}
+                        ${navBtn('prev', 'Previous move', 'M14 5l-7 7 7 7')}
+                        ${navBtn('next', 'Next move', 'M10 5l7 7-7 7')}
+                        ${navBtn('end', 'Latest move', 'M18 5v14M6 5l8 7-8 7')}
+                    </div>
+                    <div class="move-log dc-review-log" id="dc-study-log" role="log" aria-live="polite" aria-label="Game moves"></div>
+                    <div class="dc-review-count" id="dc-study-count" aria-live="polite"></div>
+                </div>
+            </div>
+        </div>`;
+    }
+    /* Repaint the study board + log in place (no full re-render, so
+       stepping never steals focus from the navigation buttons). */
+    _paintStudy() {
+        const board = document.getElementById('dc-study-board');
+        const rec = this._histRec(this._studyGameId);
+        if (!board || !rec) return;
+        const stored = this._studyMoves(rec);
+        const total = stored.length;
+        if (!total || typeof ChessGame === 'undefined') return;
+        const view = this._studyPly == null ? total : Math.max(0, Math.min(total, this._studyPly));
+        // Full-game engine for move text (captures, castling, promotion…)
+        const full = new ChessGame();
+        try { full.reset(); } catch (_) {}
+        stored.forEach(m => { try { full.movePiece(full.algebraicToCoords(m.from), full.algebraicToCoords(m.to), m.promo || null); } catch (_) {} });
+        const played = full.moveHistory.slice(0, view);
+        // View engine for the board position.
+        const eng = new ChessGame();
+        try { eng.reset(); } catch (_) {}
+        played.forEach(m => { try { eng.movePiece(eng.algebraicToCoords(m.from), eng.algebraicToCoords(m.to), m.promotion || null); } catch (_) {} });
+        const flip = rec.myColor === 'black';
+        if (!board.dataset.built) {
+            board.innerHTML = '';
+            for (let dr = 0; dr < 8; dr++) for (let dc = 0; dc < 8; dc++) {
+                const sq = document.createElement('div');
+                sq.className = 'chess-square white';
+                sq.dataset.dr = String(dr); sq.dataset.dc = String(dc);
+                board.appendChild(sq);
+            }
+            board.dataset.built = '1';
+        }
+        const last = played.length ? played[played.length - 1] : null;
+        const lastFrom = last ? eng.algebraicToCoords(last.from) : null;
+        const lastTo = last ? eng.algebraicToCoords(last.to) : null;
+        let inCheck = false, kingPos = null;
+        try { inCheck = eng._isKingInCheck(eng.currentPlayer); kingPos = inCheck ? eng.findKing(eng.currentPlayer) : null; } catch (_) {}
+        board.querySelectorAll(':scope > .chess-square').forEach(sq => {
+            const dr = +sq.dataset.dr, dc = +sq.dataset.dc;
+            const r = flip ? 7 - dr : dr, c = flip ? 7 - dc : dc;
+            sq.className = `chess-square ${((r + c) % 2 === 0) ? 'white' : 'black'}`;
+            const alg = eng.coordsToAlgebraic([r, c]);
+            sq.dataset.square = alg;
+            const piece = eng.board[r][c];
+            try { sq.setAttribute('aria-label', this._squareLabel(alg, piece, !!(kingPos && kingPos[0] === r && kingPos[1] === c))); } catch (_) {}
+            if ((lastFrom && lastFrom[0] === r && lastFrom[1] === c) || (lastTo && lastTo[0] === r && lastTo[1] === c)) sq.classList.add('last-move');
+            if (kingPos && kingPos[0] === r && kingPos[1] === c) sq.classList.add('in-check');
+            let img = sq.querySelector('img.chess-piece, svg.chess-piece');
+            if (piece) {
+                const wantSrc = this._pieceFile(piece);
+                if (!(img && img.tagName === 'IMG' && img.dataset.fallbackPiece === piece && img.getAttribute('src') === wantSrc)) {
+                    const w = document.createElement('div');
+                    w.innerHTML = this._svg(piece);
+                    const fresh = w.firstChild;
+                    if (img) img.replaceWith(fresh); else sq.prepend(fresh);
+                }
+            } else if (img) img.remove();
+            let fl = sq.querySelector('.coord-file'), rk = sq.querySelector('.coord-rank');
+            if (dr === 7) {
+                if (!fl) { fl = document.createElement('span'); fl.className = 'coord-file'; sq.appendChild(fl); }
+                fl.textContent = String.fromCharCode(97 + c);
+            } else if (fl) fl.remove();
+            if (dc === 0) {
+                if (!rk) { rk = document.createElement('span'); rk.className = 'coord-rank'; sq.appendChild(rk); }
+                rk.textContent = String(8 - r);
+            } else if (rk) rk.remove();
+        });
+        try { board.setAttribute('aria-label', view === 0 ? 'Starting position' : `Position after ${view} half-move${view === 1 ? '' : 's'}`); } catch (_) {}
+        // Move log with the current pair highlighted; pairs jump on tap.
+        const log = document.getElementById('dc-study-log');
+        if (log) {
+            const fm = full.moveHistory;
+            let html = '';
+            for (let i = 0; i < fm.length; i += 2) {
+                const w = fm[i], b = fm[i + 1];
+                const endPly = Math.min(total, i + 2);
+                const cur = view > i && view <= endPly ? ' cur' : '';
+                html += `<button type="button" class="move-pair${cur}" data-action="hist-goto" data-ply="${endPly}" title="Jump to move ${Math.floor(i / 2) + 1}"><span class="move-num">${Math.floor(i / 2) + 1}.</span>${this._fmtLogMove(w)}${b ? this._fmtLogMove(b) : ''}</button>`;
+            }
+            log.innerHTML = html || '<span style="color:var(--text-muted-dim)">No moves.</span>';
+            const curEl = log.querySelector('.move-pair.cur');
+            if (curEl) { try { log.scrollTop = curEl.offsetTop - log.offsetTop - 8; } catch (_) {} }
+            else { try { log.scrollTop = view === 0 ? 0 : log.scrollHeight; } catch (_) {} }
+        }
+        const count = document.getElementById('dc-study-count');
+        if (count) count.textContent = view === 0 ? `Start of game · ${total} half-moves`
+            : view === total ? `Final position · move ${Math.ceil(total / 2)} of ${Math.ceil(total / 2)}`
+            : `After ${view} half-move${view === 1 ? '' : 's'} · move ${Math.ceil(view / 2)} of ${Math.ceil(total / 2)}`;
+        document.querySelectorAll('#dc-review [data-action="hist-nav"]').forEach(b => {
+            const w = b.dataset.where;
+            const dis = (w === 'start' || w === 'prev') ? view <= 0 : view >= total;
+            if (dis) b.setAttribute('disabled', ''); else b.removeAttribute('disabled');
+        });
+    }
+
+    /* Short ("5 min") + full ("Blitz 5+0") time-control labels, read
+       structurally: current writes store {id,base,inc}, legacy rows a
+       bare id string. Never falls back to "[object Object]". */
+    _histMinutes(g, cats) {
+        const list = cats || ChessCourseApp.onlineControls();
+        const c = g ? g.control : null;
+        const id = this._histControlId(g);
+        const meta = list.find(x => x.id === id);
+        if (meta) return { min: `${Math.round(meta.base / 60000)} min`, full: `${meta.name} ${meta.label}` };
+        if (c && typeof c === 'object') {
+            const mins = Number.isFinite(+c.base) ? Math.round(+c.base / 60000) : 0;
+            const nm = (typeof c.name === 'string' && c.name) ? c.name : (id ? id.charAt(0).toUpperCase() + id.slice(1) : '');
+            const lb = (typeof c.label === 'string') ? c.label : '';
+            const full = `${nm} ${lb}`.trim() || 'Casual game';
+            return { min: mins > 0 ? `${mins} min` : '–', full };
+        }
+        if (id) return { min: '–', full: id.charAt(0).toUpperCase() + id.slice(1) };
+        return { min: '–', full: 'Casual game' };
+    }
+
+    /* Lesson timeline: a rail with one node per lesson. Completed
+       lessons read complete, the up-next lesson is marked, locked
+       lessons name their unlock condition. Review stays one tap away. */
     _profileLessonsHTML() {
-        return this.lessons.map(l => {
+        const n = this.progress.done.length, total = this.lessons.length;
+        const pct = total ? Math.round((n / total) * 100) : 0;
+        const cur = this._currentLesson();
+        const check = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+        const rows = this.lessons.map(l => {
             const done = this.isDone(l.id), open = this.isOpen(l.id);
-            const badge = done ? '<span class="completed-badge">Done ✓</span>'
+            const isCur = !!(cur && cur.id === l.id);
+            const state = done ? 'done' : isCur ? 'current' : 'locked';
+            const pill = done ? '<span class="completed-badge">Done</span>'
+                : isCur ? '<span class="current-badge">Up next</span>'
                 : open ? '<span class="profile-open">Ready to play</span>'
                 : '<span class="profile-locked">Locked</span>';
-            return `<div class="profile-lesson-row">
-                <span class="lesson-number sm">${l.id}</span>
-                <span class="profile-lesson-title">${esc(l.title)}</span>
-                ${badge}
-                <button class="btn-secondary sm" data-open-lesson="${l.id}" ${open ? '' : 'disabled'}>${done ? 'Review' : 'Play'}</button>
-            </div>`;
+            const sub = done ? `Lesson ${l.id} · Completed`
+                : isCur ? `Lesson ${l.id} · Continue here`
+                : open ? `Lesson ${l.id} · Unlocked` : `Lesson ${l.id} · Finish Lesson ${l.id - 1} to unlock`;
+            return `<li class="dc-les ${state}">
+                <span class="dc-node" aria-hidden="true">${done ? check : l.id}</span>
+                <span class="dc-les-main"><span class="dc-les-title">${esc(l.title)}</span><span class="dc-les-sub">${esc(sub)}</span></span>
+                ${pill}
+                <button class="btn-secondary sm" data-open-lesson="${l.id}" ${open ? '' : 'disabled'} type="button">${done ? 'Review' : 'Play'}</button>
+            </li>`;
         }).join('');
+        return `
+            <section class="dc-panel dc-lessons" aria-label="Lesson record">
+                <div class="dc-head"><h3>Lesson record</h3><span class="dc-count">${n} of ${total} · ${pct}%</span></div>
+                <div class="dc-track slim" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Lessons complete, ${pct} percent" title="${pct}% complete"><span style="width:${pct}%"></span></div>
+                <ol class="dc-les-list">${rows}</ol>
+            </section>`;
     }
 
     _bindMenu() {
@@ -3813,7 +4367,7 @@ class ChessCourseApp {
     _go(id) {
         this._trackScreen(id);
         try { document.body.dataset.screen = id; } catch (_) {}
-        ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen']
+        ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen','study-screen']
             .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
         // A11y: move keyboard focus to the new screen so SR users land
         // on the heading instead of staying on a now-hidden control.
@@ -3822,7 +4376,7 @@ class ChessCourseApp {
             if (scr) { scr.focus({ preventScroll: true }); }
         } catch (_) {}
         // Keep nav highlighted so users always know where they are
-        const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen': 'online' };
+        const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen': 'online', 'study-screen': 'study' };
         const active = navFor[id];
         document.querySelectorAll('.nav-btn').forEach(b => {
             const key = b.dataset.nav || b.textContent.trim().toLowerCase();
@@ -3843,6 +4397,7 @@ class ChessCourseApp {
                 else if (key.startsWith('online')) this.showOnline();
                 else if (key.startsWith('profile')) this.showProfile();
                 else if (key.startsWith('progress')) this.showProgress();
+                else if (key.startsWith('study')) this.showStudy();
                 this._closeMenu();
             });
         });

@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#0d1526">
     <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=39">
+    <link rel="stylesheet" href="styles.css?v=41">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; upgrade-insecure-requests">
     <style>
     /* ══ Learn screen ══════════════════════════════════════════════════════
@@ -112,7 +112,9 @@
 
     /* ── Board frame: shared geometry with #chess-board-wrapper ── */
     #play-board-wrap {
-      width: min(100%, calc(100vh - 300px), 780px);
+      width: min(100%, calc(100dvh - 300px), 780px);
+      max-width: min(100%, 780px);
+      min-width: 0;
       margin: 0 auto;
       padding: 12px;
       background: var(--bg-card);
@@ -201,7 +203,7 @@
       .lv-focus #lesson-screen .container { padding-top: .5rem; padding-bottom: .5rem; }
       .lv-focus #levelview { display: flex; flex-direction: column;
         min-height: calc(100dvh - 76px); }
-      .lv-focus .lesson-content { grid-template-columns: 1fr !important; gap: .6rem; flex: 1; }
+      .lv-focus .lesson-content { grid-template-columns: minmax(0, 1fr) !important; gap: .6rem; flex: 1; }
       /* Fill the width: the wrapper padding + container padding are the only
          things between the viewport edge and the board. */
       .lv-focus #play-board-wrap,
@@ -224,10 +226,13 @@
 
     .sticky-actions { display: none; }
     @media (max-width: 860px) {
-      /* Lessons keeps this bar above the board too (app.js markup). */
+      /* Lessons keeps this bar above the board too (app.js markup).
+         min-width:0 + max-width:100% keep the nowrap toolbar from expanding
+         .arena (and therefore the board) past the viewport; overflow-x scrolls
+         the bar itself when buttons do not fit. */
       #lesson-screen .sticky-actions {
-        display: flex; position: sticky; bottom: 0; align-self: flex-start;
-        width: 100%; box-sizing: border-box; z-index: 40;
+        display: flex; position: sticky; bottom: 0; align-self: stretch;
+        width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; z-index: 40;
         align-items: center; gap: .25rem; margin-top: .3rem;
         flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
@@ -241,18 +246,18 @@
       #lesson-screen .sticky-actions::-webkit-scrollbar { display: none; }
       #lesson-screen .sticky-actions .sticky-label { font-size: .68rem; font-weight: 800;
         color: var(--text-muted); letter-spacing: .01em; white-space: nowrap;
-        overflow: hidden; text-overflow: ellipsis; max-width: 32%; }
+        overflow: hidden; text-overflow: ellipsis; max-width: 32%; min-width: 0; flex: 0 1 auto; }
       #lesson-screen .sticky-actions .sticky-count { margin-left: auto; font-size: .8rem;
         font-weight: 800; color: var(--accent-bright); font-variant-numeric: tabular-nums;
-        white-space: nowrap; padding-right: .2rem; }
+        white-space: nowrap; padding-right: .2rem; flex-shrink: 0; }
       #lesson-screen .sticky-actions button { flex: 0 0 auto; }
       #lesson-screen .btn-cta.sm { padding: .4rem .8rem; min-height: 36px; font-size: .82rem; }
     }
 
     @media (max-width: 700px) {
       .sticky-actions {
-        display: flex; position: sticky; bottom: 0; align-self: flex-start;
-        width: 100%; box-sizing: border-box; z-index: 40;
+        display: flex; position: sticky; bottom: 0; align-self: stretch;
+        width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; z-index: 40;
         align-items: center; gap: .25rem; margin-top: .3rem;
         flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
@@ -266,10 +271,10 @@
       .sticky-actions::-webkit-scrollbar { display: none; }
       .sticky-actions .sticky-label { font-size: .68rem; font-weight: 800; color: var(--text-muted);
         letter-spacing: .01em; white-space: nowrap;
-        overflow: hidden; text-overflow: ellipsis; max-width: 32%; }
+        overflow: hidden; text-overflow: ellipsis; max-width: 32%; min-width: 0; flex: 0 1 auto; }
       .sticky-actions .sticky-count { margin-left: auto; font-size: .8rem; font-weight: 800;
         color: var(--accent-bright); font-variant-numeric: tabular-nums; white-space: nowrap;
-        padding-right: .2rem; }
+        padding-right: .2rem; flex-shrink: 0; }
       .sticky-actions button { flex: 0 0 auto; }
       .sticky-actions .btn-cta { margin-left: .15rem; }
       .btn-cta.sm { padding: .4rem .8rem; min-height: 36px; font-size: .82rem; }
@@ -436,9 +441,18 @@
       }
     }
 
+    @media (min-width: 1025px) {
+      /* Sit at the top of the arena. Subtract site header + level title
+         (~20rem) so the square stays fully on screen in a 900px-tall window. */
+      #play-board-wrap {
+        order: -1;
+        width: min(100%, calc(100dvh - 20rem), 920px);
+        max-width: min(100%, 920px);
+      }
+    }
     @media (max-width: 1000px) {
-      #learn-screen .lesson-content { grid-template-columns: 1fr; }
-      #play-board-wrap { width: min(100%, calc(100vh - 340px), 620px); }
+      #learn-screen .lesson-content { grid-template-columns: minmax(0, 1fr); }
+      #play-board-wrap { width: min(100%, calc(100dvh - 340px), 620px); max-width: min(100%, 620px); }
     }
     /* ── Phone: get out of the board's way ───────────────────────────
        On a small screen the BOARD is the whole task. Lichess does the same
@@ -479,7 +493,7 @@
       .lv-achieve-stars { font-size: .95rem; }
       .lv-achieve-text { font-size: .74rem; }
       /* Board: full-bleed, square, edge to edge. */
-      #play-board-wrap { width: 100%; padding: 6px; border-radius: var(--radius-sm); }
+      #play-board-wrap { width: 100%; max-width: 100%; padding: 6px; border-radius: var(--radius-sm); }
       #play-board .coord-file, #play-board .coord-rank { font-size: .58rem; }
       #play-board .goal-mark { font-size: 1.35rem; }
       /* Actions 2-up under the board; the sticky bar handles "next". */
@@ -513,6 +527,7 @@
                     <button class="nav-btn" id="nav-progress" data-nav="progress" type="button">Progress</button>
                     <button class="nav-btn" id="nav-profile" data-nav="profile" type="button">Profile</button>
                     <button class="nav-btn" id="nav-online" data-nav="online" type="button">Online</button>
+                    <button class="nav-btn" id="nav-study" data-nav="study" type="button">Study</button>
                     <button class="nav-btn theme-toggle" id="theme-toggle" data-nav="theme" type="button" aria-pressed="false" title="Switch to day mode">
                         <span class="theme-sky" aria-hidden="true">
                             <svg class="theme-sun" viewBox="0 0 24 24"><g stroke-linecap="round"><circle cx="12" cy="12" r="4.6" fill="none" stroke-width="2"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M19.2 4.8l-1.8 1.8M6.6 17.4l-1.8 1.8" stroke-width="2"/></g></svg>
@@ -689,19 +704,13 @@
 
                                 <div id="lv-feedback" class="feedback info" role="status" aria-live="polite" data-focus-hide>Pick your piece to begin.</div>
 
-                                <div class="lesson-actions lv-actions" data-focus-hide>
+<div class="lesson-actions lv-actions" data-focus-hide>
                                     <button class="btn-secondary" id="hint-btn" type="button">Hint (H)</button>
                                     <button class="btn-secondary" id="undo-btn" type="button">Undo (U)</button>
                                     <button class="btn-secondary" id="restart-btn" type="button">Restart (R)</button>
                                     <button class="btn-secondary" id="solve-btn" type="button">Solution</button>
-                                    <button class="btn-secondary" id="back-btn" type="button">← All levels</button>
-                                    <!-- Next stage lives with the board. On a phone the page
-                                         is much taller than the viewport, so it is ALSO
-                                         mirrored into the sticky bar placed ABOVE the
-                                         board — a sticky bar below the board would not be
-                                         on screen until you scrolled past the board. -->
-                                    <button class="btn-cta" id="next-lvl-btn" type="button">Next stage →</button>
                                 </div>
+                                <button class="btn-secondary" id="back-btn" type="button">← All levels</button>
 
                                 <!-- Player card: mirrors the Lessons screen footer -->
                                 <div class="profile-card player your-turn" id="lv-you" data-focus-hide>
@@ -793,6 +802,15 @@
                 </div>
             </div>
 
+            <!-- Study Screen -->
+            <div id="study-screen" class="screen" tabindex="-1">
+                <div class="container st-container">
+                    <div id="study-content">
+                        <!-- Rendered by study.js -->
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -807,7 +825,9 @@
          meta-CSP (inline) and by file:// (CORS), which is why levels never
          loaded. Classic + external is allowed in both. Built from js/*.js by
          tools/build-learn.mjs — edit the sources, then rebuild. -->
-    <script defer src="js/learn.bundle.js?v=3"></script>
+    <script defer src="js/learn.bundle.js?v=4"></script>
+    <!-- Study workspace: analysis board, library, engine client (classic script, file:// compatible) -->
+    <script defer src="study.js?v=1"></script>
 
 </body>
 </html>
