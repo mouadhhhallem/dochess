@@ -1922,8 +1922,13 @@ function hideLearn() {
     // Home/Lessons keep a stale deep link and Learn nav re-opens that level
     // instead of the picker.
     clearLevelUrl();
-    // Also ensure we show the picker home, not a stale level
-    showPickerHome();
+    // Reset to the picker WITHOUT re-showing: showPickerHome() calls
+    // showLearn(), which re-adds .active — stacking Learn under every
+    // legacy screen (Study, Profile, Lessons, …) navigated to mid-level.
+    $('levelview').hidden = true;
+    $('learn-heading').hidden = false;
+    $('picker').hidden = false;
+    renderPicker();
 }
 
 /** Keep a shareable deep link while a level is open; strip it on the picker. */
