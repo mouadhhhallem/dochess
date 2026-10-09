@@ -52,6 +52,25 @@ export function showLearn() {
 
 function hideLearn() {
     $('learn-screen')?.classList.remove('active');
+    // Leaving Learn must not leave ?level= in the address bar — otherwise
+    // Home/Lessons keep a stale deep link and Learn nav re-opens that level
+    // instead of the picker.
+    clearLevelUrl();
+    // Also ensure we show the picker home, not a stale level
+    showPickerHome();
+}
+
+/** Keep a shareable deep link while a level is open; strip it on the picker. */
+function setLevelUrl(id) {
+    const url = new URL(location.href);
+    if (id) url.searchParams.set('level', id);
+    else url.searchParams.delete('level');
+    history.replaceState(null, '', url.pathname + url.search);
+}
+
+function clearLevelUrl() {
+    if (!new URLSearchParams(location.search).get('level')) return;
+    setLevelUrl(null);
 }
 
 /* ── Stars ───────────────────────────────────────────────────────────────
@@ -112,7 +131,7 @@ function renderPicker() {
 function openLevel(id) {
     const lv = DATA.levels.find((l) => l.id === id);
     if (!lv) return;
-    history.replaceState(null, '', 'index.html?level=' + id);
+    setLevelUrl(id);
     showLearn();
     $('learn-heading').hidden = true;
     $('levelview').hidden = false;
@@ -166,13 +185,20 @@ function openLevel(id) {
     }
     paint();
     updateNextBtn();
+    // Keep the screen on the board: showLearn() pins the page to the top,
+    // which strands the board below the fold on most screens. Center it on
+    // the board like the Lessons screen does (one instant jump after layout,
+    // so it never fights the focus call below).
+    requestAnimationFrame(() => {
+        try { document.getElementById('play-board-wrap')?.scrollIntoView({ block: 'center' }); } catch (_) {}
+    });
     // Forced: on a freshly opened level the board does not hold focus yet, so
     // the first Tab must land on the piece the level expects.
     board.focusSquare(firstOwnSquare(), true);
 }
 
 function showPickerHome() {
-    history.replaceState(null, '', 'index.html');
+    setLevelUrl(null);
     showLearn();
     $('levelview').hidden = true;
     $('learn-heading').hidden = false;
@@ -625,9 +651,9 @@ function restartLevel(msg) {
 export async function bootLearn() {
     bootFocusMode();
     bind('nav-learn', () => {
-        const id = new URLSearchParams(location.search).get('level');
-        if (id && DATA && DATA.levels.some((l) => l.id === id)) openLevel(id);
-        else showPickerHome();
+        // Always the picker. A leftover ?level= must not trap the player on
+        // one puzzle when they tap Learn again from another screen.
+        showPickerHome();
     });
     bind('start-levels-btn', () => showPickerHome());
     bind('back-btn', showPickerHome);
@@ -729,7 +755,7 @@ export async function bootLearn() {
         return;
     }
     const id = new URLSearchParams(location.search).get('level');
-    if (id && DATA.levels.some((l) => l.id === id)) { logMoves = []; renderLog(); openLevel(id); }
+    if (id && DATA.levels.some((l) => l.id === id)) { logMoves = []; renderLog(); openLevel(id); setLevelUrl(null); }
     // play.html redirects here as index.html?level=x#learn — honor the marker
     // so the redirect actually lands on the picker instead of Home.
     else if (location.hash === '#learn') showPickerHome();
