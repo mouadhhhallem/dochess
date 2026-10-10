@@ -1598,6 +1598,14 @@ body[data-theme='day'] {
 
 body[data-theme='night'] { color-scheme: dark; }
 
+/* ── Board skins (picked in the Online lobby) — override the square
+   colors for every board in the app. Brown is the default. ── */
+body[data-board-skin='blue']   { --board-light: #DEE3E6; --board-dark: #8CA2AD; --board-selected: rgba(110, 145, 165, 0.5); --board-last: #93AFBA; }
+body[data-board-skin='green']  { --board-light: #FFFFDD; --board-dark: #86A666; --board-selected: rgba(120, 160, 90, 0.5);  --board-last: #AAC86E; }
+body[data-board-skin='gray']   { --board-light: #F0F0F0; --board-dark: #999999; --board-selected: rgba(140, 140, 140, 0.5); --board-last: #B3B3B3; }
+body[data-board-skin='wood']   { --board-light: #E8C9A0; --board-dark: #A17A56; --board-selected: rgba(170, 120, 70, 0.5);  --board-last: #D4A373; }
+body[data-board-skin='purple'] { --board-light: #E0D3E8; --board-dark: #9070A8; --board-selected: rgba(140, 105, 170, 0.5); --board-last: #B090C8; }
+
 body[data-theme='day'] .header { background: #ffffff; }
 
 body[data-theme='day'] .hero h2,
@@ -2152,17 +2160,18 @@ body[data-theme='day'] .dc-les.current .dc-node { color: #047857; }
     }
     /* Board first in the arena so opponent cards / speech do not push it
        below the fold on a maximised desktop window. Size it from the live
-       viewport so the square stays fully on screen under the sticky header. */
+       viewport so the square stays fully on screen under the sticky header.
+       The online arena keeps natural order (opponent card above, You below,
+       matching phones) — order:-1 would drop both name cards under the board. */
     #lesson-screen #chess-board-wrapper,
-    #play-board-wrap,
-    #online-board-wrapper {
+    #play-board-wrap {
         order: -1;
         width: min(100%, calc(100dvh - 11rem), 920px);
         max-width: min(100%, 920px);
     }
     #online-board-wrapper {
         max-width: min(100%, 760px);
-        width: min(100%, calc(100dvh - 11rem), 760px);
+        width: min(100%, calc(100dvh - 16rem), 760px);
     }
 }
 
@@ -2279,6 +2288,39 @@ body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     touch-action: manipulation;
 }
+
+/* ── Board skin picker (Online lobby) ── */
+.skin-row { display: flex; gap: .65rem; flex-wrap: wrap; }
+.skin-swatch {
+    display: flex; flex-direction: column; align-items: center; gap: .4rem;
+    background: var(--bg-main); border: 1px solid var(--glass-border); border-radius: 10px;
+    padding: .55rem .6rem; cursor: pointer; color: var(--text-muted); font: inherit; font-size: .74rem; font-weight: 700;
+    transition: border-color .15s ease, color .15s ease;
+}
+.skin-swatch:hover { border-color: var(--accent); color: var(--text-main); }
+.skin-swatch.on { border-color: var(--accent); color: var(--text-main); box-shadow: 0 0 0 1px var(--accent); }
+.skin-prev {
+    display: grid; grid-template-columns: 1fr 1fr; width: 46px; height: 46px;
+    border-radius: 6px; overflow: hidden; border: 1px solid rgba(0, 0, 0, 0.3);
+}
+.skin-prev i { display: block; }
+
+/* Phone time-control presets: tap icons instead of scrolling wheels. */
+.tc-presets { display: none; }
+.tc-preset {
+    display: flex; flex-direction: column; align-items: center; gap: .2rem;
+    background: var(--bg-main); border: 1px solid var(--glass-border); border-radius: 10px;
+    padding: .6rem .3rem; cursor: pointer; color: var(--text-muted); font: inherit; font-size: .7rem; font-weight: 700;
+    transition: border-color .15s ease, color .15s ease;
+}
+.tc-preset svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-preset-time { font-size: .95rem; font-weight: 800; color: var(--text-main); font-variant-numeric: tabular-nums; }
+.tc-preset-cat { font-size: .65rem; text-transform: uppercase; letter-spacing: .05em; }
+.tc-preset:hover { border-color: var(--accent); color: var(--text-main); }
+.tc-preset.on { border-color: var(--accent); color: var(--text-main); box-shadow: 0 0 0 1px var(--accent); background: rgba(16, 185, 129, 0.08); }
+
+/* Online action icons (icons always; labels hide on phones). */
+.btn-act-ic { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 
 /* ── iPhone-style wheel picker: two snap columns + live summary ── */
 .wheel-wrap {
@@ -2682,8 +2724,22 @@ body[data-theme='day'] .confirm-card h3 { color: var(--text-main); }
     #online-screen .arena .move-log { padding: 0.5rem 0.7rem; max-height: 72px; }
     #online-screen .arena .feedback { margin-top: 0.5rem; }
     #online-screen .arena .speech-bubble { padding: 0.55rem 0.9rem; }
-    #online-screen .lesson-actions { margin-top: 0.5rem; flex-direction: row; flex-wrap: nowrap; align-items: center; overflow-x: auto; padding-bottom: calc(0.25rem + env(safe-area-inset-bottom, 0px)); }
+    #online-screen .lesson-actions { margin-top: 0.5rem; flex-direction: row; flex-wrap: nowrap; align-items: center; overflow-x: auto; padding-bottom: calc(0.25rem + env(safe-area-inset-bottom, 0px)); gap: 0.45rem; }
     #online-screen .lesson-actions .btn-secondary { white-space: nowrap; }
+    /* Phones: action buttons become compact icon-only so all four always
+       fit. width:auto cancels the generic `.lesson-actions button` 100% /
+       280px stretch that made each button span the screen. */
+    #online-screen .lesson-actions .btn-act-tx { display: none; }
+    #online-screen .lesson-actions .btn-primary,
+    #online-screen .lesson-actions .btn-secondary {
+        width: auto; max-width: none; padding: 0.5rem 0.7rem; min-height: 38px;
+        display: inline-flex; align-items: center; justify-content: center;
+        gap: 0.35rem; flex-shrink: 0; font-size: 0.88rem;
+    }
+    #online-screen .lesson-actions .icon-btn { width: auto; min-width: 38px; height: 38px; flex-shrink: 0; }
+    /* Lobby on phones: tap presets instead of scrolling wheels. */
+    #online-screen .wheel-wrap { display: none; }
+    #online-screen .tc-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
     #online-screen.screen { padding: 10px 0 12px; }
     /* Match screen on phones: bars + board + actions only. Turn state
        already lives in the indicators and clocks; the log stays a tap
@@ -2693,7 +2749,9 @@ body[data-theme='day'] .confirm-card h3 { color: var(--text-main); }
     body[data-screen="online-screen"] .header .container { padding-top: 0.4rem; padding-bottom: 0.4rem; }
     body[data-screen="online-screen"] .logo-icon { width: 28px; height: 28px; }
     body[data-screen="online-screen"] .logo h1 { font-size: 1rem; }
-    #online-screen .dashboard-section > h4:first-child { display: none; }
+    /* In-match only: the control-name heading duplicates the lobby summary.
+       Lobby keeps its section headings. */
+    #online-screen .lesson-content .dashboard-section > h4:first-child { display: none; }
 }
 
 /* Landscape phones: height is scarce — keep the square board inside the
@@ -2763,7 +2821,7 @@ body[data-theme='day'] #home-screen {
     grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
     gap: 3rem;
     align-items: center;
-    padding: 3rem 2.5rem;
+    padding: 2.1rem 2.5rem;
     border-radius: 20px;
     overflow: hidden;
     background:
@@ -2861,7 +2919,7 @@ body[data-theme='day'] #home-screen .hm-hero::after {
 #home-screen .hm-facts strong { font-size: 1rem; font-weight: 800; color: var(--hm-text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 
 /* hero board centerpiece */
-#home-screen .hm-hero-board { position: relative; z-index: 1; min-width: 0; max-width: 520px; width: 100%; margin-left: auto; }
+#home-screen .hm-hero-board { position: relative; z-index: 1; min-width: 0; max-width: 500px; width: 100%; margin-left: auto; }
 #home-screen .hm-boardframe {
     position: relative;
     background: var(--hm-surface-2);
@@ -3021,7 +3079,8 @@ body[data-theme='day'] #home-screen .hm-track { background: rgba(15, 23, 42, 0.1
 #home-screen .hm-dot.locked { opacity: .45; cursor: default; }
 #home-screen .hm-dot:not(.locked):hover { transform: translateY(-2px); border-color: var(--hm-accent); }
 #home-screen .hm-dot:focus-visible { outline: 2px solid var(--hm-accent); outline-offset: 2px; }
-body[data-theme='day'] #home-screen .hm-dot { background: rgba(15, 23, 42, 0.05); }
+body[data-theme='day'] #home-screen .hm-dot { background: rgba(15, 23, 42, 0.09); }
+body[data-theme='day'] #home-screen .hm-dot.locked { opacity: .6; }
 body[data-theme='day'] #home-screen .hm-dot.done { color: #04231A; }
 @keyframes hmDotPulse { 0%, 100% { box-shadow: 0 0 0 1px var(--hm-accent), 0 0 8px rgba(16, 214, 160, .18); } 50% { box-shadow: 0 0 0 1px var(--hm-accent), 0 0 18px rgba(16, 214, 160, .42); } }
 #home-screen .hm-prog-right {
@@ -3466,33 +3525,43 @@ body[data-theme='day'] .st-card-acts .linklike.danger { color: #dc2626; }
 .st-recent { list-style: none; display: flex; flex-direction: column; gap: .25rem; }
 .st-rename { width: 100%; background: var(--bg-main); border: 1px solid var(--st-gold); border-radius: 6px; color: var(--text-main); font: inherit; font-size: .9rem; padding: .4rem .6rem; }
 
-/* center */
-.st-center { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius-md); min-width: 0; overflow: hidden; }
+/* center — lichess-style: one board column, eval bar hugging the board */
+.st-center { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius-md); min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 .st-chead { padding: .9rem 1.1rem .7rem; border-bottom: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: .6rem; }
 .st-ctitle { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; min-width: 0; }
 .st-ctitle h3 { font-size: 1.1rem; font-weight: 800; color: var(--text-main); overflow-wrap: anywhere; margin-right: auto; }
 .st-chapnav { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .st-chapcount { font-size: .82rem; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.st-ctabs { display: flex; gap: 1.25rem; }
-.st-ctab { background: none; border: none; color: var(--text-muted); font: inherit; font-weight: 700; font-size: .9rem; padding: .35rem .1rem; cursor: pointer; border-bottom: 2px solid transparent; }
-.st-ctab.on { color: var(--st-gold); border-bottom-color: var(--st-gold); }
-.st-cmain { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 1.1rem; padding: 1.1rem; }
-.st-boardcol { min-width: 0; display: flex; flex-direction: column; gap: .7rem; }
-.st-boardwrap { position: relative; width: min(100%, calc(100dvh - 340px), 640px); margin: 0 auto; }
+.st-boardcol { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .65rem; padding: 1rem 1.1rem; }
+.st-boardrow { display: flex; align-items: stretch; gap: .5rem; width: min(100%, calc(100dvh - 320px), 720px); }
+.st-evalbar { position: relative; width: 38px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--glass-border); background: #1e293b; overflow: hidden; align-self: stretch; }
+body[data-theme='day'] .st-evalbar { background: #e2e8f0; }
+.st-evalfill { position: absolute; bottom: 0; left: 0; right: 0; background: #f1f5f9; transition: height .25s ease-out; }
+.st-evtick { position: absolute; right: 4px; font-size: .62rem; font-weight: 700; color: var(--text-muted-dim); }
+.st-evtick.t { top: 4px; } .st-evtick.m { top: 50%; transform: translateY(-50%); } .st-evtick.b { bottom: 4px; }
+.st-boardwrap { position: relative; flex: 1; min-width: 0; }
 .st-board { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden; border: 2px solid var(--glass-border); touch-action: none; }
+/* Scale pieces with the square — the 45px SVG default looked tiny on the
+   large PC board. Scoped to squares so the promo picker keeps its size. */
+.st-board .chess-square .st-piece { width: 90%; height: 90%; object-fit: contain; display: block; pointer-events: none; user-select: none; -webkit-user-drag: none; }
 .st-arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .st-ghost { position: fixed; left: 0; top: 0; z-index: 9995; pointer-events: none; width: 56px; height: 56px; transform: translate(-50%, -60%); }
 body.st-dragging, body.st-dragging .chess-square { touch-action: none !important; }
 .st-promo { position: absolute; z-index: 20; left: 50%; top: 12px; transform: translateX(-50%); max-width: 94%; }
 .st-promo[hidden] { display: none; }
-.st-controls { display: flex; justify-content: space-between; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.st-controls { display: flex; justify-content: space-between; align-items: center; gap: .6rem; flex-wrap: wrap; width: min(100%, calc(100dvh - 320px), 720px); }
 .st-controls .movenav { margin-bottom: 0; }
 .st-poscount { font-size: .8rem; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .st-ctl2 { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-.st-fenrow { display: flex; gap: .5rem; }
+.st-fenrow { display: flex; gap: .5rem; width: min(100%, calc(100dvh - 320px), 720px); }
 .st-fenrow input { flex: 1; min-width: 0; background: var(--bg-main); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); color: var(--text-main); font-family: 'Inter', monospace; font-size: .78rem; padding: .55rem .7rem; }
-.st-sidecol { min-width: 0; display: flex; flex-direction: column; gap: .6rem; }
-.st-moves { max-height: 420px; }
+/* right panel — tabs pick the body */
+.st-rtabs { display: flex; gap: .25rem; flex: 1; min-width: 0; overflow-x: auto; }
+.st-rtab { background: none; border: none; color: var(--text-muted); font: inherit; font-weight: 700; font-size: .84rem; padding: .35rem .6rem; cursor: pointer; border-radius: 6px; white-space: nowrap; }
+.st-rtab:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.05); }
+body[data-theme='day'] .st-rtab:hover { background: rgba(15, 23, 42, 0.05); }
+.st-rtab.on { color: var(--st-gold); background: rgba(240, 189, 101, 0.12); }
+.st-moves { max-height: none; flex: 1; min-height: 140px; overflow-y: auto; }
 .st-moves .st-mv, .st-moves .st-varmv { background: none; border: none; color: inherit; font: inherit; cursor: pointer; border-radius: 6px; padding: .15rem .35rem; }
 .st-moves .st-mv:hover, .st-moves .st-varmv:hover { background: rgba(240, 189, 101, 0.14); color: var(--text-main); }
 .st-moves .st-mv.cur, .st-moves .st-varmv.cur { background: rgba(240, 189, 101, 0.2); color: var(--text-main); }
@@ -3544,16 +3613,10 @@ body[data-theme='day'] .st-cls-blunder { color: #dc2626; }
 @keyframes stPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .st-engwhy { margin-left: auto; font-size: .75rem; color: var(--st-blue); cursor: help; }
 .st-note { font-size: .8rem; color: var(--text-muted); line-height: 1.55; }
-.st-evalrow { display: flex; gap: .9rem; align-items: stretch; }
-.st-evalmain { flex: 1; min-width: 0; }
+.st-evalmain { min-width: 0; }
 .st-evalnum { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.02em; color: var(--text-main); font-variant-numeric: tabular-nums; line-height: 1.05; }
 .st-evalwords { font-size: .88rem; color: var(--text-muted); margin-top: .1rem; }
 .st-evalmeta { font-size: .75rem; color: var(--text-muted-dim); margin-top: .3rem; font-variant-numeric: tabular-nums; }
-.st-evalbar { position: relative; width: 44px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--glass-border); background: #1e293b; overflow: hidden; min-height: 150px; }
-body[data-theme='day'] .st-evalbar { background: #e2e8f0; }
-.st-evalfill { position: absolute; bottom: 0; left: 0; right: 0; background: #f1f5f9; transition: height .25s ease-out; }
-.st-evtick { position: absolute; right: 4px; font-size: .62rem; font-weight: 700; color: var(--text-muted-dim); }
-.st-evtick.t { top: 4px; } .st-evtick.m { top: 50%; transform: translateY(-50%); } .st-evtick.b { bottom: 4px; }
 .st-engcard { background: var(--bg-main); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); padding: .7rem .8rem; }
 .st-engcard-h { font-size: .8rem; font-weight: 800; color: var(--text-main); margin-bottom: .45rem; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
 .st-pv { font-size: .85rem; color: var(--text-muted); line-height: 1.6; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -3600,6 +3663,7 @@ body[data-theme='day'] .st-cand-ev.pos { color: #15803d; } body[data-theme='day'
     .st-wrap { grid-template-columns: 260px minmax(0, 1fr); }
     .st-right { grid-column: 1 / -1; }
     .st-right .st-pane-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .9rem; }
+    .st-boardrow, .st-controls, .st-fenrow { width: min(100%, 640px); }
 }
 @media (max-width: 860px) {
     .st-wrap { grid-template-columns: minmax(0, 1fr); }
@@ -3608,9 +3672,9 @@ body[data-theme='day'] .st-cand-ev.pos { color: #15803d; } body[data-theme='day'
     .st-mtab.on { color: var(--st-gold); border-color: var(--st-gold); }
     .st-wrap[data-mtab="library"] .st-center, .st-wrap[data-mtab="library"] .st-right,
     .st-wrap[data-mtab="board"] .st-left, .st-wrap[data-mtab="board"] .st-right,
-    .st-wrap[data-mtab="engine"] .st-left, .st-wrap[data-mtab="engine"] .st-center { display: none; }
-    .st-cmain { grid-template-columns: minmax(0, 1fr); }
-    .st-boardwrap { width: 100%; max-width: 560px; }
+    .st-wrap[data-mtab="analysis"] .st-left, .st-wrap[data-mtab="analysis"] .st-center { display: none; }
+    .st-boardrow, .st-controls, .st-fenrow { width: 100%; }
+    .st-evalbar { width: 30px; }
     .st-left.closed, .st-right.closed { display: none; }
     .st-moves { max-height: 220px; }
     .st-practice-grid { grid-template-columns: minmax(0, 1fr); }

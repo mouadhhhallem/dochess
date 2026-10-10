@@ -644,7 +644,7 @@ function stripParents(n) {
 const S = {
     lib: null,
     studyId: null, chapterId: null, node: null,
-    sel: null, flip: false, tab: 'board',
+    sel: null, flip: false, tab: 'moves',
     leftOpen: true, rightOpen: true, mobileTab: 'board',
     search: '', dlg: null, // {kind:'import'|'study'|'confirm'..., ...}
     engOn: true, engDepth: 16, engine: null,
@@ -711,7 +711,7 @@ function render() {
     box.innerHTML = `
     <div class="st-wrap" data-mtab="${S.mobileTab}">
         <div class="st-mobiletabs" role="tablist" aria-label="Study sections">
-            ${['library', 'board', 'engine'].map(t => `<button role="tab" aria-selected="${S.mobileTab === t}" class="st-mtab${S.mobileTab === t ? ' on' : ''}" data-st="mtab" data-t="${t}" type="button">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
+            ${['library', 'board', 'analysis'].map(t => `<button role="tab" aria-selected="${S.mobileTab === t}" class="st-mtab${S.mobileTab === t ? ' on' : ''}" data-st="mtab" data-t="${t}" type="button">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
         </div>
         <aside class="st-left${S.leftOpen ? '' : ' closed'}" aria-label="Study library">
             ${renderLibrary(st)}
@@ -719,8 +719,8 @@ function render() {
         <section class="st-center" aria-label="Board workspace">
             ${ch ? renderCenter(st, ch) : renderCenterEmpty()}
         </section>
-        <aside class="st-right${S.rightOpen ? '' : ' closed'}" aria-label="Engine analysis">
-            ${renderEnginePanel(st, ch)}
+        <aside class="st-right${S.rightOpen ? '' : ' closed'}" aria-label="Analysis">
+            ${renderRightPanel(st, ch)}
         </aside>
     </div>
     <div class="st-toast" id="st-toast" role="status" aria-live="polite"></div>
@@ -810,10 +810,31 @@ function renderCenterEmpty() {
     </div>`;
 }
 function chapterIndex(st, ch) { return st.chapters.findIndex(c => c.id === ch.id); }
+/* Current eval for the selected node: engine result for this FEN, else cache. */
+function currentEval() {
+    const ana = S.ana && S.node && S.ana.fen === S.node.fen ? S.ana.result : (S.node && S.anaCache.get(S.node.fen)) || null;
+    const w = ana && ana.candidates[0] ? whiteRel(ana.candidates[0].score, ana.turn) : null;
+    const cpW = w && w.type === 'cp' ? w.v : null;
+    return { ana, w, cpW, pct: evalBarPct(cpW) };
+}
+function evalBarHTML() {
+    const { w, pct, ana } = currentEval();
+    return `<div class="st-evalbar" id="st-evalbar" role="img" aria-label="${ana ? 'Evaluation ' + esc(fmtScore(w)) : 'No evaluation yet'}">
+        <div class="st-evalfill" id="st-evalfill" style="height:${pct}%"></div>
+        <span class="st-evtick t">+3</span><span class="st-evtick m">0</span><span class="st-evtick b">−3</span>
+    </div>`;
+}
+function paintEvalBar() {
+    const bar = $('#st-evalbar');
+    if (!bar) return;
+    const { w, pct, ana } = currentEval();
+    const fill = $('#st-evalfill');
+    if (fill) fill.style.height = pct + '%';
+    bar.setAttribute('aria-label', ana ? 'Evaluation ' + fmtScore(w) : 'No evaluation yet');
+}
 function renderCenter(st, ch) {
     const ci = chapterIndex(st, ch);
     const editingTitle = S.renameId === 'study:' + st.id;
-    const editingCh = S.renameId === 'chapter:' + ch.id;
     return `
     <div class="st-chead">
         <div class="st-ctitle">
@@ -830,44 +851,32 @@ function renderCenter(st, ch) {
             <button class="btn-secondary sm" data-st="new-chapter" type="button">+ Chapter</button>
             <button class="linklike danger" data-st="del-chapter" type="button">Delete</button>
         </div>
-        <div class="st-ctabs" role="tablist" aria-label="Workspace tabs">
-            ${['board', 'notes', 'repertoire'].map(t => `<button role="tab" aria-selected="${S.tab === t}" class="st-ctab${S.tab === t ? ' on' : ''}" data-st="ctab" data-t="${t}" type="button">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
-        </div>
     </div>
-    <div class="st-cmain">
-        <div class="st-boardcol">
+    <div class="st-boardcol">
+        <div class="st-boardrow">
+            ${evalBarHTML()}
             <div class="st-boardwrap"><div class="st-board" id="st-board" role="group" aria-label="Study chessboard"></div><svg class="st-arrows" id="st-arrows" aria-hidden="true"></svg>
                 <div class="st-promo" id="st-promo" hidden></div>
             </div>
-            <div class="st-controls">
-                <div class="movenav" role="group" aria-label="Move navigation">
-                    <button class="icon-btn" data-st="nav" data-where="start" type="button" title="First position" aria-label="First position"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M18 5l-8 7 8 7"/></svg></button>
-                    <button class="icon-btn" data-st="nav" data-where="prev" type="button" title="Previous move (←)" aria-label="Previous move"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5l-7 7 7 7"/></svg></button>
-                    <span class="st-poscount" id="st-poscount" aria-live="polite"></span>
-                    <button class="icon-btn" data-st="nav" data-where="next" type="button" title="Next move (→)" aria-label="Next move"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5l7 7-7 7"/></svg></button>
-                    <button class="icon-btn" data-st="nav" data-where="end" type="button" title="Latest move" aria-label="Latest move"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
-                </div>
-                <div class="st-ctl2">
-                    <button class="btn-secondary sm" data-st="flip" type="button" aria-pressed="${S.flip}">Flip</button>
-                    <button class="btn-secondary sm" data-st="import-open" type="button">Import</button>
-                    <button class="btn-secondary sm" data-st="shortcuts" type="button" title="Keyboard shortcuts">?</button>
-                </div>
+        </div>
+        <div class="st-controls">
+            <div class="movenav" role="group" aria-label="Move navigation">
+                <button class="icon-btn" data-st="nav" data-where="start" type="button" title="First position" aria-label="First position"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M18 5l-8 7 8 7"/></svg></button>
+                <button class="icon-btn" data-st="nav" data-where="prev" type="button" title="Previous move (←)" aria-label="Previous move"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5l-7 7 7 7"/></svg></button>
+                <span class="st-poscount" id="st-poscount" aria-live="polite"></span>
+                <button class="icon-btn" data-st="nav" data-where="next" type="button" title="Next move (→)" aria-label="Next move"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5l7 7-7 7"/></svg></button>
+                <button class="icon-btn" data-st="nav" data-where="end" type="button" title="Latest move" aria-label="Latest move"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
             </div>
-            <div class="st-fenrow">
-                <input id="st-fen" type="text" spellcheck="false" autocomplete="off" placeholder="Paste FEN…" aria-label="FEN position" value="">
-                <button class="btn-secondary sm" data-st="fen-load" type="button">Load</button>
-                <button class="btn-secondary sm" data-st="fen-copy" type="button">Copy FEN</button>
+            <div class="st-ctl2">
+                <button class="btn-secondary sm" data-st="flip" type="button" aria-pressed="${S.flip}">Flip</button>
+                <button class="btn-secondary sm" data-st="import-open" type="button">Import</button>
+                <button class="btn-secondary sm" data-st="shortcuts" type="button" title="Keyboard shortcuts">?</button>
             </div>
         </div>
-        <div class="st-sidecol">
-            ${S.tab === 'board' ? `<div class="move-log st-moves" id="st-moves" role="log" aria-live="polite" aria-label="Moves">${renderMoveList(ch)}</div>
-                <div class="st-lineacts">
-                    <button class="btn-secondary sm" data-st="promote" type="button" title="Make this variation the main line">Promote line</button>
-                    <button class="btn-secondary sm" data-st="del-line" type="button" title="Delete this line">Delete line</button>
-                    <button class="btn-secondary sm" data-st="pgn-copy" type="button">Copy PGN</button>
-                </div>` : ''}
-            ${S.tab === 'notes' ? renderNotesTab(st, ch) : ''}
-            ${S.tab === 'repertoire' ? renderRepTab(st, ch) : ''}
+        <div class="st-fenrow">
+            <input id="st-fen" type="text" spellcheck="false" autocomplete="off" placeholder="Paste FEN…" aria-label="FEN position" value="">
+            <button class="btn-secondary sm" data-st="fen-load" type="button">Load</button>
+            <button class="btn-secondary sm" data-st="fen-copy" type="button">Copy FEN</button>
         </div>
     </div>
     ${S.practice ? renderPractice() : ''}`;
@@ -1324,7 +1333,33 @@ function materialCount(fen) {
     } catch (_) {}
     return { diff: w - b, w, b };
 }
-function renderEnginePanel(st, ch) {
+/* Right panel — lichess-style analysis column: tabs pick the body,
+   the eval bar itself lives on the board (left of the board). */
+const RIGHT_TABS = [['moves', 'Moves'], ['engine', 'Engine'], ['notes', 'Notes'], ['repertoire', 'Repertoire']];
+function renderRightPanel(st, ch) {
+    const tab = RIGHT_TABS.some(t => t[0] === S.tab) ? S.tab : 'moves';
+    return `
+        <div class="st-pane-head">
+            <button class="icon-btn st-collapse" data-st="toggle-right" type="button" aria-label="${S.rightOpen ? 'Collapse analysis panel' : 'Expand analysis panel'}" title="Collapse panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5l7 7-7 7"/></svg></button>
+            <div class="st-rtabs" role="tablist" aria-label="Analysis sections">
+                ${RIGHT_TABS.map(([id, label]) => `<button role="tab" aria-selected="${tab === id}" class="st-rtab${tab === id ? ' on' : ''}" data-st="ctab" data-t="${id}" type="button">${label}</button>`).join('')}
+            </div>
+            ${tab === 'engine' ? `<button class="icon-btn" data-st="engine-settings" type="button" aria-label="Engine settings" title="Engine settings"><span aria-hidden="true">${tileIcon('sliders')}</span></button>` : ''}
+        </div>
+        <div class="st-pane-body">
+            ${tab === 'moves' ? `
+                <div class="move-log st-moves" id="st-moves" role="log" aria-live="polite" aria-label="Moves">${ch ? renderMoveList(ch) : ''}</div>
+                <div class="st-lineacts">
+                    <button class="btn-secondary sm" data-st="promote" type="button" title="Make this variation the main line">Promote line</button>
+                    <button class="btn-secondary sm" data-st="del-line" type="button" title="Delete this line">Delete line</button>
+                    <button class="btn-secondary sm" data-st="pgn-copy" type="button">Copy PGN</button>
+                </div>` : ''}
+            ${tab === 'engine' ? renderEngineBody(st, ch) : ''}
+            ${tab === 'notes' ? renderNotesTab(st, ch) : ''}
+            ${tab === 'repertoire' ? renderRepTab(st, ch) : ''}
+        </div>`;
+}
+function renderEngineBody(st, ch) {
     const eng = S.engine;
     const engKind = (eng && eng.kind === 'stockfish') ? 'stockfish' : (eng ? eng.kind : 'none');
     let badge, badgeCls;
@@ -1337,31 +1372,17 @@ function renderEnginePanel(st, ch) {
     const turn = ana ? ana.turn : null;
     const c0 = ana && ana.candidates[0];
     const w = c0 ? whiteRel(c0.score, ana.turn) : null;
-    const cpW = w && w.type === 'cp' ? w.v : null;
-    const pct = evalBarPct(cpW);
     const pvSans = c0 ? pvToSans(S.node ? S.node.fen : START_FEN, c0.pv, 12) : [];
     const playable = st && ch && S.node && !S.practice;
     return `
-        <div class="st-pane-head">
-            <button class="icon-btn st-collapse" data-st="toggle-right" type="button" aria-label="${S.rightOpen ? 'Collapse engine panel' : 'Expand engine panel'}" title="Collapse panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5l7 7-7 7"/></svg></button>
-            <h3>Engine analysis</h3>
-            <button class="icon-btn" data-st="engine-settings" type="button" aria-label="Engine settings" title="Engine settings"><span aria-hidden="true">${tileIcon('sliders')}</span></button>
-        </div>
-        <div class="st-pane-body">
             <div class="st-engstatus"><span class="st-dot ${badgeCls}" aria-hidden="true"></span><span>${esc(badge)}</span>
                 ${eng && eng.status === 'unavailable' && eng.statusDetail ? `<span class="st-engwhy" title="${esc(eng.statusDetail)}">why?</span>` : ''}
             </div>
             ${eng && eng.status === 'unavailable' && eng.statusDetail ? `<p class="st-note">${esc(eng.statusDetail)}</p>` : ''}
-            <div class="st-evalrow">
-                <div class="st-evalmain">
-                    <div class="st-evalnum">${ana ? esc(fmtScore(w)) : '–'}</div>
-                    <div class="st-evalwords">${ana ? esc(evalWords(w, turn)) : (S.engOn ? 'Analyzing position…' : 'Engine is off')}</div>
-                    <div class="st-evalmeta">${ana ? `Depth ${ana.depth}${ana.seldepth ? '/' + ana.seldepth : ''} · ${fmtNodes(ana.nodes)} nodes · ${fmtNps(ana.nps)}${ana.engine === 'local' ? ' · local' : ''}` : ' '}</div>
-                </div>
-                <div class="st-evalbar" role="img" aria-label="${ana ? 'Evaluation ' + esc(fmtScore(w)) : 'No evaluation yet'}">
-                    <div class="st-evalfill" style="height:${pct}%"></div>
-                    <span class="st-evtick t">+3</span><span class="st-evtick m">0</span><span class="st-evtick b">−3</span>
-                </div>
+            <div class="st-evalmain">
+                <div class="st-evalnum">${ana ? esc(fmtScore(w)) : '–'}</div>
+                <div class="st-evalwords">${ana ? esc(evalWords(w, turn)) : (S.engOn ? 'Analyzing position…' : 'Engine is off')}</div>
+                <div class="st-evalmeta">${ana ? `Depth ${ana.depth}${ana.seldepth ? '/' + ana.seldepth : ''} · ${fmtNodes(ana.nodes)} nodes · ${fmtNps(ana.nps)}${ana.engine === 'local' ? ' · local' : ''}` : ' '}</div>
             </div>
             <div class="st-engcard">
                 <div class="st-engcard-h">Best continuation ${pvSans.length > 1 ? `<button class="linklike" data-st="cand-line" type="button" ${playable ? '' : 'disabled'}>Play line</button>` : ''}</div>
@@ -1393,8 +1414,7 @@ function renderEnginePanel(st, ch) {
                     ${[10, 12, 14, 16, 18, 20].map(d => `<option value="${d}"${S.engDepth === d ? ' selected' : ''}>${d}</option>`).join('')}
                 </select></label>
             </div>
-            ${st ? `<div class="st-progress"><div class="st-progress-h"><span>Study progress</span><span>${studyProgress(st)}%</span></div><div class="dc-track"><span style="width:${studyProgress(st)}%"></span></div><span class="st-dim">${st.chapters.length} chapter${st.chapters.length === 1 ? '' : 's'}</span></div>` : ''}
-        </div>`;
+            ${st ? `<div class="st-progress"><div class="st-progress-h"><span>Study progress</span><span>${studyProgress(st)}%</span></div><div class="dc-track"><span style="width:${studyProgress(st)}%"></span></div><span class="st-dim">${st.chapters.length} chapter${st.chapters.length === 1 ? '' : 's'}</span></div>` : ''}`;
 }
 function fmtNodes(n) {
     n = +n || 0;
@@ -1452,10 +1472,14 @@ function paintLibrary() {
     if (document.activeElement && document.activeElement.id === 'st-search') return;
 }
 function paintEngine() {
+    paintEvalBar();
+    // Only rebuild the right panel when the Engine tab is showing — a
+    // background result must not clobber moves/notes the user is in.
+    if (S.tab !== 'engine') return;
     const aside = $('#study-content .st-right');
     if (!aside) return;
     const st = curStudy(), ch = curChapter(st);
-    aside.innerHTML = renderEnginePanel(st, ch);
+    aside.innerHTML = renderRightPanel(st, ch);
 }
 function needStudy() {
     const st = curStudy();
@@ -1624,7 +1648,7 @@ function doAction(a, el) {
         case 'cand': {
             const u = el.dataset.uci;
             if (!u || !st || !needChapter(st)) break;
-            S.tab = 'board';
+            S.tab = 'moves';
             doPlayMove(u.slice(0, 2), u.slice(2, 4), u[4] || undefined);
             break;
         }
@@ -1632,7 +1656,7 @@ function doAction(a, el) {
             if (!st || !needChapter(st) || !S.ana || !S.ana.result || !S.ana.result.candidates[0]) break;
             const pv = S.ana.result.candidates[0].pv;
             if (!pv.length) break;
-            S.tab = 'board';
+            S.tab = 'moves';
             let n = S.node, played = 0;
             pv.forEach(u => {
                 const r = playOn(n, u.slice(0, 2), u.slice(2, 4), u[4] || undefined);
@@ -1744,7 +1768,7 @@ function doAction(a, el) {
                 if (res.illegal) return;
                 n = res.node; played++;
             });
-            S.node = n; S.tab = 'board';
+            S.node = n; S.tab = 'moves';
             touch(st); render(); scheduleAnalyze();
             toast(`Repertoire line loaded (${played} moves).`);
             break;

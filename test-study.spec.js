@@ -204,6 +204,8 @@ test('live Stockfish analysis over http (skipped if no server)', async ({ page }
   await page.click('.st-new');
   await page.fill('#st-dlg-input', 'EngineLive');
   await page.click('[data-st="study-create"]');
+  // Engine panel now lives behind the Engine tab (lichess-style layout).
+  await page.click('[data-st="ctab"][data-t="engine"]');
   // Genuine engine handshake: real depth line, real bestmove, real MultiPV.
   await page.waitForFunction(() => /Stockfish.*Connected/.test(document.querySelector('.st-engstatus')?.textContent || ''), null, { timeout: 90000 });
   await page.waitForFunction(() => /Depth (1[2-9]|20)\b/.test(document.querySelector('.st-evalmeta')?.textContent || ''), null, { timeout: 120000 });
@@ -222,6 +224,7 @@ test('study falls back honestly on file:// (no fake engine)', async ({ page }) =
   await page.click('.st-new');
   await page.fill('#st-dlg-input', 'Offline');
   await page.click('[data-st="study-create"]');
+  await page.click('[data-st="ctab"][data-t="engine"]');
   await page.waitForFunction(() => /Local engine/.test(document.querySelector('.st-engstatus')?.textContent || ''), null, { timeout: 30000 });
   // Local fallback still measures: depth shown, score formatted, no fantasy.
   await page.waitForFunction(() => /Depth 2/.test(document.querySelector('.st-evalmeta')?.textContent || ''), null, { timeout: 30000 });
@@ -237,7 +240,7 @@ test('study mobile layout has no overflow', async ({ page }) => {
   await expect(page.locator('.st-mobiletabs')).toBeVisible();
   await page.click('[data-st="mtab"][data-t="library"]');
   await expect(page.locator('.st-left')).toBeVisible();
-  await page.click('[data-st="mtab"][data-t="engine"]');
+  await page.click('[data-st="mtab"][data-t="analysis"]');
   await expect(page.locator('.st-right')).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBe(0);

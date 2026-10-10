@@ -153,6 +153,7 @@ class ChessCourseApp {
         window.toggleTheme  = (el) => this.toggleTheme(el);
         window.app          = this;
         this._applyTheme(this._resolveTheme(), false);
+        this._applyBoardSkin(this._boardSkin(), false);
         this._initAuth();
         this._bindMenu();
         this._bindImgFallback();
@@ -259,6 +260,8 @@ class ChessCourseApp {
                 else if (a === 'hist-nav') this._histNav(action.dataset.where);
                 else if (a === 'hist-goto') this._histGoto(parseInt(action.dataset.ply, 10));
                 else if (a === 'hist-to-study') { if (window.DoChessStudy) window.DoChessStudy.importGame(action.dataset.game); }
+                else if (a === 'board-skin') this._setBoardSkin(action.dataset.skin);
+                else if (a === 'lobby-preset') this._lobbyPreset(parseInt(action.dataset.m, 10), parseInt(action.dataset.s, 10));
             });
         }
     }
@@ -1820,17 +1823,41 @@ class ChessCourseApp {
         const board = OnlineRatings.board(cur.id).map((p, i) =>
             `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
             || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
+        // Phones swap the tall wheels for a tappable preset grid; desktop
+        // keeps the wheels. Both stay in sync through cc_control.
+        const presets = [[1, 0], [3, 0], [5, 0], [3, 2], [10, 0], [15, 10]];
+        const presetHTML = presets.map(([pm, ps]) => {
+            const pc = this._controlFor(pm, ps);
+            const on = (cur.minutes ?? 5) === pm && (cur.incSec ?? 0) === ps;
+            return `<button type="button" class="tc-preset${on ? ' on' : ''}" data-action="lobby-preset" data-m="${pm}" data-s="${ps}" aria-pressed="${on}" title="${pc.name} ${pc.label}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5v3.5l2.5 1.5M9 2h6"/></svg>
+                <span class="tc-preset-time">${pm}+${ps}</span>
+                <span class="tc-preset-cat">${pc.name}</span>
+            </button>`;
+        }).join('');
         box.innerHTML = `
             <div class="online-lobby">
                 ${signed ? '' : `<div class="exercise-instructions"><h4>Sign in to play online</h4><p>Online games are rated, so every player needs an identity. <button class="linklike"
            data-action="profile-signin">Sign in / Join</button></p></div>`}
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Time control</h4>
+                    <div class="tc-presets" role="group" aria-label="Quick time controls">${presetHTML}</div>
                     <div class="wheel-wrap">
                         ${wheel('min', mins, cur.minutes ?? 5, (v) => v)}
                         ${wheel('inc', secs, cur.incSec ?? 0, (v) => v)}
                         <div class="wheel-summary" id="wheel-summary">${this._wheelSummaryHTML(cur, signed)}</div>
                     </div>
+                </div>
+                <div class="dashboard-section">
+                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Board style</h4>
+                    <div class="skin-row" role="radiogroup" aria-label="Board style">
+                        ${ChessCourseApp.BOARD_SKINS.map(k => `
+                            <button type="button" class="skin-swatch${this._boardSkin() === k.id ? ' on' : ''}" data-action="board-skin" data-skin="${k.id}" role="radio" aria-checked="${this._boardSkin() === k.id}" title="${k.name} board">
+                                <span class="skin-prev" aria-hidden="true"><i style="background:${k.light}"></i><i style="background:${k.dark}"></i><i style="background:${k.dark}"></i><i style="background:${k.light}"></i></span>
+                                <span class="skin-name">${k.name}</span>
+                            </button>`).join('')}
+                    </div>
+                    <p class="lobby-hint">Applies to every board — online games, Study and lessons.</p>
                 </div>
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Play a friend</h4>
@@ -1950,6 +1977,37 @@ class ChessCourseApp {
         const list = document.getElementById('wheel-board-list');
         if (list) {
             const rows = OnlineRatings.board(cur.id).map((p, i) =>
+                `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
+                || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
+            list.innerHTML = rows;
+        }
+    }
+
+    // Phone preset tap: save the control, sync the (hidden) wheels so a
+    // resize to desktop stays consistent, repaint summary + leaderboard.
+    _lobbyPreset(m, s) {
+        const val = this._controlFor(m, s);
+        m = val.minutes; s = val.incSec;
+        try { localStorage.setItem('cc_control', JSON.stringify({ m, s })); } catch (_) {}
+        ['min', 'inc'].forEach(kind => {
+            const el = document.getElementById('wheel-' + kind);
+            if (!el) return;
+            const v = kind === 'min' ? m : s;
+            el.querySelectorAll('[role="option"]').forEach(o => o.setAttribute('aria-selected', o.dataset.val === String(v) ? 'true' : 'false'));
+        });
+        document.querySelectorAll('.tc-preset').forEach(b => {
+            const on = parseInt(b.dataset.m, 10) === m && parseInt(b.dataset.s, 10) === s;
+            b.classList.toggle('on', on);
+            b.setAttribute('aria-pressed', String(on));
+        });
+        try { navigator.vibrate && navigator.vibrate(5); } catch (_) {}
+        const sum = document.getElementById('wheel-summary');
+        if (sum) sum.innerHTML = this._wheelSummaryHTML(val, !!(this._clerk && this._clerk.user));
+        const head = document.getElementById('wheel-board-head');
+        if (head) head.textContent = `Device leaderboard — ${val.name}`;
+        const list = document.getElementById('wheel-board-list');
+        if (list) {
+            const rows = OnlineRatings.board(val.id).map((p, i) =>
                 `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
                 || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
             list.innerHTML = rows;
@@ -2731,14 +2789,14 @@ class ChessCourseApp {
                     </div>
                     <div class="lesson-actions" id="online-actions">
                         ${over
-                            ? `<button class="btn-primary btn-glow-strong" data-action="online-rematch">Rematch</button>
-                               <button class="btn-secondary" data-action="online-review">Review</button>
+                            ? `<button class="btn-primary btn-glow-strong" data-action="online-rematch" aria-label="Rematch">${ChessCourseApp.ACT_ICONS.rematch}<span class="btn-act-tx">Rematch</span></button>
+                               <button class="btn-secondary" data-action="online-review" aria-label="Review game">${ChessCourseApp.ACT_ICONS.review}<span class="btn-act-tx">Review</span></button>
                                ${this._muteBtnHTML()}
-                               <button class="btn-secondary" data-action="online-leave">Lobby</button>`
-                            : `<button class="btn-secondary" data-action="online-draw-offer">Draw</button>
-                               <button class="btn-secondary" data-action="online-resign-ask">Resign</button>
+                               <button class="btn-secondary" data-action="online-leave" aria-label="Back to lobby">${ChessCourseApp.ACT_ICONS.lobby}<span class="btn-act-tx">Lobby</span></button>`
+                            : `<button class="btn-secondary" data-action="online-draw-offer" aria-label="Offer draw">${ChessCourseApp.ACT_ICONS.draw}<span class="btn-act-tx">Draw</span></button>
+                               <button class="btn-secondary" data-action="online-resign-ask" aria-label="Resign">${ChessCourseApp.ACT_ICONS.resign}<span class="btn-act-tx">Resign</span></button>
                                ${this._muteBtnHTML()}
-                               <button class="btn-secondary" data-action="online-leave-ask">Leave</button>`}
+                               <button class="btn-secondary" data-action="online-leave-ask" aria-label="Leave game">${ChessCourseApp.ACT_ICONS.leave}<span class="btn-act-tx">Leave</span></button>`}
                     </div>
                 </div>
             </div>`;
@@ -3564,6 +3622,53 @@ class ChessCourseApp {
             try { localStorage.setItem('ccp_theme', this.theme); } catch (_) {}
         }
         this._syncThemeButton();
+    }
+
+    /* ── Board skins: square colors for every board, chosen in the
+       Online lobby. CSS vars on body[data-board-skin] do the painting. ── */
+    static BOARD_SKINS = [
+        { id: 'brown',  name: 'Brown',  light: '#F0D9B5', dark: '#B58863' },
+        { id: 'blue',   name: 'Blue',   light: '#DEE3E6', dark: '#8CA2AD' },
+        { id: 'green',  name: 'Green',  light: '#FFFFDD', dark: '#86A666' },
+        { id: 'gray',   name: 'Gray',   light: '#F0F0F0', dark: '#999999' },
+        { id: 'wood',   name: 'Wood',   light: '#E8C9A0', dark: '#A17A56' },
+        { id: 'purple', name: 'Purple', light: '#E0D3E8', dark: '#9070A8' }
+    ];
+
+    // Line icons for the online action bar. Phones hide the text labels
+    // (btn-act-tx) and keep only these; desktop shows icon + label.
+    static ACT_ICONS = {
+        rematch: '<svg viewBox="0 0 24 24" class="btn-act-ic" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.66-5.66L20 8M20 4v4h-4M20 12a8 8 0 0 1-13.66 5.66L4 16M4 20v-4h4"/></svg>',
+        review: '<svg viewBox="0 0 24 24" class="btn-act-ic" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20.5 20.5L16 16"/></svg>',
+        lobby: '<svg viewBox="0 0 24 24" class="btn-act-ic" aria-hidden="true"><path d="M4 10.5L12 4l8 6.5V20h-5v-6H9v6H4z"/></svg>',
+        draw: '<svg viewBox="0 0 24 24" class="btn-act-ic" aria-hidden="true"><path d="M8.5 15.5l-3-3a2 2 0 0 1 0-2.83l3.5-3.5a2 2 0 0 1 2.83 0l3.5 3.5M15.5 15.5l3-3a2 2 0 0 0 0-2.83l-3.5-3.5"/><path d="M4 14l3 3a2 2 0 0 0 2.83 0L14 12.8M10 17l1.2 1.2a2 2 0 0 0 2.83 0L20 12.2"/></svg>',
+        resign: '<svg viewBox="0 0 24 24" class="btn-act-ic" aria-hidden="true"><path d="M5 21V4M5 4h12l-2.5 4L17 12H5"/></svg>',
+        leave: '<svg viewBox="0 0 24 24" class="btn-act-ic" aria-hidden="true"><path d="M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M9 8l-4 4 4 4M5 12h10"/></svg>'
+    };
+
+    _boardSkin() {
+        try {
+            const s = localStorage.getItem('cc_board_skin');
+            if (s && ChessCourseApp.BOARD_SKINS.some(k => k.id === s)) return s;
+        } catch (_) {}
+        return 'brown';
+    }
+
+    _applyBoardSkin(id, persist = true) {
+        const skin = ChessCourseApp.BOARD_SKINS.some(k => k.id === id) ? id : 'brown';
+        this.boardSkin = skin;
+        if (skin === 'brown') delete document.body.dataset.boardSkin;
+        else document.body.dataset.boardSkin = skin;
+        if (persist) {
+            try { localStorage.setItem('cc_board_skin', skin); } catch (_) {}
+        }
+    }
+
+    _setBoardSkin(id) {
+        this._applyBoardSkin(id);
+        if (document.getElementById('online-content') && (!this.online || this.online.phase === 'lobby')) {
+            this._renderOnlineLobby();
+        }
     }
 
     toggleTheme(fromEl) {
