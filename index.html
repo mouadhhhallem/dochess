@@ -8,8 +8,8 @@
     <meta name="theme-color" content="#0d1526">
     <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=41">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; upgrade-insecure-requests">
+    <link rel="stylesheet" href="styles.css?v=43">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; upgrade-insecure-requests">
     <style>
     /* ══ Learn screen ══════════════════════════════════════════════════════
        Deliberately the SAME anatomy as the Lessons screen (#lesson-screen):
@@ -555,51 +555,10 @@
 
             <!-- Home Screen -->
             <div id="home-screen" class="screen active" tabindex="-1">
-                <div class="container">
-
-                    <!-- Hero -->
-                    <div class="hero">
-                        <img class="hero-chess-icon" id="hero-logo-img" src="assets/logos/logo-256-dark.png?v=28" alt="DoChess" width="88" height="88" fetchpriority="high">
-                        <h2>Master the <span>Game of Kings</span></h2>
-                        <p>Learn chess from scratch with 10 interactive lessons guided by expert teachers. Every move, every rule — made simple.</p>
-                        <button class="btn-primary btn-glow-strong" id="start-learning-btn" type="button">Start Learning →</button>
-                        <button class="btn-secondary" id="start-levels-btn" type="button" style="margin-top:.75rem">★ New: Interactive Levels (36 puzzles)</button>
+                <div class="container hm-container">
+                    <div class="hm-wrap" id="hm-wrap">
+                        <!-- Rendered by home.js: hero + board, actions, progress story, teachers -->
                     </div>
-
-                    <!-- How it works: the real first-run path, nothing more -->
-                    <div class="how-strip" aria-label="How the course works">
-                        <div class="how-step"><span class="how-num">1</span><div><h4>Pick a lesson</h4><p>Ten lessons, in order — each unlocks the next.</p></div></div>
-                        <div class="how-step"><span class="how-num">2</span><div><h4>Make the move</h4><p>Play it on the real board. Feedback is instant.</p></div></div>
-                        <div class="how-step"><span class="how-num">3</span><div><h4>Complete &amp; unlock</h4><p>Finish the exercise, then take on the computer.</p></div></div>
-                    </div>
-
-                    <!-- Progress Overview -->
-                    <div class="progress-overview">
-                        <h3>Your Progress</h3>
-                        <div class="progress-stats">
-                            <div class="stat">
-                                <span class="stat-label">Lessons Completed</span>
-                                <span class="stat-value" id="lessons-completed">0</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">Total Lessons</span>
-                                <span class="stat-value">10</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-label">Completion</span>
-                                <span class="stat-value" id="progress-percentage">0%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Teachers -->
-                    <div class="teachers-section">
-                        <h3>Meet Your Teachers</h3>
-                        <div class="teachers-grid" id="teachers-grid">
-                            <!-- Rendered by JS -->
-                        </div>
-                    </div>
-
                 </div>
             </div>
 
@@ -759,25 +718,9 @@
 
             <!-- Progress Screen -->
             <div id="progress-screen" class="screen" tabindex="-1">
-                <div class="container">
-                    <h2>Your Learning Progress</h2>
-
-                    <div class="progress-chart">
-                        <p>Overall Completion</p>
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="overall-progress"></div>
-                        </div>
-                        <p class="progress-label">
-                            <span id="lessons-completed-2">0</span> / 10 lessons complete —
-                            <span id="progress-percentage-2">0%</span>
-                        </p>
-                    </div>
-
-                    <div class="completed-lessons">
-                        <h3>Completed Lessons</h3>
-                        <div id="completed-lessons-list">
-                            <!-- Rendered by JS -->
-                        </div>
+                <div class="container pg-container">
+                    <div class="pg-wrap" id="pg-wrap">
+                        <!-- Rendered by progress.js -->
                     </div>
                 </div>
             </div>
@@ -818,7 +761,7 @@
     <script defer src="chess.js?v=15"></script>
     <script defer src="clerk-config.js?v=18"></script>
     <script defer src="online.js?v=32"></script>
-    <script defer src="app.js?v=38"></script>
+    <script defer src="app.js?v=39"></script>
     <!-- Vendored chess.js (UMD global `Chess`) for the Learn curriculum -->
     <script defer src="js/vendor/chess.js?v=1"></script>
     <!-- Learn curriculum as ONE classic script: ES modules are blocked by the
@@ -828,6 +771,10 @@
     <script defer src="js/learn.bundle.js?v=4"></script>
     <!-- Study workspace: analysis board, library, engine client (classic script, file:// compatible) -->
     <script defer src="study.js?v=1"></script>
+    <!-- Home page: hero board + progress-driven regions (classic script) -->
+    <script defer src="home.js?v=4"></script>
+    <!-- Progress page: completion ring + lesson journey (classic script) -->
+    <script defer src="progress.js?v=1"></script>
 
 </body>
 </html>

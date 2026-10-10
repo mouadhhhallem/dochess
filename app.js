@@ -206,7 +206,14 @@ class ChessCourseApp {
         const start = document.getElementById('start-learning-btn');
         if (start && !start.dataset.bound) {
             start.dataset.bound = '1';
-            start.addEventListener('click', () => this.showLessons());
+            start.addEventListener('click', () => {
+                // Home secondary CTA: fresh → lessons grid; returning →
+                // straight into the up-next lesson; graduates → full game.
+                const cur = this._currentLesson();
+                if (!cur) { this.openLesson(10); return; }
+                if (this.progress.done.length === 0) this.showLessons();
+                else this.openLesson(cur.id);
+            });
         }
         // Delegated handler for dynamically rendered lesson buttons
         // and any element with [data-open-lesson].
@@ -507,88 +514,39 @@ class ChessCourseApp {
     }
 
     _syncProgress() {
-        const n = this.progress.done.length, total = 10;
-        const pct = Math.round((n / total) * 100);
-        const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-        set('lessons-completed',   n);   set('lessons-completed-2',   n);
-        set('progress-percentage', pct + '%'); set('progress-percentage-2', pct + '%');
-        const bar = document.getElementById('overall-progress');
-        if (bar) {
-            bar.style.width = pct + '%';
-            bar.setAttribute('role', 'progressbar');
-            bar.setAttribute('aria-valuenow', String(pct));
-            bar.setAttribute('aria-valuemin', '0');
-            bar.setAttribute('aria-valuemax', '100');
-        }
         // Keep the Continue card truthful when progress changes while home
         // is visible (markDone → _syncProgress without a re-render).
         if (document.getElementById('home-screen')?.classList.contains('active')) {
             try { this._paintContinue(); } catch (_) {}
         }
-
-        const list = document.getElementById('completed-lessons-list');
-        if (!list) return;
-        list.innerHTML = '';
-        if (!n) {
-            list.innerHTML = '<p style="text-align:center;color:var(--text-muted-dim);padding:2rem">No lessons completed yet. Start learning!</p>';
-            return;
-        }
-        this.progress.done.forEach(lid => {
-            const l = this.lessons.find(x => x.id === lid);
-            const t = this.teachers.find(x => x.id === l?.teacherId);
-            if (!l || !t) return;
-            const d = document.createElement('div'); d.className = 'completed-lesson-item';
-                        d.innerHTML = `<div class="completed-lesson-info"><img src="${t.img}" width="44" height="44" loading="lazy"
-                            alt="${esc(t.name)}"><div><h4>${esc(l.title)}</h4><p style="font-size:.82rem;color:var(--text-muted-dim)">Lesson ${l.id}</p></div></div><div class="completed-date">Done ✓</div>`;
-            list.appendChild(d);
-        });
+        // Progress page reads the same real state (progress.js refresh).
+        if (window.DoChessProgress) { try { window.DoChessProgress.refresh(); } catch (_) {} }
     }
 
     /* ══════════════════════════════════════════════════════════════
        SCREENS
     ══════════════════════════════════════════════════════════════ */
     _renderHome() {
-        const g = document.getElementById('teachers-grid');
-        if (!g) return;
-        g.innerHTML = '';
-        this.teachers.forEach(t => {
-            const c = document.createElement('div'); c.className = 'teacher-card';
-            c.innerHTML = `<img src="${t.img}" width="88" height="88" loading="lazy" alt="${esc(t.name)}"><h4>${esc(t.name)}</h4><p style="font-weight:600;color:var(--accent);margin-bottom:.4rem">${esc(t.title)}</p><p>${esc(t.desc)}</p>`;
-            g.appendChild(c);
-        });
+        // Home markup + dynamics live in home.js (scoped #home-screen).
+        if (window.DoChessHome) window.DoChessHome.render();
         this._paintContinue();
         this._syncProgress();
     }
 
-    /* ── Continue Learning (spec §31): real progress only, never faked.
-       Points at the first open-but-incomplete lesson; hidden when all done. ── */
+    /* ── Home hero CTA: real progress only, never faked. Fresh learners see
+       "Start Learning" (existing test + first-run copy); returning learners
+       jump straight into their up-next lesson; graduates replay the game. ── */
     _paintContinue() {
         const heroBtn = document.getElementById('start-learning-btn');
         const cur = this._currentLesson();
-        // Remove any previous continue card (re-render safe).
-        document.getElementById('continue-card')?.remove();
         if (!cur) {
-            if (heroBtn) heroBtn.textContent = 'Play a Full Game →';
-            return;
-        }
-        const doneCount = this.progress.done.length;
-        if (heroBtn) {
-            heroBtn.textContent = doneCount === 0
+            if (heroBtn) heroBtn.textContent = 'Play Again →';
+        } else if (heroBtn) {
+            heroBtn.textContent = this.progress.done.length === 0
                 ? 'Start Learning →'
                 : `Continue Lesson ${cur.id} →`;
         }
-        if (doneCount === 0) return; // fresh learners get the plain hero
-        const overview = document.querySelector('#home-screen .progress-overview');
-        if (!overview || document.getElementById('continue-card')) return;
-        const card = document.createElement('div');
-        card.id = 'continue-card';
-        card.className = 'continue-card';
-        card.innerHTML = `
-            <div><p class="continue-kicker">Continue Learning</p>
-            <h3>Lesson ${cur.id} — ${esc(cur.title)}</h3>
-            <p>${esc(cur.objective || '')}</p></div>
-            <button class="btn-primary" data-open-lesson="${cur.id}" type="button">Continue →</button>`;
-        overview.before(card);
+        if (window.DoChessHome) window.DoChessHome.refresh();
     }
 
     _renderLessons() {
@@ -3468,7 +3426,13 @@ class ChessCourseApp {
         }
     }
 
-    showHome()     { this._go('home-screen');     this._renderHome(); }
+    showHome() {
+        // The Learn screen is module-owned (outside _go's screen list), so a
+        // programmatic return home must hide it or the two pages stack. The
+        // next nav-learn visit self-heals via showPickerHome().
+        try { document.getElementById('learn-screen')?.classList.remove('active'); } catch (_) {}
+        this._go('home-screen'); this._renderHome();
+    }
     showLessons()  { this._go('lessons-screen');  this._renderLessons(); }
     showLesson()   { this._go('lesson-screen'); }
     showProgress() { this._go('progress-screen'); this._syncProgress(); }
@@ -4307,7 +4271,7 @@ class ChessCourseApp {
         document.addEventListener('click', (e) => {
             if (nav.classList.contains('open') && !nav.contains(e.target) && !btn.contains(e.target)) close();
         });
-        window.addEventListener('resize', () => { if (window.innerWidth > 900) close(); });
+        window.addEventListener('resize', () => { if (window.innerWidth > 1120) close(); });
     }
     _closeMenu() {
         const btn = document.getElementById('menu-btn');
