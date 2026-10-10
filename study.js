@@ -105,7 +105,12 @@ function createEngineClient(callbacks) {
             }
         },
         ensure() {
-            if (client.worker || client.kind === 'local') return true;
+            // A worker is usable only if one exists. Once we know workers
+            // cannot start (file://), return false so every analyze() takes
+            // the local fallback — returning true here sent later searches
+            // down the dead-worker path and they never answered.
+            if (client.worker) return true;
+            if (client.kind === 'local') return false;
             client._setStatus('booting', 'Starting Stockfish…');
             let w;
             try {
@@ -1473,6 +1478,7 @@ function paintLibrary() {
 }
 function paintEngine() {
     paintEvalBar();
+    paintArrows(); // engine best-move arrow tracks every result
     // Only rebuild the right panel when the Engine tab is showing — a
     // background result must not clobber moves/notes the user is in.
     if (S.tab !== 'engine') return;
@@ -2110,6 +2116,19 @@ function paintArrows() {
         const dr = S.flip ? 7 - r : r, dc = S.flip ? 7 - c : c;
         return [dc + 0.5, dr + 0.5];
     };
+    // Engine best-move arrow (lichess-style): dimmed green, drawn UNDER the
+    // user's own markers, live-updated with every engine result. Only while
+    // the engine is on and has a result for THIS node's position.
+    if (!S.practice && S.engOn && n && S.ana && S.ana.fen === n.fen
+        && S.ana.result && S.ana.result.candidates && S.ana.result.candidates[0]) {
+        const uci = S.ana.result.candidates[0].pv[0] || S.ana.result.bestUci;
+        if (uci && uci.length >= 4) {
+            const [x1, y1] = pt(uci.slice(0, 2)), [x2, y2] = pt(uci.slice(2, 4));
+            const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+            const e2x = x2 - (dx / len) * 0.32, e2y = y2 - (dy / len) * 0.32;
+            s += `<line x1="${x1}" y1="${y1}" x2="${e2x.toFixed(2)}" y2="${e2y.toFixed(2)}" stroke="#34d399" stroke-width="0.11" stroke-linecap="round" opacity="0.55" marker-end="url(#st-ah-g)"/>`;
+        }
+    }
     if (n) {
         n.marks.forEach(mk => {
             const [x, y] = pt(mk.sq);
