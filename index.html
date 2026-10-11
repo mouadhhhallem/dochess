@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#0d1526">
     <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=47">
+    <link rel="stylesheet" href="styles.css?v=48">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com; object-src 'none'; base-uri 'self'; upgrade-insecure-requests">
     <style>
     /* ══ Learn screen ══════════════════════════════════════════════════════
@@ -37,6 +37,80 @@
     .lvl-card .stars .off { color: var(--text-muted-dim); opacity: .4; }
     .lvl-par { font-size: .72rem; font-weight: 700; color: var(--text-muted-dim);
       border: 1px solid var(--glass-border); border-radius: 20px; padding: .12rem .5rem; }
+    .diff-pill { font-size: .72rem; font-weight: 700; color: var(--accent-bright);
+      border: 1px solid rgba(52,211,153,.4); border-radius: 20px; padding: .12rem .5rem; }
+    /* ── Curriculum navigation (stages → sets → lessons) ─────────────────
+       Same card anatomy as .lvl-card throughout; only these additions. */
+    .learn-progress-panel { background: var(--bg-card); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: .5rem;
+      display: flex; flex-direction: column; gap: .6rem; }
+    .lp-num { font-size: 1.4rem; font-weight: 800; color: var(--accent-bright);
+      font-variant-numeric: tabular-nums; }
+    .lp-bar { height: 8px; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
+    .lp-fill { display: block; height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent-dim), var(--accent-bright)); }
+    .lp-sub { font-size: .82rem; color: var(--text-muted); }
+    #continue-btn { align-self: flex-start; }
+    .stage-block { margin-bottom: .5rem; }
+    .stage-head { margin: 1.5rem 0 .75rem; }
+    .stage-head h3 { font-size: 1.05rem; font-weight: 800; margin: .15rem 0 .2rem; }
+    .stage-head p { font-size: .85rem; color: var(--text-muted); margin: 0; }
+    .stage-n { display: inline-block; font-size: .7rem; font-weight: 800; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--accent-bright); }
+    .set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 1rem; }
+    .set-card { display: flex; flex-direction: column; gap: .7rem; background: var(--bg-card);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-md);
+      padding: 1rem 1.15rem; cursor: pointer; transition: var(--transition);
+      animation: lvCardIn .34s cubic-bezier(.22,.68,.24,1) backwards; }
+    .set-card:hover:not(.locked) { border-color: var(--accent); transform: translateY(-2px); }
+    .set-card.locked { opacity: .6; filter: grayscale(40%); cursor: default; }
+    .set-icon-wrap { width: 44px; height: 44px; border-radius: 12px; display: flex;
+      align-items: center; justify-content: center; background: rgba(251,191,36,.1);
+      border: 1px solid rgba(251,191,36,.35); color: var(--gold); }
+    .set-icon-wrap img { width: 34px; height: 34px; display: block; }
+    .set-icon-wrap svg { width: 30px; height: 30px; fill: none; stroke: currentColor;
+      stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .set-icon-wrap.big { width: 60px; height: 60px; }
+    .set-icon-wrap.big img { width: 46px; height: 46px; }
+    .set-icon-wrap.big svg { width: 40px; height: 40px; }
+    .set-info h3 { font-size: .98rem; margin-bottom: .15rem; }
+    .set-info p { font-size: .82rem; color: var(--text-muted); line-height: 1.5; margin: 0 0 .4rem; }
+    .set-progress { display: flex; align-items: center; gap: .6rem; }
+    .sp-bar { flex: 1; height: 6px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
+    .sp-fill { display: block; height: 100%; border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent-dim), var(--accent-bright)); }
+    .sp-num { font-size: .75rem; font-weight: 700; color: var(--text-muted-dim);
+      font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .set-open { align-self: stretch; }
+    .set-view { display: flex; flex-direction: column; gap: 1rem; }
+    #set-back { align-self: flex-start; }
+    .set-hero { display: flex; gap: 1rem; align-items: center; background: var(--bg-card);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-md); padding: 1rem 1.25rem; }
+    .set-hero h3 { font-size: 1.1rem; margin: .1rem 0 .2rem; }
+    .set-hero p { font-size: .85rem; color: var(--text-muted); margin: 0 0 .4rem; }
+    .lesson-rows { list-style: none; display: flex; flex-direction: column; gap: .6rem; }
+    .lesson-row { display: flex; align-items: center; gap: .9rem; background: var(--bg-card);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-md);
+      padding: .7rem 1rem; animation: lvCardIn .34s cubic-bezier(.22,.68,.24,1) backwards; }
+    .lesson-row:hover:not(.planned) { border-color: var(--accent); }
+    .lesson-row.planned { opacity: .6; filter: grayscale(40%); }
+    .lr-num { min-width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-weight: 800; font-size: .85rem; background: var(--accent-dim); color: #fff; }
+    .lesson-row.done .lr-num { background: linear-gradient(135deg, var(--accent), var(--accent-bright)); }
+    .lr-main { flex: 1; min-width: 0; }
+    .lr-title { font-weight: 700; font-size: .92rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+    .lr-goal { font-size: .8rem; color: var(--text-muted); }
+    .diff-chip { font-size: .68rem; font-weight: 700; border-radius: 20px; padding: .1rem .5rem;
+      border: 1px solid var(--glass-border); color: var(--text-muted-dim); }
+    .diff-chip.d2 { color: var(--gold); border-color: rgba(251,191,36,.4); }
+    .diff-chip.d3 { color: #f87171; border-color: rgba(248,113,113,.4); }
+    .lr-soon { font-size: .78rem; font-weight: 700; color: var(--text-muted-dim); white-space: nowrap; }
+    .lr-open { flex-shrink: 0; }
+    @media (max-width: 700px) {
+      .lesson-row { gap: .6rem; padding: .6rem .7rem; }
+      .lr-open { padding: .55rem 1rem; min-height: 40px; font-size: .85rem; }
+      .set-hero { padding: .8rem .9rem; }
+    }
     .lvl-card .lesson-body { padding: 1rem 1.15rem; }
     .lvl-card .lesson-body p { font-size: .85rem; line-height: 1.55; margin: 0; }
     .lvl-card .lesson-footer { padding: .75rem 1.15rem; }
@@ -641,6 +715,7 @@
                                     <button class="btn-secondary sm" id="lv-sticky-undo" type="button" title="Undo move"><span class="btn-icon">↶</span> Undo</button>
                                     <button class="btn-secondary sm" id="lv-sticky-restart" type="button" title="Restart level"><span class="btn-icon">↺</span> Reset</button>
                                     <button class="btn-secondary sm" id="lv-sticky-hint" type="button" title="Hint"><span class="btn-icon">💡</span> Hint</button>
+                                    <button class="btn-secondary sm" id="lv-sticky-back" type="button" title="Back to all levels"><span class="btn-icon">←</span> Levels</button>
                                     <button class="btn-cta sm" id="lv-sticky-next" type="button">Next →</button>
                                     <button class="icon-btn" id="lv-focus-toggle" data-focus-toggle type="button"
                                             aria-expanded="true" aria-controls="levelview"
@@ -663,13 +738,19 @@
 
                                 <div id="lv-feedback" class="feedback info" role="status" aria-live="polite" data-focus-hide>Pick your piece to begin.</div>
 
-<div class="lesson-actions lv-actions" data-focus-hide>
+                                <div class="lesson-actions lv-actions" data-focus-hide>
                                     <button class="btn-secondary" id="hint-btn" type="button">Hint (H)</button>
                                     <button class="btn-secondary" id="undo-btn" type="button">Undo (U)</button>
                                     <button class="btn-secondary" id="restart-btn" type="button">Restart (R)</button>
                                     <button class="btn-secondary" id="solve-btn" type="button">Solution</button>
+                                    <button class="btn-secondary" id="back-btn" type="button">← All levels</button>
+                                    <!-- Next stage lives with the board. On a phone the page
+                                         is much taller than the viewport, so it is ALSO
+                                         mirrored into the sticky bar placed ABOVE the
+                                         board — a sticky bar below the board would not be
+                                         on screen until you scrolled past the board. -->
+                                    <button class="btn-cta" id="next-lvl-btn" type="button">Next stage →</button>
                                 </div>
-                                <button class="btn-secondary" id="back-btn" type="button">← All levels</button>
 
                                 <!-- Player card: mirrors the Lessons screen footer -->
                                 <div class="profile-card player your-turn" id="lv-you" data-focus-hide>
@@ -769,7 +850,7 @@
          meta-CSP (inline) and by file:// (CORS), which is why levels never
          loaded. Classic + external is allowed in both. Built from js/*.js by
          tools/build-learn.mjs — edit the sources, then rebuild. -->
-    <script defer src="js/learn.bundle.js?v=4"></script>
+    <script defer src="js/learn.bundle.js?v=8"></script>
     <!-- Study workspace: analysis board, library, engine client (classic script, file:// compatible) -->
     <script defer src="study.js?v=3"></script>
     <!-- Home page: hero board + progress-driven regions (classic script) -->

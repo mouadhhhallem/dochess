@@ -1377,8 +1377,8 @@ body {
 }
 
 /* ── Feedback ─────────────────────────────────────────────────── */
-/* Action row. The advance CTA sits on its own line below the other controls
-   so it never squeezes them and stays the visual end of the flow. */
+/* Action row. Controls sit inline in one row; the advance CTA is pushed to
+   the right edge (see #lesson-screen .lesson-actions .btn-cta below). */
 .lesson-actions {
     display: flex;
     justify-content: center;
@@ -1387,15 +1387,13 @@ body {
     margin-top: 2rem;
     flex-wrap: wrap;
 }
-/* Lessons only: the advance CTA gets its own centred row so it never
-   squeezes the other controls. The Learn screen keeps a denser inline row
-   (see index.html .lv-actions), because levels are advanced far more often. */
+/* Lessons: keep the advance CTA inline in the same row as the other
+   controls (Reset / Flip / Complete), pushed to the right — matching the
+   Learn screen's denser inline row (.lv-actions), so "Next: … →" is
+   visible without scrolling on a normal desktop view. */
 #lesson-screen .lesson-actions .btn-cta {
-    flex-basis: 100%;
-    margin-top: .35rem;
-    width: fit-content;
-    min-width: 260px;
-    margin-inline: auto;
+    margin-left: auto;
+    min-width: 172px;
 }
 
 .diff-label {
