@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Legendary</title>
+<desc id="desc">Earn an elite achievement</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M26 49 16 29 39 41 53 21 67 41 91 29 83 50Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="3" stroke-linejoin="round"/><path d="M29 58H83L79 76H33Z" fill="#6E4510"/><path d="M64 45 68 54 78 55 71 62 73 72 64 67 55 72 57 62 50 55 60 54Z" fill="#FFE7A3"/></g>
+
+</svg>

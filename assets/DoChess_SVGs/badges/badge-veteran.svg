@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Veteran</title>
+<desc id="desc">Be an active long-term member</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E2E8F0"/>
+    <stop offset=".48" stop-color="#94A3B8"/>
+    <stop offset="1" stop-color="#334155"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#334155" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#94A3B8" fill-opacity=".17" stroke="#94A3B8" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E2E8F0" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 17 98 30V58C98 78 82 91 64 101 46 91 30 78 30 58V30Z" fill="#E2E8F0" stroke="#334155" stroke-width="4" stroke-linejoin="round"/><path d="M64 35 72 51 90 53 77 65 81 82 64 73 47 82 51 65 38 53 56 51Z" fill="#334155"/></g>
+
+</svg>

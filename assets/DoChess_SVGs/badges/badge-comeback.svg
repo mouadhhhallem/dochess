@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Comeback</title>
+<desc id="desc">Win after being behind</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C7FFE0"/>
+    <stop offset=".48" stop-color="#4CCB8A"/>
+    <stop offset="1" stop-color="#176044"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#176044" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#4CCB8A" fill-opacity=".17" stroke="#4CCB8A" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C7FFE0" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M38 42H22L40 24 58 42H45C38 42 33 48 33 56" fill="none" stroke="#C7FFE0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M88 69H104L86 87 68 69H81C88 69 93 63 93 55" fill="none" stroke="#C7FFE0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M37 72C45 85 63 89 76 79M91 40C83 27 65 23 52 33" fill="none" stroke="#176044" stroke-width="5" stroke-linecap="round"/></g>
+
+</svg>

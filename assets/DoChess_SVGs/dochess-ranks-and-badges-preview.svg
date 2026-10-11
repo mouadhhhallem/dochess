@@ -1,0 +1,940 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800x1705" height="1800x1705" viewBox="0 0 1800 1705" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Rank and Badge Contact Sheet</title>
+<desc id="desc">Vector preview of 8 ranks and 50 achievement badges</desc>
+<rect width="1800" height="1705" fill="#0B1220"/>
+<text x="60" y="70" font-family="Arial,sans-serif" font-size="42" font-weight="700" fill="#F8FAFC">DoChess · Rank &amp; Badge System</text>
+<text x="60" y="108" font-family="Arial,sans-serif" font-size="18" letter-spacing="4" fill="#94A3B8">SCALABLE VECTOR ASSETS · EDITABLE IN ADOBE ILLUSTRATOR</text>
+<text x="60" y="165" font-family="Arial,sans-serif" font-size="27" font-weight="700" fill="#F5B82E">RANKS</text>
+<g transform="translate(85,185) scale(1.15)">
+<g><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#7D4229" stroke="#C77B4A" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#F2B27A" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#7D4229" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#C77B4A" stroke="#F2B27A" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#F2B27A"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#7D4229" stroke-width="2.5" stroke-linecap="round"/></g>
+</g>
+<text x="159" y="330" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#E2E8F0">BRONZE</text>
+<g transform="translate(300,185) scale(1.15)">
+<g><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#71819A" stroke="#D8E0EC" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#71819A" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#D8E0EC" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#FFFFFF"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#71819A" stroke-width="2.5" stroke-linecap="round"/></g>
+</g>
+<text x="374" y="330" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#E2E8F0">SILVER</text>
+<g transform="translate(515,185) scale(1.15)">
+<g><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#A96B14" stroke="#FFC857" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#FFF0A6" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#A96B14" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#FFC857" stroke="#FFF0A6" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#FFF0A6"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#A96B14" stroke-width="2.5" stroke-linecap="round"/></g>
+</g>
+<text x="589" y="330" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#E2E8F0">GOLD</text>
+<g transform="translate(730,185) scale(1.15)">
+<g><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#2563A8" stroke="#7DD3FC" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#DFF7FF" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#2563A8" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#7DD3FC" stroke="#DFF7FF" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#DFF7FF"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#2563A8" stroke-width="2.5" stroke-linecap="round"/></g>
+</g>
+<text x="804" y="330" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#E2E8F0">PLATINUM</text>
+<g transform="translate(945,185) scale(1.15)">
+<g><path d="M64 2 69 12 64 10 59 12Z" fill="#F0D9FF"/><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#6D28D9" stroke="#C084FC" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#F0D9FF" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#6D28D9" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#C084FC" stroke="#F0D9FF" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#F0D9FF"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#6D28D9" stroke-width="2.5" stroke-linecap="round"/></g>
+</g>
+<text x="1019" y="330" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#E2E8F0">DIAMOND</text>
+<g transform="translate(1160,185) scale(1.15)">
+<g><path d="M64 2 69 12 64 10 59 12Z" fill="#FFE0E6"/><path d="M14 53 25 59 19 62 11 60Z M114 53 103 59 109 62 117 60Z" fill="#FB7185"/><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#9F1239" stroke="#FB7185" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#FFE0E6" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#9F1239" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#FB7185" stroke="#FFE0E6" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#FFE0E6"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#9F1239" stroke-width="2.5" stroke-linecap="round"/></g>
+</g>
+<text x="1234" y="330" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#E2E8F0">MASTER</text>
+<g transform="translate(1375,185) scale(1.15)">
+<g><path d="M64 2 69 12 64 10 59 12Z" fill="#FFF2B2"/><path d="M14 53 25 59 19 62 11 60Z M114 53 103 59 109 62 117 60Z" fill="#FBBF24"/><path d="M26 20 19 12 30 15 34 23Z M102 20 109 12 98 15 94 23Z" fill="#FFF2B2"/><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#92400E" stroke="#FBBF24" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#FFF2B2" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#92400E" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#FBBF24" stroke="#FFF2B2" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#FFF2B2"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#92400E" stroke-width="2.5" stroke-linecap="round"/></g>
+</g>
+<text x="1449" y="330" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#E2E8F0">GRANDMASTER</text>
+<g transform="translate(1590,185) scale(1.15)">
+<g><path d="M64 2 69 12 64 10 59 12Z" fill="#FDE68A"/><path d="M14 53 25 59 19 62 11 60Z M114 53 103 59 109 62 117 60Z" fill="#60A5FA"/><path d="M26 20 19 12 30 15 34 23Z M102 20 109 12 98 15 94 23Z" fill="#FDE68A"/><path d="M64 0 68 8 77 9 70 15 72 24 64 19 56 24 58 15 51 9 60 8Z" fill="#FDE68A" stroke="#1D4ED8" stroke-width="1"/><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#1D4ED8" stroke="#60A5FA" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#FDE68A" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#1D4ED8" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#60A5FA" stroke="#FDE68A" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#FDE68A"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#1D4ED8" stroke-width="2.5" stroke-linecap="round"/></g>
+</g>
+<text x="1664" y="330" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#E2E8F0">LEGEND</text>
+<path d="M60 360H1740" stroke="#334155" stroke-width="2"/>
+<text x="60" y="410" font-family="Arial,sans-serif" font-size="27" font-weight="700" fill="#F5B82E">BADGES</text>
+<g transform="translate(69,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M28 49 17 31 39 42 53 22 67 42 91 30 84 51Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="3" stroke-linejoin="round"/><path d="M29 57H84L80 75H33Z" fill="#6E4510"/><path d="M35 64H78" stroke="#FFE7A3" stroke-width="3"/></g>
+
+</g>
+<text x="133" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">First Win</text>
+<g transform="translate(239,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M43 26H85V48C85 63 76 72 64 72S43 63 43 48Z" fill="#BFEAFF" stroke="#124B82" stroke-width="4"/><path d="M43 33H29V43C29 54 36 59 46 58M85 33H99V43C99 54 92 59 82 58" fill="none" stroke="#124B82" stroke-width="5" stroke-linecap="round"/><path d="M64 72V87M48 94H80M54 87H74" stroke="#BFEAFF" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="303" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">100 Games</text>
+<g transform="translate(409,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M43 26H85V48C85 63 76 72 64 72S43 63 43 48Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="4"/><path d="M43 33H29V43C29 54 36 59 46 58M85 33H99V43C99 54 92 59 82 58" fill="none" stroke="#6E4510" stroke-width="5" stroke-linecap="round"/><path d="M64 72V87M48 94H80M54 87H74" stroke="#FFE7A3" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="473" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">500 Games</text>
+<g transform="translate(579,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE0B1"/>
+    <stop offset=".48" stop-color="#F59E32"/>
+    <stop offset="1" stop-color="#87430C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#87430C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F59E32" fill-opacity=".17" stroke="#F59E32" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE0B1" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M43 26H85V48C85 63 76 72 64 72S43 63 43 48Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4"/><path d="M43 33H29V43C29 54 36 59 46 58M85 33H99V43C99 54 92 59 82 58" fill="none" stroke="#87430C" stroke-width="5" stroke-linecap="round"/><path d="M64 72V87M48 94H80M54 87H74" stroke="#FFE0B1" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="643" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">1000 Games</text>
+<g transform="translate(749,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFC2CB"/>
+    <stop offset=".48" stop-color="#F05268"/>
+    <stop offset="1" stop-color="#811C32"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#811C32" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F05268" fill-opacity=".17" stroke="#F05268" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFC2CB" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M65 18C71 36 93 42 88 65C85 84 72 96 57 96 38 96 27 81 32 63 35 51 44 44 46 31 56 40 56 48 56 53 65 44 67 31 65 18Z" fill="#FFC2CB" stroke="#811C32" stroke-width="4" stroke-linejoin="round"/><path d="M61 58C70 68 73 74 68 84 63 92 50 88 50 78 50 70 57 66 61 58Z" fill="#811C32"/></g>
+
+</g>
+<text x="813" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Win Streak</text>
+<g transform="translate(919,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C7FFE0"/>
+    <stop offset=".48" stop-color="#4CCB8A"/>
+    <stop offset="1" stop-color="#176044"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#176044" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#4CCB8A" fill-opacity=".17" stroke="#4CCB8A" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C7FFE0" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M38 42H22L40 24 58 42H45C38 42 33 48 33 56" fill="none" stroke="#C7FFE0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M88 69H104L86 87 68 69H81C88 69 93 63 93 55" fill="none" stroke="#C7FFE0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M37 72C45 85 63 89 76 79M91 40C83 27 65 23 52 33" fill="none" stroke="#176044" stroke-width="5" stroke-linecap="round"/></g>
+
+</g>
+<text x="983" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Comeback</text>
+<g transform="translate(1089,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="59" r="34" fill="none" stroke="#BFEAFF" stroke-width="7"/><circle cx="64" cy="59" r="21" fill="none" stroke="#124B82" stroke-width="6"/><circle cx="64" cy="59" r="8" fill="#BFEAFF"/><path d="M64 59 94 28M82 28H94V40" fill="none" stroke="#BFEAFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></g>
+
+</g>
+<text x="1153" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Perfect Game</text>
+<g transform="translate(1259,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M60 31C49 18 33 29 37 42 24 46 28 62 38 66 29 81 43 92 55 83L62 75V34Z" fill="#E8CEFF" stroke="#53228C" stroke-width="3"/><path d="M68 31C79 18 95 29 91 42 104 46 100 62 90 66 99 81 85 92 73 83L66 75V34Z" fill="#E8CEFF" stroke="#53228C" stroke-width="3"/><path d="M64 30V86M45 45 55 52M82 43 73 52M43 68 55 65M84 68 73 65" stroke="#53228C" stroke-width="4" stroke-linecap="round"/></g>
+
+</g>
+<text x="1323" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">No Mistakes</text>
+<g transform="translate(1429,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M70 18 39 65H59L51 99 88 50H67Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="1493" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Speed Demon</text>
+<g transform="translate(1599,435) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><rect x="28" y="29" width="72" height="66" rx="8" fill="#BFEAFF" stroke="#124B82" stroke-width="4"/><path d="M28 47H100" stroke="#124B82" stroke-width="6"/><path d="M44 20V38M84 20V38" stroke="#BFEAFF" stroke-width="7" stroke-linecap="round"/><path d="M43 61H52M61 61H70M79 61H86M43 75H52M61 75H70M79 75H86" stroke="#124B82" stroke-width="5" stroke-linecap="round"/></g>
+
+</g>
+<text x="1663" y="586" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Daily Player</text>
+<g transform="translate(69,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><rect x="26" y="29" width="76" height="68" rx="8" fill="#E8CEFF" stroke="#53228C" stroke-width="4"/><path d="M26 48H102M44 20V37M84 20V37" stroke="#E8CEFF" stroke-width="6" stroke-linecap="round"/><text x="64" y="80" font-size="33" font-family="Arial,sans-serif" font-weight="700" text-anchor="middle" fill="#53228C">7</text></g>
+
+</g>
+<text x="133" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Weekly Player</text>
+<g transform="translate(239,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C7FFE0"/>
+    <stop offset=".48" stop-color="#4CCB8A"/>
+    <stop offset="1" stop-color="#176044"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#176044" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#4CCB8A" fill-opacity=".17" stroke="#4CCB8A" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C7FFE0" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M48 25C48 15 63 13 67 24L68 34H82V48C96 44 102 61 89 67L82 68V83H66C70 97 52 102 47 89L46 83H31V67C18 71 12 54 25 49L31 48V34H47Z" fill="#C7FFE0" stroke="#176044" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="303" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Puzzle Master</text>
+<g transform="translate(409,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><rect x="26" y="25" width="76" height="76" rx="5" fill="#BFEAFF" stroke="#124B82" stroke-width="4"/><path d="M35 34H51V50H35ZM67 34H83V50H67ZM51 50H67V66H51ZM83 50H99V66H83ZM35 66H51V82H35ZM67 66H83V82H67ZM51 82H67V98H51ZM83 82H99V98H83Z" fill="#124B82"/></g>
+
+</g>
+<text x="473" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Tactics Expert</text>
+<g transform="translate(579,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 20C49 34 44 42 49 52L41 70H87L79 52C84 42 79 34 64 20Z" fill="#E8CEFF" stroke="#53228C" stroke-width="4" stroke-linejoin="round"/><path d="M64 31 57 44 69 49 60 60M39 78H89M33 88H95" fill="none" stroke="#53228C" stroke-width="5" stroke-linecap="round"/></g>
+
+</g>
+<text x="643" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Endgame Expert</text>
+<g transform="translate(749,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE0B1"/>
+    <stop offset=".48" stop-color="#F59E32"/>
+    <stop offset="1" stop-color="#87430C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#87430C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F59E32" fill-opacity=".17" stroke="#F59E32" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE0B1" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M23 30C40 24 54 29 64 38V91C52 82 38 79 23 85Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4" stroke-linejoin="round"/><path d="M105 30C88 24 74 29 64 38V91C76 82 90 79 105 85Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4" stroke-linejoin="round"/><path d="M34 44 52 47M34 56 52 59M76 47 94 44M76 59 94 56" stroke="#87430C" stroke-width="3" stroke-linecap="round"/></g>
+
+</g>
+<text x="813" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Opening Theorist</text>
+<g transform="translate(919,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFC2CB"/>
+    <stop offset=".48" stop-color="#F05268"/>
+    <stop offset="1" stop-color="#811C32"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#811C32" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F05268" fill-opacity=".17" stroke="#F05268" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFC2CB" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="64" r="31" fill="none" stroke="#FFC2CB" stroke-width="7"/><path d="M55 20H73M64 20V31M85 39 94 30" stroke="#FFC2CB" stroke-width="6" stroke-linecap="round"/><path d="M64 43V64L80 73" fill="none" stroke="#811C32" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="983" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Blitz Champion</text>
+<g transform="translate(1089,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="64" r="31" fill="none" stroke="#BFEAFF" stroke-width="7"/><path d="M55 20H73M64 20V31M85 39 94 30" stroke="#BFEAFF" stroke-width="6" stroke-linecap="round"/><path d="M64 43V64L80 73" fill="none" stroke="#124B82" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="1153" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Rapid Champion</text>
+<g transform="translate(1259,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M38 23H90M38 96H90M44 25C44 44 51 49 64 60 77 49 84 44 84 25M44 94C44 75 51 70 64 59 77 70 84 75 84 94Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="4" stroke-linejoin="round"/><path d="M52 81H76L64 69Z" fill="#6E4510"/></g>
+
+</g>
+<text x="1323" y="823" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0"><tspan x="1323">Classical</tspan><tspan x="1323" dy="17">Champion</tspan></text>
+<g transform="translate(1429,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M43 26H85V48C85 63 76 72 64 72S43 63 43 48Z" fill="#E8CEFF" stroke="#53228C" stroke-width="4"/><path d="M43 33H29V43C29 54 36 59 46 58M85 33H99V43C99 54 92 59 82 58" fill="none" stroke="#53228C" stroke-width="5" stroke-linecap="round"/><path d="M64 72V87M48 94H80M54 87H74" stroke="#E8CEFF" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="1493" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Tournament Winner</text>
+<g transform="translate(1599,680) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C7FFE0"/>
+    <stop offset=".48" stop-color="#4CCB8A"/>
+    <stop offset="1" stop-color="#176044"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#176044" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#4CCB8A" fill-opacity=".17" stroke="#4CCB8A" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C7FFE0" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="48" cy="43" r="12" fill="#C7FFE0"/><circle cx="80" cy="43" r="12" fill="#C7FFE0"/><circle cx="64" cy="34" r="13" fill="#C7FFE0" stroke="#176044" stroke-width="3"/><path d="M25 86C25 67 39 60 50 64L64 76 78 64C91 60 103 68 103 86Z" fill="#C7FFE0" stroke="#176044" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="1663" y="831" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Team Player</text>
+<g transform="translate(69,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 19 75 47 105 49 82 68 89 98 64 82 39 98 46 68 23 49 53 47Z" fill="#BFEAFF" stroke="#124B82" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="133" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Coach's Pick</text>
+<g transform="translate(239,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 22C44 22 34 38 39 55 42 66 51 69 52 81H76C77 69 86 66 89 55 94 38 84 22 64 22Z" fill="#E8CEFF" stroke="#53228C" stroke-width="4"/><path d="M52 88H76M56 96H72M64 35V48M57 42H71" stroke="#53228C" stroke-width="5" stroke-linecap="round"/></g>
+
+</g>
+<text x="303" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Knowledge Seeker</text>
+<g transform="translate(409,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M18 42 64 20 110 42 64 64Z" fill="#E8CEFF" stroke="#53228C" stroke-width="4" stroke-linejoin="round"/><path d="M37 55V76C52 91 76 91 91 76V55L64 69Z" fill="#E8CEFF" stroke="#53228C" stroke-width="4" stroke-linejoin="round"/><path d="M107 44V71" stroke="#E8CEFF" stroke-width="5" stroke-linecap="round"/><circle cx="107" cy="77" r="5" fill="#E8CEFF"/></g>
+
+</g>
+<text x="473" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Study Buddy</text>
+<g transform="translate(579,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFC2CB"/>
+    <stop offset=".48" stop-color="#F05268"/>
+    <stop offset="1" stop-color="#811C32"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#811C32" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F05268" fill-opacity=".17" stroke="#F05268" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFC2CB" stroke-width="3" stroke-linecap="round"/>
+<g><rect x="24" y="36" width="80" height="55" rx="9" fill="#FFC2CB" stroke="#811C32" stroke-width="4"/><path d="M42 36 49 26H74L82 36" fill="#FFC2CB" stroke="#811C32" stroke-width="4" stroke-linejoin="round"/><circle cx="64" cy="63" r="18" fill="#811C32"/><circle cx="64" cy="63" r="10" fill="#FFC2CB"/></g>
+
+</g>
+<text x="643" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Content Creator</text>
+<g transform="translate(749,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><rect x="49" y="20" width="30" height="51" rx="15" fill="#BFEAFF" stroke="#124B82" stroke-width="4"/><path d="M36 55C36 74 48 84 64 84S92 74 92 55M64 84V100M49 100H79" fill="none" stroke="#BFEAFF" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="813" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Commentator</text>
+<g transform="translate(919,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE0B1"/>
+    <stop offset=".48" stop-color="#F59E32"/>
+    <stop offset="1" stop-color="#87430C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#87430C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F59E32" fill-opacity=".17" stroke="#F59E32" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE0B1" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M23 30C40 24 54 29 64 38V91C52 82 38 79 23 85Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4" stroke-linejoin="round"/><path d="M105 30C88 24 74 29 64 38V91C76 82 90 79 105 85Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4" stroke-linejoin="round"/><path d="M34 44 52 47M34 56 52 59M76 47 94 44M76 59 94 56" stroke="#87430C" stroke-width="3" stroke-linecap="round"/></g>
+
+</g>
+<text x="983" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Blog Writer</text>
+<g transform="translate(1089,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C7FFE0"/>
+    <stop offset=".48" stop-color="#4CCB8A"/>
+    <stop offset="1" stop-color="#176044"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#176044" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#4CCB8A" fill-opacity=".17" stroke="#4CCB8A" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C7FFE0" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M25 28H103V79H65L43 96V79H25Z" fill="#C7FFE0" stroke="#176044" stroke-width="4" stroke-linejoin="round"/><circle cx="45" cy="54" r="4" fill="#176044"/><circle cx="64" cy="54" r="4" fill="#176044"/><circle cx="83" cy="54" r="4" fill="#176044"/></g>
+
+</g>
+<text x="1153" y="1068" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0"><tspan x="1153">Discussion</tspan><tspan x="1153" dy="17">Starter</tspan></text>
+<g transform="translate(1259,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M21 49 39 32 55 39 68 32 89 39 107 52 93 70 79 62 66 78 52 67 42 74Z" fill="#BFEAFF" stroke="#124B82" stroke-width="4" stroke-linejoin="round"/><path d="M43 50 61 65 75 51M53 43 70 56M31 63 44 77" fill="none" stroke="#124B82" stroke-width="4" stroke-linecap="round"/></g>
+
+</g>
+<text x="1323" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Helpful</text>
+<g transform="translate(1429,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="48" cy="43" r="12" fill="#FFE7A3"/><circle cx="80" cy="43" r="12" fill="#FFE7A3"/><circle cx="64" cy="34" r="13" fill="#FFE7A3" stroke="#6E4510" stroke-width="3"/><path d="M25 86C25 67 39 60 50 64L64 76 78 64C91 60 103 68 103 86Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="1493" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Mentor</text>
+<g transform="translate(1599,925) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFC2CB"/>
+    <stop offset=".48" stop-color="#F05268"/>
+    <stop offset="1" stop-color="#811C32"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#811C32" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F05268" fill-opacity=".17" stroke="#F05268" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFC2CB" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 91 29 59C7 34 37 15 54 36L64 47 74 36C91 15 121 34 99 59Z" fill="#FFC2CB" stroke="#811C32" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="1663" y="1076" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Supporter</text>
+<g transform="translate(69,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E2E8F0"/>
+    <stop offset=".48" stop-color="#94A3B8"/>
+    <stop offset="1" stop-color="#334155"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#334155" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#94A3B8" fill-opacity=".17" stroke="#94A3B8" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E2E8F0" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 17 98 30V58C98 78 82 91 64 101 46 91 30 78 30 58V30Z" fill="#E2E8F0" stroke="#334155" stroke-width="4" stroke-linejoin="round"/><path d="M64 35 72 51 90 53 77 65 81 82 64 73 47 82 51 65 38 53 56 51Z" fill="#334155"/></g>
+
+</g>
+<text x="133" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Veteran</text>
+<g transform="translate(239,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C5FFFA"/>
+    <stop offset=".48" stop-color="#31C7C0"/>
+    <stop offset="1" stop-color="#126A70"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#126A70" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#31C7C0" fill-opacity=".17" stroke="#31C7C0" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C5FFFA" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M49 22H79M55 22V51L34 84C29 93 37 100 47 100H81C91 100 99 93 94 84L73 51V22" fill="#C5FFFA" stroke="#126A70" stroke-width="4" stroke-linejoin="round"/><path d="M43 79H85M52 68 58 61 66 72 75 63" fill="none" stroke="#126A70" stroke-width="4" stroke-linecap="round"/></g>
+
+</g>
+<text x="303" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Beta Tester</text>
+<g transform="translate(409,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M26 49 16 29 39 41 53 21 67 41 91 29 83 50Z" fill="#E8CEFF" stroke="#53228C" stroke-width="3" stroke-linejoin="round"/><path d="M29 58H83L79 76H33Z" fill="#53228C"/><path d="M64 45 68 54 78 55 71 62 73 72 64 67 55 72 57 62 50 55 60 54Z" fill="#E8CEFF"/></g>
+
+</g>
+<text x="473" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Early Access</text>
+<g transform="translate(579,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C5FFFA"/>
+    <stop offset=".48" stop-color="#31C7C0"/>
+    <stop offset="1" stop-color="#126A70"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#126A70" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#31C7C0" fill-opacity=".17" stroke="#31C7C0" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C5FFFA" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M43 91C34 80 29 68 27 56 26 49 35 46 39 54L45 66 42 31C42 23 54 22 56 31L59 60 62 25C63 17 75 18 76 26L76 60 82 34C84 26 95 29 94 37L89 68C87 84 78 95 66 99Z" fill="#C5FFFA" stroke="#126A70" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="643" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Holiday Mode</text>
+<g transform="translate(749,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M39 89 43 72 35 58 40 43 55 25 73 31 88 49 78 57 65 48 61 61 75 69 82 89Z" fill="#BFEAFF" stroke="#124B82" stroke-width="4" stroke-linejoin="round"/><circle cx="67" cy="39" r="3" fill="#124B82"/><path d="M34 98H91" stroke="#BFEAFF" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="813" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Chess Lover</text>
+<g transform="translate(919,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C7FFE0"/>
+    <stop offset=".48" stop-color="#4CCB8A"/>
+    <stop offset="1" stop-color="#176044"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#176044" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#4CCB8A" fill-opacity=".17" stroke="#4CCB8A" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C7FFE0" stroke-width="3" stroke-linecap="round"/>
+<g><ellipse cx="64" cy="72" rx="25" ry="20" fill="#C7FFE0"/><ellipse cx="37" cy="45" rx="9" ry="13" fill="#C7FFE0"/><ellipse cx="56" cy="34" rx="9" ry="13" fill="#C7FFE0"/><ellipse cx="75" cy="34" rx="9" ry="13" fill="#C7FFE0"/><ellipse cx="93" cy="45" rx="9" ry="13" fill="#C7FFE0"/></g>
+
+</g>
+<text x="983" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Animal Lover</text>
+<g transform="translate(1089,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE0B1"/>
+    <stop offset=".48" stop-color="#F59E32"/>
+    <stop offset="1" stop-color="#87430C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#87430C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F59E32" fill-opacity=".17" stroke="#F59E32" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE0B1" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M27 32 103 44 69 101Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4" stroke-linejoin="round"/><path d="M27 32Q62 12 103 44" fill="none" stroke="#87430C" stroke-width="7" stroke-linecap="round"/><circle cx="59" cy="48" r="6" fill="#87430C"/><circle cx="79" cy="59" r="6" fill="#87430C"/><circle cx="57" cy="73" r="6" fill="#87430C"/></g>
+
+</g>
+<text x="1153" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Food Lover</text>
+<g transform="translate(1259,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE0B1"/>
+    <stop offset=".48" stop-color="#F59E32"/>
+    <stop offset="1" stop-color="#87430C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#87430C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F59E32" fill-opacity=".17" stroke="#F59E32" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE0B1" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M29 48H84V68C84 83 73 91 58 91S29 83 29 68Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4"/><path d="M84 53H94C107 53 103 72 84 72M44 35C35 27 48 23 43 16M63 35C54 27 67 23 62 16" fill="none" stroke="#FFE0B1" stroke-width="5" stroke-linecap="round"/><path d="M24 98H91" stroke="#FFE0B1" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="1323" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Coffee Break</text>
+<g transform="translate(1429,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M81 26C57 29 45 53 56 73 63 87 79 91 92 82 84 101 55 106 38 88 17 65 34 29 64 24Z" fill="#E8CEFF" stroke="#53228C" stroke-width="4" stroke-linejoin="round"/><path d="M91 25 95 34 104 35 97 42 99 51 91 46 83 51 85 42 78 35 87 34Z" fill="#E8CEFF"/></g>
+
+</g>
+<text x="1493" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Late Night</text>
+<g transform="translate(1599,1170) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C5FFFA"/>
+    <stop offset=".48" stop-color="#31C7C0"/>
+    <stop offset="1" stop-color="#126A70"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#126A70" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#31C7C0" fill-opacity=".17" stroke="#31C7C0" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C5FFFA" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="63" r="35" fill="none" stroke="#C5FFFA" stroke-width="6"/><path d="M77 43 69 66 47 82 55 59Z" fill="#C5FFFA" stroke="#126A70" stroke-width="4" stroke-linejoin="round"/><circle cx="64" cy="63" r="4" fill="#126A70"/></g>
+
+</g>
+<text x="1663" y="1321" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Explorer</text>
+<g transform="translate(69,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="52" r="27" fill="#FFE7A3" stroke="#6E4510" stroke-width="4"/><path d="M49 76 39 105 61 94 72 108 80 76" fill="#FFE7A3" stroke="#6E4510" stroke-width="4" stroke-linejoin="round"/><path d="M64 34 69 45 81 46 72 54 74 66 64 60 54 66 56 54 47 46 59 45Z" fill="#6E4510"/></g>
+
+</g>
+<text x="133" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Collector</text>
+<g transform="translate(239,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M26 49 16 29 39 41 53 21 67 41 91 29 83 50Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="3" stroke-linejoin="round"/><path d="M29 58H83L79 76H33Z" fill="#6E4510"/><path d="M64 45 68 54 78 55 71 62 73 72 64 67 55 72 57 62 50 55 60 54Z" fill="#FFE7A3"/></g>
+
+</g>
+<text x="303" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Legendary</text>
+<g transform="translate(409,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 17 98 30V58C98 78 82 91 64 101 46 91 30 78 30 58V30Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="4" stroke-linejoin="round"/><path d="M64 35 72 51 90 53 77 65 81 82 64 73 47 82 51 65 38 53 56 51Z" fill="#6E4510"/></g>
+
+</g>
+<text x="473" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">DoChess Pro</text>
+<g transform="translate(579,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M20 62Q64 18 108 62Q64 106 20 62Z" fill="#BFEAFF" stroke="#124B82" stroke-width="4"/><circle cx="64" cy="62" r="17" fill="#124B82"/><circle cx="64" cy="62" r="7" fill="#BFEAFF"/></g>
+
+</g>
+<text x="643" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Sharp Eye</text>
+<g transform="translate(749,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 19 75 47 105 49 82 68 89 98 64 82 39 98 46 68 23 49 53 47Z" fill="#E8CEFF" stroke="#53228C" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="813" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Rising Star</text>
+<g transform="translate(919,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE0B1"/>
+    <stop offset=".48" stop-color="#F59E32"/>
+    <stop offset="1" stop-color="#87430C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#87430C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F59E32" fill-opacity=".17" stroke="#F59E32" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE0B1" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 19C84 31 88 52 78 72L64 88 50 72C40 52 44 31 64 19Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4"/><circle cx="64" cy="48" r="8" fill="#87430C"/><path d="M50 66 34 77 42 52M78 66 94 77 86 52M58 88 64 105 70 88" fill="#FFE0B1" stroke="#87430C" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="983" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Speed Runner</text>
+<g transform="translate(1089,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C7FFE0"/>
+    <stop offset=".48" stop-color="#4CCB8A"/>
+    <stop offset="1" stop-color="#176044"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#176044" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#4CCB8A" fill-opacity=".17" stroke="#4CCB8A" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C7FFE0" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M35 101V23" stroke="#C7FFE0" stroke-width="6" stroke-linecap="round"/><path d="M39 26H93L79 44 93 62H39Z" fill="#C7FFE0" stroke="#176044" stroke-width="4" stroke-linejoin="round"/></g>
+
+</g>
+<text x="1153" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Pathfinder</text>
+<g transform="translate(1259,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M39 89 43 72 35 58 40 43 55 25 73 31 88 49 78 57 65 48 61 61 75 69 82 89Z" fill="#BFEAFF" stroke="#124B82" stroke-width="4" stroke-linejoin="round"/><circle cx="67" cy="39" r="3" fill="#124B82"/><path d="M34 98H91" stroke="#BFEAFF" stroke-width="6" stroke-linecap="round"/></g>
+
+</g>
+<text x="1323" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Knight Fan</text>
+<g transform="translate(1429,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#C5FFFA"/>
+    <stop offset=".48" stop-color="#31C7C0"/>
+    <stop offset="1" stop-color="#126A70"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#126A70" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#31C7C0" fill-opacity=".17" stroke="#31C7C0" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#C5FFFA" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="62" r="37" fill="none" stroke="#C5FFFA" stroke-width="8"/><path d="M43 63 57 77 86 45" fill="none" stroke="#C5FFFA" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></g>
+
+</g>
+<text x="1493" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Consistent Player</text>
+<g transform="translate(1599,1415) scale(1.0)">
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="59" r="34" fill="none" stroke="#FFE7A3" stroke-width="7"/><circle cx="64" cy="59" r="21" fill="none" stroke="#6E4510" stroke-width="6"/><circle cx="64" cy="59" r="8" fill="#FFE7A3"/><path d="M64 59 94 28M82 28H94V40" fill="none" stroke="#FFE7A3" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></g>
+
+</g>
+<text x="1663" y="1566" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#E2E8F0">Daily Puzzle</text>
+</svg>

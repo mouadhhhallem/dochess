@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Content Creator</title>
+<desc id="desc">Publish chess content</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFC2CB"/>
+    <stop offset=".48" stop-color="#F05268"/>
+    <stop offset="1" stop-color="#811C32"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#811C32" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F05268" fill-opacity=".17" stroke="#F05268" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFC2CB" stroke-width="3" stroke-linecap="round"/>
+<g><rect x="24" y="36" width="80" height="55" rx="9" fill="#FFC2CB" stroke="#811C32" stroke-width="4"/><path d="M42 36 49 26H74L82 36" fill="#FFC2CB" stroke="#811C32" stroke-width="4" stroke-linejoin="round"/><circle cx="64" cy="63" r="18" fill="#811C32"/><circle cx="64" cy="63" r="10" fill="#FFC2CB"/></g>
+
+</svg>

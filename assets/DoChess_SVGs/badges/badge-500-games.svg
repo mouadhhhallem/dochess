@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: 500 Games</title>
+<desc id="desc">Play 500 games</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M43 26H85V48C85 63 76 72 64 72S43 63 43 48Z" fill="#FFE7A3" stroke="#6E4510" stroke-width="4"/><path d="M43 33H29V43C29 54 36 59 46 58M85 33H99V43C99 54 92 59 82 58" fill="none" stroke="#6E4510" stroke-width="5" stroke-linecap="round"/><path d="M64 72V87M48 94H80M54 87H74" stroke="#FFE7A3" stroke-width="6" stroke-linecap="round"/></g>
+
+</svg>

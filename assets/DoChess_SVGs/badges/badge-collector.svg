@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Collector</title>
+<desc id="desc">Collect a set of achievements</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE7A3"/>
+    <stop offset=".48" stop-color="#F5B82E"/>
+    <stop offset="1" stop-color="#6E4510"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#6E4510" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F5B82E" fill-opacity=".17" stroke="#F5B82E" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE7A3" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="52" r="27" fill="#FFE7A3" stroke="#6E4510" stroke-width="4"/><path d="M49 76 39 105 61 94 72 108 80 76" fill="#FFE7A3" stroke="#6E4510" stroke-width="4" stroke-linejoin="round"/><path d="M64 34 69 45 81 46 72 54 74 66 64 60 54 66 56 54 47 46 59 45Z" fill="#6E4510"/></g>
+
+</svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Early Access</title>
+<desc id="desc">Join an early access release</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#E8CEFF"/>
+    <stop offset=".48" stop-color="#B36BEE"/>
+    <stop offset="1" stop-color="#53228C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#53228C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#B36BEE" fill-opacity=".17" stroke="#B36BEE" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#E8CEFF" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M26 49 16 29 39 41 53 21 67 41 91 29 83 50Z" fill="#E8CEFF" stroke="#53228C" stroke-width="3" stroke-linejoin="round"/><path d="M29 58H83L79 76H33Z" fill="#53228C"/><path d="M64 45 68 54 78 55 71 62 73 72 64 67 55 72 57 62 50 55 60 54Z" fill="#E8CEFF"/></g>
+
+</svg>

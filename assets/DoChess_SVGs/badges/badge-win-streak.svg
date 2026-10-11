@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Win Streak</title>
+<desc id="desc">Reach a winning streak</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFC2CB"/>
+    <stop offset=".48" stop-color="#F05268"/>
+    <stop offset="1" stop-color="#811C32"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#811C32" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F05268" fill-opacity=".17" stroke="#F05268" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFC2CB" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M65 18C71 36 93 42 88 65C85 84 72 96 57 96 38 96 27 81 32 63 35 51 44 44 46 31 56 40 56 48 56 53 65 44 67 31 65 18Z" fill="#FFC2CB" stroke="#811C32" stroke-width="4" stroke-linejoin="round"/><path d="M61 58C70 68 73 74 68 84 63 92 50 88 50 78 50 70 57 66 61 58Z" fill="#811C32"/></g>
+
+</svg>

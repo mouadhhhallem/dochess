@@ -515,7 +515,6 @@ class ChessCourseApp {
         if (!this.isDone(id)) { this.progress.done.push(id); this._saveProgress(); }
         this._syncProgress();
     }
-
     _syncProgress() {
         // Keep the Continue card truthful when progress changes while home
         // is visible (markDone → _syncProgress without a re-render).
@@ -524,6 +523,9 @@ class ChessCourseApp {
         }
         // Progress page reads the same real state (progress.js refresh).
         if (window.DoChessProgress) { try { window.DoChessProgress.refresh(); } catch (_) {} }
+        // Achievements: lesson- and Learn-derived badges re-evaluate here
+        // (Pathfinder, Tactics Expert, Knowledge Seeker, …).
+        try { if (typeof DoChessAchievements !== 'undefined') DoChessAchievements.evaluate(this.userId); } catch (_) {}
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -1749,7 +1751,9 @@ class ChessCourseApp {
     }
     _wheelSummaryHTML(cur, signed) {
         const rating = signed ? OnlineRatings.get(this.userId, cur.id) : '–';
-        return `<span class="ws-cat">${cur.name}</span><span class="ws-label">${cur.label}</span><span class="ws-rating">${rating}</span>`;
+        let chip = '';
+        try { if (signed && typeof DoChessAchievements !== 'undefined') chip = DoChessAchievements.rankChipHTML(this.userId); } catch (_) {}
+        return `<span class="ws-cat">${cur.name}</span><span class="ws-label">${cur.label}</span><span class="ws-rating">${rating}</span>${chip}`;
     }
     _onlineControl() {
         let m = 5, s = 0;
@@ -1820,8 +1824,12 @@ class ChessCourseApp {
                     <div class="wheel-band" aria-hidden="true"></div>
                 </div>
             </div>`;
+        const crest = (rating) => {
+            try { if (typeof DoChessAchievements !== 'undefined') return DoChessAchievements.crestMiniHTML(rating); } catch (_) {}
+            return '';
+        };
         const board = OnlineRatings.board(cur.id).map((p, i) =>
-            `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
+            `<div class="board-row"><span class="board-rank">${i + 1}</span>${crest(p.rating)}<span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '-'}</span></div>`).join('')
             || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
         // Phones swap the tall wheels for a tappable preset grid; desktop
         // keeps the wheels. Both stay in sync through cc_control.
@@ -1976,8 +1984,12 @@ class ChessCourseApp {
         if (head) head.textContent = `Device leaderboard — ${cur.name}`;
         const list = document.getElementById('wheel-board-list');
         if (list) {
+            const crest = (rating) => {
+                try { if (typeof DoChessAchievements !== 'undefined') return DoChessAchievements.crestMiniHTML(rating); } catch (_) {}
+                return '';
+            };
             const rows = OnlineRatings.board(cur.id).map((p, i) =>
-                `<div class="board-row"><span class="board-rank">${i + 1}</span><span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
+                `<div class="board-row"><span class="board-rank">${i + 1}</span>${crest(p.rating)}<span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '–'}</span></div>`).join('')
                 || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
             list.innerHTML = rows;
         }
@@ -2701,6 +2713,10 @@ class ChessCourseApp {
         // (<2 plies) are never rated either — the verdict still stands.
         let delta = null, rating = null;
         const score = result === 'win' ? 1 : result === 'draw' ? 0.5 : 0;
+        // Peak before the rating write — achievements promotion compares this
+        // against the post-write peak (onGame's peakBefore).
+        let peakBefore = null;
+        try { if (typeof DoChessAchievements !== 'undefined') peakBefore = DoChessAchievements.myPeak(this.userId); } catch (_) {}
         if (!s.unrated && !s.short) {
             const r = OnlineRatings.applyGame({ uid: this.userId, cat: s.control.id, score, oppRating: this._oppRatingFor(), gameId: s.gameId });
             if (r) { delta = r.delta; rating = r.rating; }
@@ -2714,6 +2730,20 @@ class ChessCourseApp {
                 result, plies: s.engine.moveHistory.length, delta
             });
         }
+        // Ranks + achievements: fold this game into the device-local record
+        // (streak, speed-class flags, underdog comeback) and toast any new
+        // badge or rank promotion — same event source as the rating write.
+        try {
+            if (typeof DoChessAchievements !== 'undefined' && result !== 'aborted') {
+                const ach = DoChessAchievements.onGame({
+                    uid: this.userId, result, cat: s.control.id,
+                    oppRating: this._oppRatingFor(),
+                    myBefore: (rating !== null && delta !== null) ? rating - delta : null,
+                    peakBefore
+                });
+                if (ach) DoChessAchievements.announceFresh(ach.fresh, ach.promoted);
+            }
+        } catch (_) {}
         if (result === 'win') { this.snd.playSuccess(); }
         else this.snd.playCheck();
         this._stopOnlineTick();
@@ -3726,12 +3756,14 @@ class ChessCourseApp {
                 ${this._profileIdentityHTML(null)}
                 ${this._profileStudyHTML()}
                 ${this._profileLessonsHTML()}
+                ${this._profileAchievementsHTML()}
             </div>`;
             return;
         }
         box.innerHTML = `
             <div class="dc-profile">
                 ${this._profileIdentityHTML(user)}
+                ${this._profileAchievementsHTML()}
                 ${this._profileStudyHTML()}
                 <div class="dc-split">
                     ${this._profileBattleHTML()}
@@ -3785,6 +3817,8 @@ class ChessCourseApp {
             `<span class="dc-trend ${trend.d > 0 ? 'up' : 'down'}" title="Last Blitz game: ${trend.d > 0 ? '+' : ''}${trend.d} vs ${trend.opp}">
                 <svg viewBox="0 0 8 8" aria-hidden="true"><path d="${trend.d > 0 ? 'M4 1l3 5H1z' : 'M4 7L1 2h6z'}"/></svg>${trend.d > 0 ? '+' : ''}${trend.d}
             </span>`;
+        let rankChip = '';
+        try { if (typeof DoChessAchievements !== 'undefined') rankChip = DoChessAchievements.rankChipHTML(this.userId); } catch (_) {}
         return `
             <section class="dc-panel dc-id" aria-label="Player identity">
                 <div class="dc-avatar">${av}<span class="dc-presence" title="${seen}"></span></div>
@@ -3796,6 +3830,7 @@ class ChessCourseApp {
                         <span><span class="presence-dot" aria-hidden="true"></span>${seen}</span>
                         <span class="dc-sep" aria-hidden="true">·</span>
                         <span class="dc-rate-chip" title="Current Blitz rating">Blitz <strong>${blitz}</strong>${trendChip}</span>
+                        ${rankChip ? `<span class="dc-sep" aria-hidden="true">·</span>${rankChip}` : ''}
                     </p>
                     ${this._profileBadgesHTML()}
                 </div>
@@ -3821,6 +3856,15 @@ class ChessCourseApp {
             else if (b.games > 0) out.push(`<span class="dc-badge">Provisional · ${b.games}/10</span>`);
         } catch (_) {}
         return out.length ? `<div class="dc-badges">${out.join('')}</div>` : '';
+    }
+
+    /* Rank card + full badge gallery, rendered by achievements.js from the
+       device-local `cca_v1_` store. Guests see the same honest state. */
+    _profileAchievementsHTML() {
+        try {
+            if (typeof DoChessAchievements !== 'undefined') return DoChessAchievements.profileHTML(this.userId);
+        } catch (_) {}
+        return '';
     }
 
     /* Last rated Blitz delta, for the identity trend chip. Null when
@@ -4436,6 +4480,8 @@ class ChessCourseApp {
     _go(id) {
         this._trackScreen(id);
         try { document.body.dataset.screen = id; } catch (_) {}
+        // Achievements: record section coverage (Explorer badge) + day touch.
+        try { if (typeof DoChessAchievements !== 'undefined') DoChessAchievements.touch(this.userId, id); } catch (_) {}
         ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen','study-screen']
             .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
         // A11y: move keyboard focus to the new screen so SR users land

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Legend Rank</title>
+<desc id="desc">Legend competitive rank crest, tier 8</desc>
+<g><path d="M64 2 69 12 64 10 59 12Z" fill="#FDE68A"/><path d="M14 53 25 59 19 62 11 60Z M114 53 103 59 109 62 117 60Z" fill="#60A5FA"/><path d="M26 20 19 12 30 15 34 23Z M102 20 109 12 98 15 94 23Z" fill="#FDE68A"/><path d="M64 0 68 8 77 9 70 15 72 24 64 19 56 24 58 15 51 9 60 8Z" fill="#FDE68A" stroke="#1D4ED8" stroke-width="1"/><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#1D4ED8" stroke="#60A5FA" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#FDE68A" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#1D4ED8" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#60A5FA" stroke="#FDE68A" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#FDE68A"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#1D4ED8" stroke-width="2.5" stroke-linecap="round"/></g>
+</svg>

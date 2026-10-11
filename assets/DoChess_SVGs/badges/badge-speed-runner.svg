@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Speed Runner</title>
+<desc id="desc">Complete a fast challenge</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE0B1"/>
+    <stop offset=".48" stop-color="#F59E32"/>
+    <stop offset="1" stop-color="#87430C"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#87430C" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#F59E32" fill-opacity=".17" stroke="#F59E32" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#FFE0B1" stroke-width="3" stroke-linecap="round"/>
+<g><path d="M64 19C84 31 88 52 78 72L64 88 50 72C40 52 44 31 64 19Z" fill="#FFE0B1" stroke="#87430C" stroke-width="4"/><circle cx="64" cy="48" r="8" fill="#87430C"/><path d="M50 66 34 77 42 52M78 66 94 77 86 52M58 88 64 105 70 88" fill="#FFE0B1" stroke="#87430C" stroke-width="4" stroke-linejoin="round"/></g>
+
+</svg>

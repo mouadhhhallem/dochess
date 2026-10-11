@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Badge: Rapid Champion</title>
+<desc id="desc">Reach a rapid milestone</desc>
+
+<defs>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#BFEAFF"/>
+    <stop offset=".48" stop-color="#39A9F5"/>
+    <stop offset="1" stop-color="#124B82"/>
+  </linearGradient>
+</defs>
+<circle cx="64" cy="64" r="55" fill="#101B2B" stroke="#124B82" stroke-width="3"/>
+<circle cx="64" cy="64" r="49" fill="none" stroke="url(#ring)" stroke-width="7"/>
+<circle cx="64" cy="64" r="40" fill="#39A9F5" fill-opacity=".17" stroke="#39A9F5" stroke-opacity=".42" stroke-width="1.5"/>
+<path d="M30 33A44 44 0 0 1 54 21" fill="none" stroke="#BFEAFF" stroke-width="3" stroke-linecap="round"/>
+<g><circle cx="64" cy="64" r="31" fill="none" stroke="#BFEAFF" stroke-width="7"/><path d="M55 20H73M64 20V31M85 39 94 30" stroke="#BFEAFF" stroke-width="6" stroke-linecap="round"/><path d="M64 43V64L80 73" fill="none" stroke="#124B82" stroke-width="6" stroke-linecap="round"/></g>
+
+</svg>

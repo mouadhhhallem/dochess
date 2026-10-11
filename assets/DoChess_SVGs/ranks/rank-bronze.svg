@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">DoChess Bronze Rank</title>
+<desc id="desc">Bronze competitive rank crest, tier 1</desc>
+<g><path d="M64 7 105 25 101 70 64 103 27 70 23 25Z" fill="#7D4229" stroke="#C77B4A" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M64 15 97 30 94 67 64 94 34 67 31 30Z" fill="#101D31" stroke="#F2B27A" stroke-opacity=".7" stroke-width="1.8"/>
+    <path d="M64 22 89 34 87 64 64 84 41 64 39 34Z" fill="#7D4229" fill-opacity=".6"/><path d="M47 69 50 58 43 47 45 34 55 23 69 27 78 38 73 44 66 40 62 48 73 55 78 69 82 76 43 76 43 69Z"
+    fill="#C77B4A" stroke="#F2B27A" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M54 31 62 34 57 40 52 37Z" fill="#F2B27A"/>
+    <circle cx="67" cy="34" r="2.4" fill="#101D31"/>
+    <path d="M49 65 75 65" stroke="#7D4229" stroke-width="2.5" stroke-linecap="round"/></g>
+</svg>
