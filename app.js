@@ -262,6 +262,18 @@ class ChessCourseApp {
                 else if (a === 'online-leave') this._onlineLeave();
                 else if (a === 'online-quick') this._quickMatch();
                 else if (a === 'qm-cancel') this._quickCancel();
+                else if (a === 'online-copy-link') {
+                    const inp = document.getElementById('invite-link');
+                    const prev = action.textContent;
+                    const done = () => {
+                        try { action.textContent = 'Copied!'; } catch (_) {}
+                        setTimeout(() => { try { action.textContent = prev; } catch (_) {} }, 1500);
+                    };
+                    if (inp && inp.value && navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(inp.value).then(done, () => { try { inp.select(); } catch (_) {} done(); });
+                    } else if (inp) { try { inp.select(); } catch (_) {} done(); }
+                }
+                else if (a === 'online-invite-guest') this._onlineJoin(action.dataset.code);
                 else if (a === 'online-resign-ask') this._onlineResignAsk();
                 else if (a === 'online-leave-ask') this._onlineLeaveAsk();
                 else if (a === 'online-rematch') this._onlineRematch();
@@ -1817,7 +1829,51 @@ class ChessCourseApp {
     showOnline() {
         this._go('online-screen');
         if (this.online && (this.online.phase === 'play' || this.online.phase === 'over')) this._renderOnlineGame();
-        else this._renderOnlineLobby();
+        else {
+            this._renderOnlineLobby();
+            this._consumeInviteLink();
+        }
+    }
+
+    // Invite links (#play-CODE / ?play=CODE): the opener joins instantly —
+    // rated when signed in, or consents to a guest (unrated) game first.
+    _consumeInviteLink() {
+        let code = null;
+        try {
+            const h = /^#play-([A-Za-z0-9]{6})$/i.exec(location.hash || '');
+            let q = null;
+            try { q = new URLSearchParams(location.search || '').get('play'); } catch (_) {}
+            const raw = h ? h[1] : (/^[A-Za-z0-9]{6}$/i.test(q || '') ? q : null);
+            if (raw) code = OnlineNet.normalizeCode(raw);
+        } catch (_) {}
+        if (!code || code.length !== 6) return;
+        // Consume once: a reload must land on the lobby, not rejoin.
+        try {
+            const u = new URL(location.href);
+            u.hash = '';
+            u.searchParams.delete('play');
+            history.replaceState(null, '', u.pathname + u.search + u.hash);
+        } catch (_) {}
+        if (this._clerk?.user) { this._pendingInvite = null; this._onlineJoin(code); return; }
+        // Guests consent first; the prompt renders on the lobby (or on its
+        // next render — the lobby may still be loading the net library).
+        this._pendingInvite = code;
+        this._renderInvitePrompt(code);
+    }
+
+    _renderInvitePrompt(code) {
+        const box = document.querySelector('#online-screen .online-lobby');
+        if (!box || box.querySelector('.invite-prompt')) return;
+        const div = document.createElement('div');
+        div.className = 'dashboard-section invite-prompt';
+        div.innerHTML = `
+            <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">You've been invited! Code ${esc(code)}</h4>
+            <p class="lobby-hint">Sign in for a rated game, or play right now as a guest (unrated).</p>
+            <div class="lobby-actions">
+                <button class="btn-primary" data-action="online-invite-guest" data-code="${esc(code)}" type="button">Play as guest</button>
+                <button class="btn-secondary" data-action="profile-signin" type="button">Sign in</button>
+            </div>`;
+        box.prepend(div);
     }
 
     _meTag() {
@@ -1945,7 +2001,8 @@ class ChessCourseApp {
                 </div>
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Play a friend</h4>
-                    <p class="lobby-hint">Share a 6-letter code. Your tabs connect directly; the host's tab validates every move and owns both clocks. Dropped connections auto-rejoin with the same code, and every move is saved so a dead tab can resume.</p>
+                    <p class="lobby-hint">Share a 6-letter code. Your tabs connect directly; the host's tab validates every move and owns both clocks. Dropped connections auto-rejoin with
+the same code, and every move is saved so a dead tab can resume. Got an invite link? Just open it — no account needed, guests play unrated.</p>
                     <div class="lobby-actions">
                         <button class="btn-primary" data-action="online-host" ${signed ? '' :
                 'disabled'}>Create game code</button>
@@ -1973,6 +2030,8 @@ class ChessCourseApp {
                 <p class="lobby-hint" style="text-align:center">DoChess ${ChessCourseApp.APP_VERSION} · both players need the same version — refresh if your opponent is told to.</p>
             </div>`;
         this._bindWheels();
+        // A pending invite (guest prompt) survives lobby re-renders.
+        if (this._pendingInvite && !this._clerk?.user) this._renderInvitePrompt(this._pendingInvite);
     }
 
     /* ── iPhone-style wheel picker: two snap columns ── */
@@ -2149,7 +2208,7 @@ class ChessCourseApp {
             s.myColor = rec.myColor || 'white';
             s.oppColor = s.myColor === 'white' ? 'black' : 'white';
             s.opp = rec.opp || { id: 'guest', name: 'Friend' };
-            s.unrated = !!(this.userId && this.userId !== 'guest' && s.opp.id && s.opp.id !== 'guest' && s.opp.id === this.userId);
+            s.unrated = this._onlineUnrated(s.opp);
             s.engine = new ChessGame();
             (rec.moves || []).forEach(m => {
                 s.engine.movePiece(s.engine.algebraicToCoords(m.from), s.engine.algebraicToCoords(m.to), m.promo || null);
@@ -2183,7 +2242,9 @@ class ChessCourseApp {
     }
 
     async _onlineJoin(codeOverride, isRejoin) {
-        if (!this._clerk?.user) return;
+        // Guests may join via invite links (unrated games); the lobby's own
+        // Join button stays signed-in-only, quick match too.
+        this._pendingInvite = null;
         if (this.online && this.online.phase === 'joining') return; // no double sessions
         const code = codeOverride || OnlineNet.normalizeCode(document.getElementById('join-code')?.value);
         if (code.length !== 6) { this._onlineLobbyMsg('Enter the 6-letter code from your friend.', 'error'); return; }
@@ -2206,11 +2267,8 @@ class ChessCourseApp {
                 // Unknown code: fail fast every time — no host will
                 // ever appear for it, so retries only waste a minute.
                 if (e && e.message === 'not-found') {
-                    // Quick-match room probes stay silent: the searching
-                    // overlay owns the screen, so no lobby flash allowed.
-                    const silent = this._qm && this._qm.active && this._qm.silentJoin;
-                    this._onlineLeave(!silent);
-                    if (!silent) this._onlineLobbyMsg('No game with that code is online.', 'error');
+                    this._onlineLeave();
+                    this._onlineLobbyMsg('No game with that code is online.', 'error');
                     return;
                 }
             }
@@ -2273,7 +2331,7 @@ class ChessCourseApp {
         if (this._qm && this._qm.active) return; // already searching
         const control = this._onlineControl();
         const elo = OnlineRatings.get(this.userId, control.id);
-        this._qm = { active: true, done: false, silentJoin: false, t0: Date.now(), ticket: null, base: null, mode: null, range: 100, timer: null, pollTimer: null };
+        this._qm = { active: true, done: false, t0: Date.now(), ticket: null, base: null, mode: null, range: 100, timer: null, pollTimer: null };
         this._renderQuickOverlay(control, elo);
         // Server queue first; P2P rendezvous when it doesn't answer.
         const base = this._apiBase();
@@ -2412,8 +2470,9 @@ class ChessCourseApp {
         qm.done = true; // cancel becomes inert; overlay closes on play
         this._qmSetStatus(opp && opp.name ? `Opponent found: ${opp.name} (${typeof opp.elo === 'number' ? opp.elo : '?'})!` : 'Opponent found!');
         if (role === 'join') {
-            // The host needs a head start opening the room.
-            setTimeout(() => { if (this._qm && this._qm.done) this._onlineJoin(code); }, 1200);
+            // The host needs a head start opening the room (retry loop
+            // covers the lag, so this stays short).
+            setTimeout(() => { if (this._qm && this._qm.done) this._onlineJoin(code); }, 400);
         } else {
             this._onlineHost(code);
         }
@@ -2432,58 +2491,118 @@ class ChessCourseApp {
         if (!qm || !qm.active) return;
         qm.mode = 'bucket';
         qm.ticket = null;
-        qm.silentJoin = true;
         this._qmSetStatus('Searching live rooms…');
         const W = Math.floor(Date.now() / 180000);
+        const cur = ChessCourseApp.quickBucketCode(control.id, W);
         const prev = ChessCourseApp.quickBucketCode(control.id, W - 1);
-        this._onlineJoin(prev).then(() => {
-            if (!qm.active) return;
-            // Probe connected us: hello sent, play incoming — nothing left.
-            if (this.online && this.online.phase !== 'lobby' && this.online.phase !== null) {
-                if (this.online.phase === 'play') return;
+        // Two legs, one winner: open our room AND knock on last window's
+        // room at the same time (wall time ~= one peer handshake, not two).
+        // Last window's room bridges searchers who pressed Find minutes apart.
+        const race = { over: false, fails: 0 };
+        const fail = () => {
+            if (!qm.active || race.over) return;
+            if (++race.fails >= 2) {
+                race.over = true;
+                this._quickCloseOverlay();
+                this.online = null; this._qm = null;
+                this._renderOnlineLobby();
+                this._onlineLobbyMsg('Could not open a game. Check your connection and try again.', 'error');
             }
-            qm.silentJoin = false;
-            this._quickHostOrJoin(ChessCourseApp.quickBucketCode(control.id, Math.floor(Date.now() / 180000)));
-        });
+        };
+        const win = () => { race.over = true; };
+        this._quickHostLeg(cur, qm, race, win, fail);
+        this._quickProbeLeg(prev, qm, race, win, fail);
     }
 
-    async _quickHostOrJoin(code) {
-        const qm = this._qm;
-        if (!qm || !qm.active) return;
-        this._onlineCleanup();
+    // Leg 1: open the current room; a taken room means a rival holds it → join.
+    async _quickHostLeg(code, qm, race, win, fail) {
+        const net = new OnlineNet((t, m, c) => this._onNetMsg(t, m, c));
         const control = this._onlineControl();
-        this.online = { phase: 'waiting', role: 'host', code, control, epoch: 0, resumed: false, quick: true, net: new OnlineNet((t, m, c) => this._onNetMsg(t, m, c)) };
-        this._qmSetStatus('Room open — waiting for a rival…');
         try {
-            await this.online.net.host(code);
-            if (!qm.active || !this.online) return;
-            this.online.epoch = OnlineStore.nextEpoch(code);
-            // Opponent arrival flows through _onNetMsg → welcome → play,
-            // and the overlay closes the moment the game starts.
+            await net.host(code);
         } catch (e) {
-            if (!qm.active) return;
-            // Lost the host race: someone else opened this room — join them.
+            try { net.destroy(); } catch (_) {}
+            if (!qm.active || race.over) return;
             if (e && e.message === 'taken') {
                 this._qmSetStatus('Room found — joining…');
-                qm.silentJoin = false;
+                win();
                 this._onlineJoin(code);
                 return;
             }
-            this._quickCloseOverlay();
-            this.online = null; this._qm = null;
-            this._renderOnlineLobby();
-            this._onlineLobbyMsg('Could not open a game. Check your connection and try again.', 'error');
+            fail();
+            return;
         }
+        if (!qm.active || race.over) { try { net.destroy(); } catch (_) {} return; }
+        // We hold the room: adopt it and wait for the rival to knock.
+        this._onlineCleanup();
+        this.online = { phase: 'waiting', role: 'host', code, control, epoch: 0, resumed: false, quick: true, net };
+        try { this.online.epoch = OnlineStore.nextEpoch(code); } catch (_) {}
+        this._qmSetStatus('Room open — waiting for a rival…');
+        win(); // probe leg stands down; its late failure is ignored
+    }
+
+    // Leg 2: one quiet knock on the previous window's room, adopted
+    // directly as the game session (no second join round-trip).
+    async _quickProbeLeg(code, qm, race, win, fail) {
+        const net = new OnlineNet((t, m, c) => this._onNetMsg(t, m, c));
+        const control = this._onlineControl();
+        let timer = null;
+        try {
+            const attempt = net.join(code);
+            attempt.catch(() => {}); // the race below may settle first
+            const conn = await Promise.race([
+                attempt,
+                new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('probe-timeout')), 7000); }),
+            ]);
+            if (!qm.active || race.over) { try { net.destroy(); } catch (_) {} return; }
+            this._onlineCleanup();
+            this.online = { phase: 'joining', role: 'join', code, control, epoch: 0, net, conn };
+            try { net.send(conn, { type: 'hello', v: ChessCourseApp.APP_VERSION, code, rejoin: false, user: this._meTag() }); } catch (_) {}
+            win();
+            this._qmSetStatus('Room found — joining…');
+            try {
+                await this._waitFor(() => this.online && this.online.phase === 'play', 10000);
+            } catch (_) {
+                if (qm.active && !race.over) {
+                    this._onlineLeave();
+                    this._onlineLobbyMsg('Host is not answering. Check the code and your connection, then try again.', 'error');
+                }
+            }
+        } catch (_) {
+            try { net.destroy(); } catch (_) {}
+            fail();
+        } finally {
+            try { if (timer) clearTimeout(timer); } catch (_) {}
+        }
+    }
+
+    // Shareable invite link for a hosted room: the opener joins
+    // instantly (rated when signed in, guest-unrated otherwise).
+    _inviteUrl(code) {
+        try {
+            const u = new URL(location.href);
+            u.search = '';
+            u.hash = `play-${code}`;
+            return u.toString();
+        } catch (_) { return `#play-${code}`; }
     }
 
     _renderOnlineWaiting(code, msg) {
         const box = document.getElementById('online-content');
         if (!box) return;
+        // Hosts get a copyable invite link; joiners share the code itself.
+        const inviteRow = (this.online && this.online.role === 'host') ? `
+                <div class="invite-row">
+                    <input id="invite-link" class="join-input" readonly value="${esc(this._inviteUrl(code))}" spellcheck="false">
+                    <button class="btn-secondary" data-action="online-copy-link" type="button">Copy invite</button>
+                </div>
+                <p class="lobby-hint">Anyone opening the link joins instantly — signed-in players are rated, guests play unrated.</p>` : '';
         box.innerHTML = `
             <div class="dashboard-section waiting-card">
                 <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Game code</h4>
                 <div class="game-code">${code}</div>
                 <p class="lobby-hint">${msg}</p>
+                ${inviteRow}
                 <div class="lobby-actions"><button class="btn-secondary"
            data-action="online-leave">Cancel</button></div>
             </div>`;
@@ -2507,6 +2626,7 @@ class ChessCourseApp {
         this._clearRejoin();
         this._onlineCleanup();
         this.online = null;
+        this._pendingInvite = null;
         if (renderLobby) this._renderOnlineLobby();
     }
 
@@ -2625,6 +2745,35 @@ class ChessCourseApp {
         const s = this.online;
         if (type === 'hello') {
             if (msg.code !== s.code || (s.phase !== 'waiting' && s.phase !== 'play')) { try { conn.close(); } catch (_) {} return; }
+            // One room, one rival: a second joiner mid-wait is turned away
+            // instead of hijacking the seat (invite links travel in groups).
+            if (s.phase === 'waiting' && s.conn && s.conn.open) {
+                try { conn.send({ type: 'rejected', reason: 'full' }); } catch (_) {}
+                setTimeout(() => { try { conn.close(); } catch (_) {} }, 400);
+                return;
+            }
+            // A hello during a LIVE game is a rejoin, not a new game —
+            // but only from the same player (no spectators on this path).
+            if (s.phase === 'play') {
+                const same = msg.user && msg.user.id && s.opp && msg.user.id === s.opp.id;
+                // Strangers knocking mid-game learn it's full right away
+                // instead of hanging through the join retry loop.
+                if (!same) {
+                    try { conn.send({ type: 'rejected', reason: 'full' }); } catch (_) {}
+                    setTimeout(() => { try { conn.close(); } catch (_) {} }, 400);
+                    return;
+                }
+                s.conn = conn; s.peerGone = false;
+                this._clearRejoin();
+                s.net.send(conn, { type: 'welcome', v: ChessCourseApp.APP_VERSION, epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
+                this._flushPending();
+                this._onlineStatus();
+                this._drawOnline();
+                return;
+            }
+            // First contact on a waiting room (or a resumed rejoin): adopt
+            // the seat. This MUST stay below the play-branch above: comparing
+            // against s.opp only works while it still names the CURRENT rival.
             s.conn = conn;
             s.opp = sanitizePeerUser(msg.user);
             this._notePeerVersion(msg);
@@ -2639,19 +2788,6 @@ class ChessCourseApp {
                 this._startOnlineTick();
                 this._startOnlinePing();
                 this._renderOnlineGame();
-                return;
-            }
-            // A hello during a LIVE game is a rejoin, not a new game —
-            // but only from the same player (no spectators on this path).
-            if (s.phase === 'play') {
-                const same = msg.user && msg.user.id && s.opp && msg.user.id === s.opp.id;
-                if (!same) { try { conn.close(); } catch (_) {} return; }
-                s.conn = conn; s.peerGone = false;
-                this._clearRejoin();
-                s.net.send(conn, { type: 'welcome', v: ChessCourseApp.APP_VERSION, epoch: s.epoch || 0, game_id: s.gameId, color: s.oppColor, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, rated: true, user: this._meTag(), state: this._buildOnlineState() });
-                this._flushPending();
-                this._onlineStatus();
-                this._drawOnline();
                 return;
             }
             if (s.phase === 'over') {
@@ -2725,6 +2861,14 @@ class ChessCourseApp {
         }
         if (type === 'host_left') {
             if (s.phase === 'play' && !s.result) this._onlineAbort('Host left the game.');
+            return;
+        }
+        // Turned away before the game (room full): back to the lobby
+        // with words. This sits above the play/over gate below: a joiner
+        // stuck in 'joining' must hear it too.
+        if (type === 'rejected' && s.phase === 'joining') {
+            this._onlineLeave();
+            this._onlineLobbyMsg('That game is already full.', 'error');
             return;
         }
         if (!this._epochOk(msg)) return;
@@ -2817,13 +2961,22 @@ class ChessCourseApp {
     /* ── Session lifecycle (host = pinned authority, §6-D2) ── */
     _newGameId() { return 'g_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
+    // A game is unrated when it's self-play (same account, both tabs),
+    // when EITHER side is a guest (invite links), or when it's too short
+    // (the abort rule in _onlineFinish). One helper, every entry point.
+    _onlineUnrated(opp) {
+        const o = opp || {};
+        const selfPlay = !!(this.userId && this.userId !== 'guest' && o.id && o.id !== 'guest' && o.id === this.userId);
+        const guestGame = !this.userId || !o.id || o.id === 'guest';
+        return selfPlay || guestGame;
+    }
+
     _startOnlineGame(myColor, opp, controlOrId, keepConn) {
         const s = this.online;
         const control = this._cleanControl(controlOrId !== undefined ? controlOrId : s.control);
-        const selfPlay = !!(this.userId && this.userId !== 'guest' && opp && opp.id && opp.id !== 'guest' && opp.id === this.userId);
         Object.assign(s, {
             phase: 'play', myColor, oppColor: myColor === 'white' ? 'black' : 'white',
-            control, opp, unrated: selfPlay,
+            control, opp, unrated: this._onlineUnrated(opp),
             gameId: s.gameId && keepConn ? s.gameId : this._newGameId(),
             engine: new ChessGame(), ply: 0, sel: null, legal: [],
             pendingPromo: null, result: null, reason: null,
@@ -3047,11 +3200,13 @@ class ChessCourseApp {
             const r = OnlineRatings.applyGame({ uid: this.userId, cat: s.control.id, score, oppRating: this._oppRatingFor(), gameId: s.gameId });
             if (r) { delta = r.delta; rating = r.rating; }
         }
-        OnlineRatings.notePlayer(this.userId, this._meTag().name, s.control.id, OnlineRatings.get(this.userId, s.control.id));
+        OnlineRatings.notePlayer(this.userId || 'guest', this._meTag().name, s.control.id, OnlineRatings.get(this.userId, s.control.id));
         if (s.opp?.id) OnlineRatings.notePlayer(s.opp.id, s.opp.name, s.control.id, s.opp.rating);
         s.ratingDelta = delta; s.ratingAfter = rating;
         if (result !== 'aborted' && s.gameId) {
-            OnlineRatings.pushHistory(this.userId, {
+            // History is for everyone, including guests (device-local
+            // 'guest' shelf; ratings above stay signed-in-only).
+            OnlineRatings.pushHistory(this.userId || 'guest', {
                 gameId: s.gameId, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, opp: s.opp?.name || 'Opponent',
                 result, plies: s.engine.moveHistory.length, delta
             });
@@ -3083,7 +3238,8 @@ class ChessCourseApp {
         // (streak, speed-class flags, underdog comeback) and toast any new
         // badge or rank promotion — same event source as the rating write.
         try {
-            if (typeof DoChessAchievements !== 'undefined' && result !== 'aborted') {
+            // Achievements attribute to an account; guest games skip them.
+            if (typeof DoChessAchievements !== 'undefined' && result !== 'aborted' && this.userId) {
                 const ach = DoChessAchievements.onGame({
                     uid: this.userId, result, cat: s.control.id,
                     oppRating: this._oppRatingFor(),
@@ -3127,7 +3283,8 @@ class ChessCourseApp {
         const rateBit = (s.ratingDelta !== null && s.ratingDelta !== undefined)
             ? ` <span class="rate-count" data-from="${s.ratingAfter - s.ratingDelta}" data-to="${s.ratingAfter}">Rating ${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}</span>`
             : '';
-        const unratedBit = (over && s.unrated) ? `<div class="feedback info">Unrated game — you are playing yourself.</div>` : '';
+        const guestBit = !this.userId || !s.opp?.id || s.opp.id === 'guest';
+        const unratedBit = (over && s.unrated) ? `<div class="feedback info">${guestBit ? 'Guest game — not rated. Sign in to play rated games.' : 'Unrated game — you are playing yourself.'}</div>` : '';
         const shortBit = (over && s.short && !s.unrated) ? `<div class="feedback info">Unrated game — too short to rate.</div>` : '';
         // After a rated game the You-card shows the whole change, e.g.
         // "Black · 857 → 831 (-26)" next to the result line's

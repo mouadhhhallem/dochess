@@ -4226,3 +4226,8 @@ body[data-theme='day'] .pz-chip.pz-offline { color: #b45309; }
 @media (prefers-reduced-motion: reduce) {
     .tb-play::after, .qm-radar::before, .qm-radar::after, .qm-knight, .qm-dots::after, #more-sheet { animation: none; }
 }
+
+/* -- Invite links: copy row in the waiting room + guest prompt -- */
+.invite-row { display: flex; gap: .5rem; margin: .7rem 0 .2rem; }
+.invite-row .join-input { flex: 1; min-width: 0; font-size: .8rem; }
+.invite-prompt { border-color: rgba(212, 164, 75, 0.45); }

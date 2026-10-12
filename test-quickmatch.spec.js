@@ -106,6 +106,74 @@ test('quick match: two searchers pair over P2P bucket, opposite colors', async (
     await B.close();
 });
 
+test('invite link: signed host pairs a guest, game unrated both sides', async ({ browser }) => {
+    test.setTimeout(180000);
+    const vp = { width: 1280, height: 800 };
+    const host = await mkPage(browser, vp, 'inv_host', 'Host');
+    await host.evaluate(() => window.app.showOnline());
+    await host.waitForSelector('[data-action="online-host"]', { timeout: 20000 });
+    await host.click('[data-action="online-host"]');
+    await host.waitForFunction(() => window.app.online?.code, null, { timeout: 60000 });
+    // Host waiting room carries a copyable invite link with the code.
+    const link = await host.locator('#invite-link').inputValue();
+    const code = await host.evaluate(() => window.app.online.code);
+    expect(link).toContain(code);
+    // Stranger with no account opens the link: guest prompt, instant unrated game.
+    const guest = await browser.newPage({ viewport: vp });
+    await guest.goto(`index.html#play-${code}`);
+    await guest.waitForFunction(() => !!window.app, null, { timeout: 15000 });
+    await guest.evaluate(() => window.app.showOnline());
+    await guest.waitForSelector('[data-action="online-invite-guest"]', { timeout: 15000 });
+    await guest.click('[data-action="online-invite-guest"]');
+    await guest.waitForFunction(() => window.app.online?.phase === 'play', null, { timeout: 120000 });
+    await host.waitForFunction(() => window.app.online?.phase === 'play', null, { timeout: 120000 });
+    const gst = await guest.evaluate(() => ({
+        uid: window.app.userId,
+        oppId: window.app.online.opp?.id,
+        unrated: window.app._onlineUnrated(window.app.online.opp),
+        color: window.app.online.myColor,
+    }));
+    expect(gst.uid).toBe(null);
+    expect(gst.oppId).toBe('inv_host');
+    expect(gst.unrated).toBe(true);
+    const hst = await host.evaluate(() => ({
+        oppId: window.app.online.opp?.id,
+        unrated: window.app._onlineUnrated(window.app.online.opp),
+        color: window.app.online.myColor,
+    }));
+    expect(hst.oppId).toBe('guest');
+    expect(hst.unrated).toBe(true);
+    expect(gst.color).not.toBe(hst.color);
+    await host.close();
+    await guest.close();
+});
+
+test('invite link: second joiner is turned away, room stays 1v1', async ({ browser }) => {
+    test.setTimeout(180000);
+    const vp = { width: 1280, height: 800 };
+    const host = await mkPage(browser, vp, 'full_h', 'FullH');
+    const A = await mkPage(browser, vp, 'full_a', 'FullA');
+    const B = await mkPage(browser, vp, 'full_b', 'FullB');
+    await host.evaluate(() => window.app.showOnline());
+    await host.waitForSelector('[data-action="online-host"]', { timeout: 20000 });
+    await host.click('[data-action="online-host"]');
+    await host.waitForFunction(() => window.app.online?.code, null, { timeout: 60000 });
+    const code = await host.evaluate(() => window.app.online.code);
+    for (const P of [A, B]) await P.evaluate(() => window.app.showOnline());
+    await A.fill('#join-code', code);
+    await A.click('.join-row button');
+    await A.waitForFunction(() => window.app.online?.phase === 'play', null, { timeout: 120000 });
+    await B.fill('#join-code', code);
+    await B.click('.join-row button');
+    await expect(B.locator('#online-lobby-status')).toContainText(/already full/, { timeout: 30000 });
+    // Host still plays A, not B.
+    expect(await host.evaluate(() => window.app.online.opp?.id)).toBe('full_a');
+    expect(await host.evaluate(() => window.app.online?.phase)).toBe('play');
+    await host.close();
+    await A.close();
+    await B.close();
+});
+
 test('quick match: server queue cancel leaves queue, back to lobby', async ({ browser }) => {
     test.setTimeout(120000);
     const ctx = await browser.newContext({ baseURL: origin });
