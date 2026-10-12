@@ -150,6 +150,7 @@ class ChessCourseApp {
         window.showOnline   = () => this.showOnline();
         window.showProfile  = () => this.showProfile();
         window.showStudy    = () => this.showStudy();
+        window.showPuzzles  = () => this.showPuzzles();
         window.toggleTheme  = (el) => this.toggleTheme(el);
         window.app          = this;
         this._applyTheme(this._resolveTheme(), false);
@@ -3525,6 +3526,7 @@ class ChessCourseApp {
     showProgress() { this._go('progress-screen'); this._syncProgress(); }
     showProfile()  { this._go('profile-screen');  this._renderProfile(); }
     showStudy()    { this._go('study-screen'); if (window.DoChessStudy) window.DoChessStudy.open(); }
+    showPuzzles()  { this._go('puzzles-screen'); if (window.DoChessPuzzles) window.DoChessPuzzles.open(); }
 
     openUserProfile() {
         if (this._clerk && this._clerk.user) {
@@ -4481,7 +4483,7 @@ class ChessCourseApp {
         try { document.body.dataset.screen = id; } catch (_) {}
         // Achievements: record section coverage (Explorer badge) + day touch.
         try { if (typeof DoChessAchievements !== 'undefined') DoChessAchievements.touch(this.userId, id); } catch (_) {}
-        ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen','study-screen']
+        ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen','study-screen','puzzles-screen']
             .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
         // A11y: move keyboard focus to the new screen so SR users land
         // on the heading instead of staying on a now-hidden control.
@@ -4490,7 +4492,7 @@ class ChessCourseApp {
             if (scr) { scr.focus({ preventScroll: true }); }
         } catch (_) {}
         // Keep nav highlighted so users always know where they are
-        const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen': 'online', 'study-screen': 'study' };
+        const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen': 'online', 'study-screen': 'study', 'puzzles-screen': 'puzzles' };
         const active = navFor[id];
         document.querySelectorAll('.nav-btn').forEach(b => {
             const key = b.dataset.nav || b.textContent.trim().toLowerCase();
@@ -4512,6 +4514,7 @@ class ChessCourseApp {
                 else if (key.startsWith('profile')) this.showProfile();
                 else if (key.startsWith('progress')) this.showProgress();
                 else if (key.startsWith('study')) this.showStudy();
+                else if (key.startsWith('puzzles')) this.showPuzzles();
                 this._closeMenu();
             });
         });
