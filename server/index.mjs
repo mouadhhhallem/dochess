@@ -21,7 +21,7 @@ import { createReadStream, statSync, existsSync } from 'node:fs';
 import { join, normalize, extname, resolve, sep } from 'node:path';
 
 import { config, missingConfig, isProductionReady, ROOT } from './lib/env.mjs';
-import { initDb, db, dbStatus, sanitizeGameRecord } from './lib/db.mjs';
+import { initDb, db, dbStatus, sanitizeGameRecord, extractCatRating } from './lib/db.mjs';
 import { identify, authStatus, authMode } from './lib/auth.mjs';
 import { redisStatus, rateLimit, get as rget, set as rset } from './lib/redis.mjs';
 import { sendJson, sendError, readJson, pathOf, query, cors, securityHeaders, header } from './lib/http.mjs';
@@ -155,29 +155,36 @@ const LEADER_CATS = new Set(['bullet', 'blitz', 'rapid', 'classical', 'correspon
 
 async function handleLeaderboard(req, res) {
     const cat = (query(req).cat || 'blitz').slice(0, 24);
-    const key = 'lb:' + cat;
+    // Cache key is per database: several environments (dev, e2e, prod) may
+    // share one Upstash instance, and a shared key would serve one env's
+    // board to another.
+    const key = 'lb:' + config.mongoDb + ':' + cat;
     const cached = await rget(key);
     if (cached) {
         try { sendJson(res, 200, JSON.parse(cached)); return; } catch (_) { /* refetch */ }
     }
     if (!LEADER_CATS.has(cat)) { sendError(res, 400, 'bad-category'); return; }
 
-    // Top-N per category. Mongo handles the sort; Redis caches the page.
+    // Top-N per category. The ratings section stores the live ratings object
+    // {rating, best, games, ...} per category (bare numbers on legacy dev
+    // records) — extract the numeric rating first, then sort. The candidate
+    // set is bounded (500) so the sort stays cheap; when the player base
+    // outgrows that, normalize to a numeric field with a descending index.
     let rows = [];
     if (db().kind === 'mongo') {
-        rows = await db().users
+        const docs = await db().users
             .find({ ['sections.ratings.data.cats.' + cat]: { $exists: true } })
             .project({ _id: 1, profile: 1, ['sections.ratings.data.cats.' + cat]: 1 })
-            .limit(50)
+            .limit(500)
             .toArray();
-        rows = rows
+        rows = docs
             .map((d) => ({
                 uid: d._id,
                 name: (d.profile && d.profile.name) || 'Player',
                 image: (d.profile && d.profile.image) || null,
-                rating: d.sections?.ratings?.data?.cats?.[cat] ?? null
+                rating: extractCatRating(d.sections?.ratings?.data?.cats?.[cat])
             }))
-            .filter((r) => Number.isFinite(r.rating))
+            .filter((r) => r.rating != null)
             .sort((a, b) => b.rating - a.rating)
             .slice(0, 50);
     } else {

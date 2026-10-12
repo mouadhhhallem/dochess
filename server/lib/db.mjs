@@ -26,6 +26,20 @@ import { mergeSections } from './merge.mjs';
 const now = () => Date.now();
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
+/**
+ * A rating-category value is either a bare number (legacy hand-written
+ * records) or the live ratings object {rating, best, games, ...} that the
+ * client syncs from `ccr_<uid>`. Accept both; prefer the current rating.
+ */
+export function extractCatRating(v) {
+    if (Number.isFinite(v)) return v;
+    if (v && typeof v === 'object') {
+        if (Number.isFinite(v.rating)) return v.rating;
+        if (Number.isFinite(v.best)) return v.best;
+    }
+    return null;
+}
+
 export function sanitizeProfile(raw) {
     if (!isObj(raw)) return {};
     const clean = {};
@@ -53,6 +67,25 @@ export function sanitizeGameRecord(raw, userId) {
     }
     if (typeof raw.delta === 'number' && Number.isFinite(raw.delta)) rec.delta = Math.max(-500, Math.min(500, Math.round(raw.delta)));
     if (typeof raw.opp === 'string') rec.opp = raw.opp.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 48);
+    // Ordered move history (UCI strings), final position, termination and
+    // rating bookends — all optional, all bounded. Absent on legacy records.
+    if (Array.isArray(raw.moves)) {
+        rec.moves = raw.moves
+            .filter((m) => typeof m === 'string')
+            .map((m) => m.replace(/[^\w\-+=#]/g, '').slice(0, 16))
+            .filter((m) => m.length >= 4)
+            .slice(0, 600);
+    }
+    if (typeof raw.finalFen === 'string' && /^[rnbqkpRNBQKP1-8/\s w b\-0-9]+$/.test(raw.finalFen)) {
+        rec.finalFen = raw.finalFen.trim().slice(0, 100);
+    }
+    if (typeof raw.termination === 'string') {
+        rec.termination = raw.termination.replace(/[^\w-]/g, '').slice(0, 24) || 'unknown';
+    }
+    for (const k of ['ratingBefore', 'ratingAfter']) {
+        if (Number.isInteger(raw[k])) rec[k] = Math.max(0, Math.min(4000, raw[k]));
+    }
+    if (Number.isFinite(raw.endedAt)) rec.endedAt = raw.endedAt;
     return rec;
 }
 
@@ -76,9 +109,15 @@ class MongoStore {
         await this.db.command({ ping: 1 });
         if (!this.indexesReady) {
             await this.games.createIndex({ userId: 1, date: -1 });
-            await this.games.createIndex({ gameId: 1 }, { unique: true, sparse: true });
+            // Per-user game history: both players hold their own copy of a
+            // shared game id, so uniqueness is (userId, gameId) — retries stay
+            // idempotent per user without dropping the other player's copy.
+            await this.games.createIndex({ userId: 1, gameId: 1 }, { unique: true });
             await this.games.createIndex({ date: -1 });
             await this.users.createIndex({ updatedAt: -1 });
+            // Legacy global gameId uniqueness (pre per-user history): drop it
+            // once so cross-player copies of one game id can coexist.
+            try { await this.games.dropIndex('gameId_1'); } catch (_) { /* already gone */ }
             this.indexesReady = true;
         }
     }
@@ -90,35 +129,75 @@ class MongoStore {
         return doc || null;
     }
 
-    /** Read-merge-write inside a single retrying critical section. */
+    /**
+     * Read-merge-write with per-section atomicity. Concurrent PUTs from one
+     * user (background sync + a manual save, two devices at once) must never
+     * clobber each other's sections: only the sections this call merged are
+     * $set, and each carries a freshness guard so an older writer cannot
+     * overwrite a newer section that landed mid-merge (LWW holds per
+     * section, not per document). Retries re-read and re-merge, staying
+     * idempotent.
+     */
     async updateUser(userId, incomingSections, profile) {
-        const attempt = async () => {
-            const doc = await this.getUser(userId) || { _id: userId, createdAt: now(), sections: {} };
-            const { changed, sections } = mergeSections(doc, incomingSections);
-            const profChanged = profile ? (JSON.stringify({ ...(doc.profile || {}), ...sanitizeProfile(profile) }) !== JSON.stringify(doc.profile || {})) : false;
-            if (!changed && !profChanged && doc.createdAt) return doc;
-            const next = {
-                ...doc,
-                updatedAt: now(),
-                sections,
-                profile: profile ? { ...(doc.profile || {}), ...sanitizeProfile(profile) } : (doc.profile || {})
-            };
-            await this.users.replaceOne({ _id: userId }, next, { upsert: true });
-            return next;
-        };
-        try {
-            return await attempt();
-        } catch (e) {
-            // Retry once on a duplicate-key race from a concurrent writer.
-            if (e && (e.code === 11000 || e.code === 11600)) return await attempt();
-            throw e;
+        // Up to 3 rounds: losing a same-section race re-reads and re-merges,
+        // so the sections that still win get their write instead of being
+        // dropped alongside the loser.
+        for (let round = 0; round < 3; round++) {
+            try {
+                const doc = await this.getUser(userId) || { _id: userId, createdAt: now(), sections: {} };
+                // Snapshot BEFORE mergeSections mutates doc.sections in place —
+                // a live reference would compare equal to itself and skip
+                // every write.
+                const before = { ...((doc && isObj(doc.sections)) ? doc.sections : {}) };
+                const { sections } = mergeSections(doc, incomingSections);
+                const set = {};
+                const guards = [];
+                if (isObj(incomingSections)) {
+                    for (const id of Object.keys(incomingSections)) {
+                        // Section ids are server-known ([a-z]); never let a client
+                        // key become a dotted Mongo field path.
+                        if (!/^[a-z]+$/.test(id)) continue;
+                        if (sections[id] === before[id]) continue; // nothing won — leave it
+                        const upd = sections[id] && Number.isFinite(sections[id].updatedAt) ? sections[id].updatedAt : -1;
+                        set['sections.' + id] = sections[id];
+                        guards.push({ $or: [
+                            { ['sections.' + id]: { $exists: false } },
+                            { ['sections.' + id + '.updatedAt']: { $lt: upd } }
+                        ] });
+                    }
+                }
+                const nextProfile = profile ? { ...(doc.profile || {}), ...sanitizeProfile(profile) } : (doc.profile || {});
+                const profChanged = profile ? (JSON.stringify(nextProfile) !== JSON.stringify(doc.profile || {})) : false;
+                if (profChanged) set.profile = nextProfile;
+                if (!Object.keys(set).length && doc.createdAt) return doc;
+                set.updatedAt = now();
+                const res = await this.users.updateOne(
+                    guards.length ? { _id: userId, $and: guards } : { _id: userId },
+                    { $set: set, $setOnInsert: { _id: userId, createdAt: doc.createdAt || now() } },
+                    { upsert: true }
+                );
+                const won = ((res && res.modifiedCount) || 0) > 0 || ((res && res.upsertedCount) || 0) > 0 ||
+                    ((res && res.matchedCount) || 0) > 0 || !guards.length;
+                // Lost a same-section race on at least one section: loop
+                // re-reads — the fresh document already holds the winner, and
+                // our remaining sections merge against it instead of vanishing.
+                if (won) return await this.getUser(userId);
+            } catch (e) {
+                // Upsert/insert race from a concurrent writer — retry while
+                // rounds remain, then fail loudly (never silently drop).
+                if (e && (e.code === 11000 || e.code === 11600) && round < 2) continue;
+                throw e;
+            }
         }
+        return await this.getUser(userId);
     }
 
     async insertGame(rec) {
         if (!rec || !rec.gameId) return { ok: false, reason: 'no-gameId' };
         try {
-            await this.games.insertOne({ ...rec, _id: rec.gameId });
+            // Document id is per-user: both players keep their own copy of a
+            // shared game id (matches the {userId, gameId} unique index).
+            await this.games.insertOne({ ...rec, _id: rec.userId + ':' + rec.gameId });
             return { ok: true };
         } catch (e) {
             if (e && e.code === 11000) return { ok: true, duplicate: true }; // idempotent
@@ -180,7 +259,9 @@ class FileStore {
         const list = this._read(this._gamesFile(rec.userId)) || [];
         if (list.some((g) => g.gameId === rec.gameId)) return { ok: true, duplicate: true };
         list.unshift(rec);
-        this._write(this._gamesFile(rec.userId), list.slice(0, 500));
+        // Dev file store: keep up to 2000 games per user (aligned with
+        // lib/merge.mjs MAX_GAMES) - history is never casually trimmed.
+        this._write(this._gamesFile(rec.userId), list.slice(0, 2000));
         return { ok: true };
     }
 
@@ -200,8 +281,8 @@ class FileStore {
             if (!f.startsWith('user_')) continue;
             const doc = this._read(f);
             if (!doc) continue;
-            const rating = doc.sections?.ratings?.data?.cats?.[cat];
-            if (!Number.isFinite(rating)) continue;
+            const rating = extractCatRating(doc.sections?.ratings?.data?.cats?.[cat]);
+            if (rating == null) continue;
             out.push({
                 uid: doc._id,
                 name: (doc.profile && doc.profile.name) || 'Player',

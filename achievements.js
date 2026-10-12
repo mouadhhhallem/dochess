@@ -111,8 +111,8 @@ const DoChessAchievements = (() => {
           rule: c => c.learn.threeStars >= 3 },
         { id: 'knight-fan', name: 'Knight Fan', how: 'Earn 3 stars on all 6 knight levels.', group: 'learn',
           rule: c => c.learn.knightThree >= 6 },
-        { id: 'puzzle-master', name: 'Puzzle Master', how: 'Solve all 36 Learn levels.', group: 'learn',
-          rule: c => c.learn.solved >= 36 },
+        { id: 'puzzle-master', name: 'Puzzle Master', how: 'Solve every Learn level.', group: 'learn',
+          rule: c => c.learn.totalLevels > 0 && c.learn.solved >= c.learn.totalLevels },
         { id: 'tactics-expert', name: 'Tactics Expert', how: 'Finish the tactics lessons (5 and 6).', group: 'learn',
           rule: c => c.lessonsDone.includes(5) && c.lessonsDone.includes(6) },
         { id: 'endgame-expert', name: 'Endgame Expert', how: 'Finish lessons 8, 9 and 10.', group: 'learn',
@@ -121,10 +121,8 @@ const DoChessAchievements = (() => {
           rule: c => c.learn.xp >= 500 },
         { id: 'pathfinder', name: 'Pathfinder', how: 'Complete all 10 course lessons.', group: 'learn',
           rule: c => c.lessonsDone.length >= 10 },
-        { id: 'speed-runner', name: 'Speed Runner', how: 'Set a Rush-mode best score in Learn.', group: 'learn',
-          rule: c => c.learn.rushBest > 0 },
-        { id: 'daily-puzzle', name: 'Daily Puzzle', how: 'Complete a Daily challenge in Learn.', group: 'learn',
-          rule: c => !!c.store.flags.dailyPuzzle },
+        { id: 'speed-runner', name: 'Speed Runner', how: 'Set a Rush-mode best score — arrives with Rush mode.', group: 'learn', community: true },
+        { id: 'daily-puzzle', name: 'Daily Puzzle', how: 'Complete a Daily challenge — arrives with Daily challenges.', group: 'learn', community: true },
         { id: 'study-buddy', name: 'Study Buddy', how: 'Work through 3+ Study sessions.', group: 'study',
           rule: c => c.study.opens >= 3 },
         { id: 'opening-theorist', name: 'Opening Theorist', how: 'Save an opening repertoire in Study.', group: 'study',
@@ -236,6 +234,20 @@ const DoChessAchievements = (() => {
     function readJSON(k) {
         try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch (_) { return null; }
     }
+    // Playable Learn levels, counted from the real curriculum shipped in the
+    // Learn bundle — never a frozen number. 0 when the curriculum is not
+    // loaded (rules require > 0, so the badge stays unearned, never guessed).
+    function playableLearnLevelCount() {
+        try {
+            const cur = window.DoChessLearn && window.DoChessLearn.curriculum;
+            const lv = cur && cur.levels;
+            if (Array.isArray(lv)) {
+                const n = lv.filter(l => l && !l.planned).length;
+                if (n > 0) return n;
+            }
+        } catch (_) {}
+        return 0;
+    }
     function buildCtx(uid, d) {
         const cats = {};
         ['bullet', 'blitz', 'rapid'].forEach(id => { cats[id] = { games: 0, w: 0, l: 0, d: 0, best: 800, rating: 800 }; });
@@ -300,6 +312,7 @@ const DoChessAchievements = (() => {
             maxStreak: d.counters.maxStreak || 0,
             learn: {
                 solved, threeStars, knightThree,
+                totalLevels: playableLearnLevelCount(),
                 xp: typeof ls.xp === 'number' ? ls.xp : 0,
                 streak: (ls.streak && typeof ls.streak.count === 'number') ? ls.streak.count : 0,
                 rushBest: typeof ls.rushBest === 'number' ? ls.rushBest : 0,

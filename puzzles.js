@@ -317,10 +317,39 @@
         }
     }
 
+    /* Sound: reuse the site SoundEngine (same move clip + cc_mute key). */
+    function pzSnd(capture) {
+        try {
+            const snd = window.app && window.app.snd;
+            if (!snd) return;
+            if (capture) snd.playCapture(); else snd.playMove();
+        } catch (_) {}
+    }
+
     function applyUci(uci) {
         try {
-            return S.chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+            const isCap = !!S.chess.get(uci.slice(2, 4));
+            const mv = S.chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+            if (mv) pzSnd(isCap);
+            return mv;
         } catch (_) { return null; }
+    }
+
+    /* Analysis: the puzzle opens in OUR Study screen — a "Puzzles" study
+       chapter with this position and the full solution line, engine ready.
+       No external site involved. */
+    function openAnalysis() {
+        const p = S.puzzle;
+        if (!p) return;
+        if (window.DoChessStudy && DoChessStudy.openPosition) {
+            DoChessStudy.openPosition({
+                fen: p.positionFen || undefined,
+                moves: (S.solution || []).slice(),
+                title: `Puzzle ${p.id || ''}${p.rating ? ` - ${p.rating}` : ''}`,
+            });
+        } else {
+            setFeedback('Analysis is not ready yet - open Study from the nav.', 'info');
+        }
     }
 
     function onSolved() {
@@ -335,8 +364,9 @@
         saveStats();
         renderStats();
         paintBoard();
-        setFeedback(S.mistakes === 0 ? 'Solved — perfect!' : 'Solved!', 'success');
+        setFeedback(S.mistakes === 0 ? 'Solved - perfect!' : 'Solved!', 'success');
         renderSolution();
+        try { if (window.app && window.app.snd) window.app.snd.playSuccess(); } catch (_) {}
     }
 
     function flashWrong(alg) {
@@ -373,9 +403,11 @@
             html += `<li><span class="pz-solwho">${who}</span> ${escapeHtml(String(sans[i]))}</li>`;
         }
         html += '</ol>';
-        if (S.puzzle.analysisUrl) html += `<a class="pz-link" href="${escapeAttr(S.puzzle.analysisUrl)}" target="_blank" rel="noopener">Open full analysis ↗</a>`;
+        if (S.puzzle) html += `<button type="button" class="pz-link" id="pz-analyse-btn">Open analysis in DoChess &#8594;</button>`;
         el.innerHTML = html;
         el.hidden = false;
+        const ab = document.getElementById('pz-analyse-btn');
+        if (ab) ab.addEventListener('click', openAnalysis);
     }
 
     function hideSolution() { const el = $('pz-solution'); if (el) { el.hidden = true; el.innerHTML = ''; } }
@@ -580,5 +612,5 @@
         else { paintBoard(); renderMeta(); }
     }
 
-    window.DoChessPuzzles = { open, version: '1.0.0' };
+    window.DoChessPuzzles = { open, version: '1.0.0', _state: () => S };
 })();

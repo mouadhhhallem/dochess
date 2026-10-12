@@ -23,7 +23,10 @@ export const SECTION_MODES = {
     leaderboard: 'keyed'
 };
 
-export const MAX_GAMES = 200;
+/* Games are user data that must never be casually dropped: the bound only
+   exists to keep one user's Mongo document far below the 16 MB limit.
+   2000 records at the per-record cap (600 half-moves) is well inside that. */
+export const MAX_GAMES = 2000;
 export const MAX_LIST_BYTES = 400_000;
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);

@@ -99,10 +99,10 @@ function shell() {
         <div class="hm-teachgrid"><div class="hm-teach-feat" id="hm-teach-feat"></div><div class="hm-teach-list" id="hm-teach-list"></div></div>
     </section>`;
     // Static wiring (destinations are existing features).
+    // "Play Chess" goes straight to the Online screen (play real people).
     $('#hm-play').addEventListener('click', () => {
         if (!app()) return;
-        if (app().isOpen(10)) app().openLesson(10);
-        else app().showLessons();
+        app().showOnline();
     });
     $('#hm-reset').addEventListener('click', () => { heroReset(); });
     $('#hm-tile-online').addEventListener('click', () => app() && app().showOnline());

@@ -21,15 +21,33 @@ test('wheel picker builds a 3+2 game with working increment', async ({ browser }
   const B = await mk('u_b', 'Beta');
   for (const P of [A, B]) { await P.evaluate(() => window.app.showOnline()); }
 
-  // Drive the wheels to 3 minutes + 2 seconds (click = deterministic).
-  await A.click('#wheel-min [data-val="3"]');
-  await A.click('#wheel-inc [data-val="2"]');
-  await A.waitForTimeout(600);
+  // Desktop lobby: time control is a preset-button grid (>=1025px hides
+  // the scroll wheels). Pick 3+2; summary + storage must agree.
+  await A.click('[data-action="lobby-preset"][data-m="3"][data-s="2"]');
+  await A.waitForTimeout(300);
   const sum = await A.evaluate(() => document.getElementById('wheel-summary').textContent.replace(/\s+/g, ' '));
   expect(sum).toMatch(/Blitz/);
   expect(sum).toMatch(/3\+2/);
   const stored = await A.evaluate(() => JSON.parse(localStorage.getItem('cc_control')));
   expect(stored).toEqual({ m: 3, s: 2 });
+  expect(await A.evaluate(() => document.querySelector('.tc-preset.on')?.dataset.m)).toBe('3');
+  expect(await A.evaluate(() => document.querySelector('.tc-preset.on')?.dataset.s)).toBe('2');
+
+  // Swapping presets rewrites the control too.
+  await A.click('[data-action="lobby-preset"][data-m="5"][data-s="0"]');
+  await A.waitForTimeout(200);
+  expect(await A.evaluate(() => JSON.parse(localStorage.getItem('cc_control')))).toEqual({ m: 5, s: 0 });
+  await A.click('[data-action="lobby-preset"][data-m="3"][data-s="2"]');
+  await A.waitForTimeout(200);
+  expect(await A.evaluate(() => JSON.parse(localStorage.getItem('cc_control')))).toEqual({ m: 3, s: 2 });
+
+  // Tablets (<1025px) keep the keyboard wheel picker: shrink the window,
+  // drive the wheels with click + arrows, then restore desktop size.
+  await A.setViewportSize({ width: 900, height: 800 });
+  await A.waitForTimeout(300);
+  await A.click('#wheel-min [data-val="3"]');
+  await A.click('#wheel-inc [data-val="2"]');
+  await A.waitForTimeout(400);
 
   // Keyboard works too: Up from 3 -> 2 minutes.
   await A.click('#wheel-min');
@@ -39,6 +57,9 @@ test('wheel picker builds a 3+2 game with working increment', async ({ browser }
   await A.keyboard.press('ArrowDown');
   await A.waitForTimeout(400);
   expect(await A.evaluate(() => document.getElementById('wheel-summary').textContent)).toMatch(/3\+2/);
+  expect(await A.evaluate(() => JSON.parse(localStorage.getItem('cc_control')))).toEqual({ m: 3, s: 2 });
+  await A.setViewportSize({ width: 1280, height: 720 });
+  await A.waitForTimeout(300);
 
   await A.click('text=Create game code');
   await A.waitForTimeout(7000);

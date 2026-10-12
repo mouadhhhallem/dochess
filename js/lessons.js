@@ -32,6 +32,9 @@
  *       squares (never crossed nor landed on), `avoidAttacked` (landing on an
  *       enemy-attacked square is rejected), `par` (BFS-verified, never trusted),
  *       `maxMoves` safety cap. Stars/points come from move count vs par.
+ *       `"opponent": true` adds a real enemy reply after every player move:
+ *       a deterministic policy shared by the runtime (engine.js) and the BFS,
+ *       so par is computed on exactly the chess the player will face.
  *
  * PAR IS COMPUTED, NOT TYPED: solveFreeMove() BFS-searches the shortest
  * player-move sequence satisfying the goal. Validation FAILS when the stored
@@ -174,6 +177,9 @@ function validateLevelSchema(lv, seen, errors, warnings) {
         if (lv.avoidAttacked !== undefined && typeof lv.avoidAttacked !== 'boolean') {
             errors.push(`${path}: avoidAttacked must be boolean`);
         }
+        if (lv.opponent !== undefined && typeof lv.opponent !== 'boolean') {
+            errors.push(`${path}: opponent must be boolean`);
+        }
         if (!Number.isInteger(lv.par) || lv.par < 1) errors.push(`${path}: par (integer >= 1) required, BFS-verified`);
         if (lv.maxMoves !== undefined && (!Number.isInteger(lv.maxMoves) || lv.maxMoves < lv.par)) {
             errors.push(`${path}: maxMoves must be an integer >= par`);
@@ -278,6 +284,114 @@ export function pathBetween(from, to) {
         out.push(_sqOf(a.f + Math.sign(df) * i, a.r + Math.sign(dr) * i));
     }
     return out;
+}
+
+/* ── deterministic defender ("opponent": true levels) ───────────────
+   After every player move the enemy answers with ONE move chosen from the
+   position. The same function runs in the runtime (engine.js) and inside
+   solveFreeMove(), so par/stars are computed on exactly the chess the
+   player will face.
+
+   Pure function of the position - no randomness, no clock: candidates are
+   scored with integer arithmetic and ties break on UCI order, so chess.js
+   in the browser and the legacy engine in node always pick the same move.
+
+   Hard rules (the coach plays back but never ruins the lesson):
+     - never mates or stalemates the player
+     - never captures the piece standing on goal.reach.square
+     - never MOVES a piece standing on a goal.capture square (the target
+       stays put until the player takes it)
+     - never leaves the player with zero legal moves under the level's own
+       rules (obstacles + movePieces allowlist - covers king-capture
+       soft-locks and obstacle-blocked checks alike)
+   Scoring, highest wins: captures, checks, promotions, central squares,
+   minus hanging the piece it just moved. */
+const DEF_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+function defCenterBonus(sq) {
+    const f = sq.charCodeAt(0) - 97;
+    const r = parseInt(sq[1], 10) - 1;
+    const df = Math.abs(f - 3.5), dr = Math.abs(r - 3.5);
+    if (df <= 1 && dr <= 1) return 2;
+    if (df <= 2.5 && dr <= 2.5) return 1;
+    return 0;
+}
+
+function defLevelLegal(m, allowed, obstacles) {
+    const mover = (m.piece || '').toLowerCase();
+    if (allowed.size && !allowed.has(mover)) return false;
+    if (m.to === m.from) return false;
+    if (obstacles.has(m.to)) return false;
+    const between = pathBetween(m.from, m.to);
+    return !(between && between.some((s) => obstacles.has(s)));
+}
+
+/** Pick the defender's reply. `g` must be a full solver-surface game whose
+ *  side to move is the defender (turn is set defensively here anyway).
+ *  Returns a UCI string (promotion suffix included) or null. */
+export function chooseDefenderMove(level, g, player) {
+    const enemy = player === 'w' ? 'b' : 'w';
+    const goal = level.goal || {};
+    const obstacles = new Set(level.obstacles || []);
+    const allowed = new Set((level.movePieces || []).map((s) => s.toLowerCase()));
+    const reachSq = goal.reach ? goal.reach.square : null;
+    const captureSquares = new Set(goal.capture || []);
+    const lastRank = enemy === 'w' ? '8' : '1';
+
+    let moves;
+    try {
+        g.setTurn(enemy);
+        moves = g.listDetailed();
+    } catch (_) { return null; }
+    if (!moves || !moves.length) return null;
+
+    const isPlayerLetter = (letter) => !!letter &&
+        (player === 'w' ? letter === letter.toUpperCase() : letter === letter.toLowerCase());
+
+    // Deterministic candidate list: UCI order, defender always queens.
+    const cands = [];
+    for (const m of moves) {
+        const piece = (m.piece || '').toLowerCase();
+        const promo = (piece === 'p' && m.to[1] === lastRank) ? 'q' : null;
+        cands.push({ uci: m.from + m.to + (promo || ''), piece, from: m.from, to: m.to });
+    }
+    cands.sort((a, b) => (a.uci < b.uci ? -1 : a.uci > b.uci ? 1 : 0));
+
+    let best = null;
+    for (const c of cands) {
+        // Leave the lesson's targets alone.
+        const victim = g.pieceOn(c.to);
+        if (victim && isPlayerLetter(victim) && c.to === reachSq) continue;
+        if (captureSquares.has(c.from)) continue;
+        const snap = g.snapshot();
+        let rec = null;
+        try {
+            g.setTurn(enemy);
+            rec = g.playDetailed(c.uci.slice(0, 4), c.uci[4] || undefined);
+        } catch (_) { rec = null; }
+        if (!rec) { g.restore(snap); continue; }
+        if (rec.mate || rec.stalemate) { g.restore(snap); continue; }
+        // The player must always still have a move under the level's rules.
+        try {
+            g.setTurn(player);
+            if (!g.listDetailed().some((m2) => defLevelLegal(m2, allowed, obstacles))) {
+                g.restore(snap);
+                continue;
+            }
+        } catch (_) { /* engine hiccup: keep the candidate */ }
+        let hanging = false;
+        try { hanging = g.attacked(c.to, player === 'w' ? 'white' : 'black'); } catch (_) { hanging = false; }
+        let score = 0;
+        if (rec.captured) score += 10 * (DEF_VALUES[String(rec.captured).toLowerCase()] || 1);
+        if (rec.check) score += 4;
+        if (rec.promotion) score += 3;
+        score += defCenterBonus(c.to);
+        if (hanging) score -= 6 * (DEF_VALUES[c.piece] || 1);
+        g.restore(snap);
+        // Strict > keeps the FIRST best, and candidates are UCI-ordered.
+        if (!best || score > best.score) best = { uci: c.uci, score };
+    }
+    return best ? best.uci : null;
 }
 
 /* ── BFS solver for free-move levels ─────────────────────────────────
@@ -416,6 +530,17 @@ export function solveFreeMove(level, api, maxDepth) {
                     continue; // keep BFS layer complete for par honesty
                 }
                 if (node.path.length + 1 >= cap) continue;
+                // Opponent reply: the defender answers from the exact policy
+                // the runtime uses, then the extra-turn rule hands the move
+                // back to the player (mirrors engine.js). Only player moves
+                // count toward par; the reply is part of the transition.
+                if (level.opponent) {
+                    const replyUci = chooseDefenderMove(level, g, player);
+                    if (replyUci) {
+                        try { g.playDetailed(replyUci.slice(0, 4), replyUci[4] || undefined); } catch (_) { /* keep position */ }
+                    }
+                    g.setTurn(player);
+                }
                 const key = keyOf(g, coll, capSet);
                 if (visited.has(key)) continue;
                 visited.add(key);

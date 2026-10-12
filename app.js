@@ -635,6 +635,10 @@ class ChessCourseApp {
         this._buildLessonUI(l);
         this._go('lesson-screen');
         requestAnimationFrame(() => {
+            // If the game is already over, _refreshGameOverCard owns the
+            // scroll (smooth reveal of the result card); an instant board
+            // jump here would cancel that animation mid-flight.
+            if (this.game && this.game.gameOver) return;
             document.getElementById('chess-board-wrapper')?.scrollIntoView({ block: 'center' });
         });
     }
@@ -1531,7 +1535,7 @@ class ChessCourseApp {
                 el.innerHTML = `<strong>Exercise Complete!</strong> ${fbText}`;
                 el.style.color = 'var(--accent-bright)';
                 const box = el.closest('.exercise-instructions');
-                if (box) { box.style.background = 'rgba(16,185,129,0.12)'; box.style.borderColor = 'var(--accent)'; }
+                if (box) { box.style.background = 'rgba(212,164,75,0.12)'; box.style.borderColor = 'var(--accent)'; }
             }
             this._fb(fbText, 'success');
             document.querySelectorAll('#complete-btn, #complete-btn-sticky').forEach((btn) => {
@@ -1876,8 +1880,9 @@ class ChessCourseApp {
         const board = OnlineRatings.board(cur.id).map((p, i) =>
             `<div class="board-row"><span class="board-rank">${i + 1}</span>${crest(p.rating)}<span class="board-name">${esc(p.name)}</span><span class="board-rating">${p.rating ?? '-'}</span></div>`).join('')
             || '<p class="board-empty">No rated players on this device yet — finish an online game to open the board.</p>';
-        // Phones swap the tall wheels for a tappable preset grid; desktop
-        // keeps the wheels. Both stay in sync through cc_control.
+        // Phones AND desktop use the tappable preset grid; the scroll
+        // wheels only appear on tablets (<=1024px). All stay in sync
+        // through cc_control.
         const presets = [[1, 0], [3, 0], [5, 0], [3, 2], [10, 0], [15, 10]];
         const presetHTML = presets.map(([pm, ps]) => {
             const pc = this._controlFor(pm, ps);
@@ -2788,6 +2793,29 @@ class ChessCourseApp {
                 gameId: s.gameId, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, opp: s.opp?.name || 'Opponent',
                 result, plies: s.engine.moveHistory.length, delta
             });
+            // Durable match record: mirror the finished game to the API
+            // (Mongo, idempotent on gameId). Best-effort — a failed POST
+            // never disturbs the game-over flow; both players post their own
+            // copy under the shared game id, moves as UCI strings.
+            try {
+                if (window.DoChessSync && typeof DoChessSync.recordGame === 'function') {
+                    const mv = (s.engine && Array.isArray(s.engine.moveHistory)) ? s.engine.moveHistory : [];
+                    DoChessSync.recordGame({
+                        gameId: s.gameId,
+                        result: result, termination: reason,
+                        plies: mv.length,
+                        moves: mv.map(m => (m && m.from && m.to)
+                            ? (m.from + m.to + (m.promotion ? String(m.promotion).toLowerCase().slice(-1) : ''))
+                            : '').filter(Boolean),
+                        control: { id: s.control.id, base: s.control.base, inc: s.control.inc },
+                        opp: (s.opp && s.opp.name) || 'Opponent',
+                        delta: (delta === null || delta === undefined) ? undefined : delta,
+                        ratingBefore: (rating === null || rating === undefined || delta === null || delta === undefined) ? undefined : rating - delta,
+                        ratingAfter: (rating === null || rating === undefined) ? undefined : rating,
+                        date: Date.now(), endedAt: Date.now()
+                    });
+                }
+            } catch (_) {}
         }
         // Ranks + achievements: fold this game into the device-local record
         // (streak, speed-class flags, underdog comeback) and toast any new
@@ -3940,6 +3968,14 @@ class ChessCourseApp {
             disabled: ['off', 'Local only']
         };
         const [kind, label] = map[st.status] || map.syncing;
+        // Conflict notice: the last push lost a cross-device race on these
+        // sections, so the newer cloud copy was kept and this browser updated
+        // to match. Persistent until the next successful sync; the title says
+        // exactly what was kept so nothing is silently dropped.
+        if (st.status === 'saved' && st.conflict && st.conflict.length) {
+            const ids = st.conflict.join(', ');
+            return `<span class="dc-sync warn" data-sync-chip title="Newer progress from your other device was kept for: ${esc(ids)}. This browser now matches it."><span class="dc-sync-dot" aria-hidden="true"></span>Synced — newer progress kept</span>`;
+        }
         return `<span class="dc-sync ${kind}" data-sync-chip title="Cloud progress for this DoChess account"><span class="dc-sync-dot" aria-hidden="true"></span>${label}</span>`;
     }
 
@@ -4587,7 +4623,11 @@ class ChessCourseApp {
         try { document.body.dataset.screen = id; } catch (_) {}
         // Achievements: record section coverage (Explorer badge) + day touch.
         try { if (typeof DoChessAchievements !== 'undefined') DoChessAchievements.touch(this.userId, id); } catch (_) {}
-        ['home-screen','lessons-screen','lesson-screen','progress-screen','profile-screen','online-screen','study-screen','puzzles-screen']
+        // learn-screen is module-owned (showLearn/showPickerHome) but must
+        // still be toggled here: navigating Learn -> Puzzles used to leave it
+        // active, stacking two pages (and, now that screens height-lock,
+        // doubling the scroll height).
+        ['home-screen','lessons-screen','lesson-screen','learn-screen','progress-screen','profile-screen','online-screen','study-screen','puzzles-screen']
             .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
         // A11y: move keyboard focus to the new screen so SR users land
         // on the heading instead of staying on a now-hidden control.
@@ -4637,4 +4677,15 @@ class ChessCourseApp {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => { window.app = new ChessCourseApp(); });
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new ChessCourseApp();
+    // Desktop screens height-lock to calc(100dvh - var(--app-header)); the
+    // sticky header is 115px on wide desktops but 77px in the 1025-1199px
+    // band, so publish the live height instead of hard-coding either value.
+    const syncHeaderVar = () => {
+        const hdr = document.querySelector('.header');
+        if (hdr) document.documentElement.style.setProperty('--app-header', hdr.offsetHeight + 'px');
+    };
+    syncHeaderVar();
+    window.addEventListener('resize', syncHeaderVar);
+});

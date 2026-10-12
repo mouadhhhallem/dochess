@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeSection, mergeSections, mergeForClient, SECTION_MODES } from '../lib/merge.mjs';
+import { mergeSection, mergeSections, mergeForClient, SECTION_MODES, MAX_GAMES } from '../lib/merge.mjs';
 
 test('lww: newer incoming wins, older is ignored', () => {
     const stored = { updatedAt: 100, data: { xp: 10 } };
@@ -30,9 +30,19 @@ test('list: games merge by gameId, newest first, capped', () => {
 });
 
 test('list: identical content returns the stored reference (no write)', () => {
-    const stored = { updatedAt: 10, data: [{ gameId: 'g1', date: 1 }] };
+    const stored = { updatedAt: 1, data: [{ gameId: 'g1', date: 1 }] };
     const same = { updatedAt: 99, data: [{ gameId: 'g1', date: 1 }] };
     assert.equal(mergeSection('games', stored, same), stored);
+});
+
+test('list: history is durable - only an absurd record count hits the cap', () => {
+    assert.ok(MAX_GAMES >= 2000, 'player games must not be casually dropped');
+    const many = Array.from({ length: MAX_GAMES + 500 }, (_, i) => ({ gameId: 'g' + i, date: i }));
+    const out = mergeSection('games', { updatedAt: 1, data: many }, { updatedAt: 2, data: [] });
+    assert.equal(out.data.length, MAX_GAMES);
+    assert.equal(out.data[0].gameId, 'g' + (MAX_GAMES + 499), 'newest first');
+    const oldestKept = out.data[out.data.length - 1];
+    assert.equal(oldestKept.date, 500, 'the oldest 500 records are the ones trimmed');
 });
 
 test('keyed: leaderboard merges per player and per category', () => {

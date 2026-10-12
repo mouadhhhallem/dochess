@@ -223,7 +223,9 @@ const OnlineRatings = {
         let h = [];
         try { h = JSON.parse(localStorage.getItem(this.histKey(uid)) || '[]'); } catch (_) {}
         h.unshift({ ...rec, date: Date.now() });
-        h = h.slice(0, 20);
+        // History is durable: keep up to 500 finished games (a "recent
+        // games" list; the server keeps its own copy without this bound).
+        h = h.slice(0, 500);
         try { localStorage.setItem(this.histKey(uid), JSON.stringify(h)); } catch (_) {}
     },
     history(uid) {

@@ -3813,7 +3813,8 @@
         "en": "Take the knight on d5 with the bishop."
       },
       "xp": 15,
-      "difficulty": 1
+      "difficulty": 1,
+      "opponent": true
     },
     {
       "id": "s4-hang-2",
@@ -3868,7 +3869,8 @@
         "en": "Take the bishop on d4 first, then the knight on d5."
       },
       "xp": 20,
-      "difficulty": 2
+      "difficulty": 2,
+      "opponent": true
     },
     {
       "id": "s4-pin-1",
@@ -3922,7 +3924,8 @@
         "en": "The knight on e5 is pinned; take it with the rook."
       },
       "xp": 20,
-      "difficulty": 1
+      "difficulty": 1,
+      "opponent": true
     },
     {
       "id": "s4-pin-2",
@@ -3976,7 +3979,8 @@
         "en": "Take the pinned knight on e5."
       },
       "xp": 25,
-      "difficulty": 1
+      "difficulty": 1,
+      "opponent": true
     },
     {
       "id": "s4-skewer",
@@ -4133,7 +4137,8 @@
         "en": "Land the knights on c3 and f3."
       },
       "xp": 20,
-      "difficulty": 2
+      "difficulty": 2,
+      "opponent": true
     },
     {
       "id": "s5-dev-2",
@@ -4188,7 +4193,8 @@
         "en": "Move the bishops to c4 and f4."
       },
       "xp": 20,
-      "difficulty": 2
+      "difficulty": 2,
+      "opponent": true
     },
     {
       "id": "s5-center-1",
@@ -4243,7 +4249,8 @@
         "en": "Advance the d and e pawns two squares each."
       },
       "xp": 20,
-      "difficulty": 2
+      "difficulty": 2,
+      "opponent": true
     },
     {
       "id": "s5-rook-1",
@@ -4298,7 +4305,8 @@
         "en": "Place the rooks on d1 and e1."
       },
       "xp": 20,
-      "difficulty": 2
+      "difficulty": 2,
+      "opponent": true
     },
     {
       "id": "s5-rook-2",
@@ -4353,7 +4361,8 @@
         "en": "Slide the a1 rook up to a7."
       },
       "xp": 20,
-      "difficulty": 1
+      "difficulty": 1,
+      "opponent": true
     },
     {
       "id": "s5-pawn-1",
@@ -4407,7 +4416,8 @@
         "en": "Keep pushing the e-pawn up the board."
       },
       "xp": 25,
-      "difficulty": 3
+      "difficulty": 3,
+      "opponent": true
     },
     {
       "id": "s5-king-1",
@@ -4438,7 +4448,7 @@
           "e4"
         ]
       },
-      "par": 5,
+      "par": 6,
       "maxMoves": 10,
       "hints": [
         {
@@ -4461,7 +4471,8 @@
         "en": "Walk the king toward the center square e4."
       },
       "xp": 25,
-      "difficulty": 3
+      "difficulty": 3,
+      "opponent": true
     },
     {
       "id": "s6-kp-1",
@@ -4517,7 +4528,8 @@
         "en": "Keep pushing the e-pawn toward the 8th rank."
       },
       "xp": 25,
-      "difficulty": 3
+      "difficulty": 3,
+      "opponent": true
     },
     {
       "id": "s6-rook-1",
@@ -4572,7 +4584,8 @@
         "en": "Route the rook to g2 and take the pawn."
       },
       "xp": 20,
-      "difficulty": 2
+      "difficulty": 2,
+      "opponent": true
     },
     {
       "id": "s6-rook-2",
@@ -4625,7 +4638,8 @@
         "en": "Cut the 7th rank with one rook, mate on the 8th with the other."
       },
       "xp": 30,
-      "difficulty": 2
+      "difficulty": 2,
+      "opponent": true
     },
     {
       "id": "s6-draw-1",
@@ -4678,7 +4692,8 @@
         "en": "Place the queen so it covers g8 and h7 but does not check h8."
       },
       "xp": 30,
-      "difficulty": 1
+      "difficulty": 1,
+      "opponent": true
     }
   ]
 }

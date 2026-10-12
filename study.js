@@ -853,7 +853,7 @@ function renderCenter(st, ch) {
         </div>
         <div class="st-chapnav" role="group" aria-label="Chapters">
             <button class="icon-btn" data-st="prev-ch" ${ci <= 0 ? 'disabled' : ''} type="button" title="Previous chapter" aria-label="Previous chapter"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5l-7 7 7 7"/></svg></button>
-            <span class="st-chapcount">Chapter ${ci + 1} / ${st.chapters.length}</span>
+            <span class="st-chapcount">Chapter ${ci + 1} / ${st.chapters.length}${ch && ch.title ? ` &middot; ${esc(ch.title)}` : ''}</span>
             <button class="icon-btn" data-st="next-ch" ${ci >= st.chapters.length - 1 ? 'disabled' : ''} type="button" title="Next chapter" aria-label="Next chapter"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5l7 7-7 7"/></svg></button>
             <button class="btn-secondary sm" data-st="new-chapter" type="button">+ Chapter</button>
             <button class="linklike danger" data-st="del-chapter" type="button">Delete</button>
@@ -2460,8 +2460,34 @@ function importGame(gameId) {
     toast(`Imported ${kept} half-moves vs ${opp}.`);
     return true;
 }
+/* Open an arbitrary position (FEN + UCI moves) as a chapter of the
+   "Puzzles" study — the in-site analysis target for the Puzzles screen.
+   All moves are replayed through the rules engine; illegal lines stop. */
+function openPosition(opts) {
+    opts = opts || {};
+    wireOnce();
+    if (!S.lib) S.lib = loadLibrary();
+    const fen = (typeof opts.fen === 'string' && opts.fen) ? opts.fen : START_FEN;
+    const moves = Array.isArray(opts.moves) ? opts.moves : [];
+    const ch = blankChapter(String(opts.title || 'Analysis').slice(0, 80), fen);
+    let n = ch.root, kept = 0;
+    moves.forEach((uci) => {
+        if (typeof uci !== 'string' || uci.length < 4) return;
+        const r = playOn(n, uci.slice(0, 2), uci.slice(2, 4), uci[4] || undefined);
+        if (r.illegal) return;
+        n = r.node; kept++;
+    });
+    let st = S.lib.studies.find((s) => s.title === 'Puzzles');
+    if (!st) { st = blankStudy('Puzzles'); S.lib.studies.unshift(st); }
+    st.chapters.push(ch);
+    touch(st);
+    openChapter(st, ch);
+    try { if (window.app) window.app.showStudy(); } catch (_) {}
+    toast(kept ? `Analysis ready - ${kept} half-moves loaded.` : 'Analysis ready - position loaded.');
+    return true;
+}
 window.DoChessStudy = {
-    open, importGame,
+    open, importGame, openPosition,
     version: '1.0.0',
     _t: { parsePgnText, classifyMove, treeToPgn, treeRoot, studyKey, evalWords, fmtScore, currentPgn: () => { const st = curStudy(), ch = curChapter(st); return st && ch ? treeToPgn(st, ch) : ''; } }
 };

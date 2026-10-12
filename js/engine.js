@@ -12,7 +12,7 @@
  * solution" and by runAllTests() in the browser console.
  */
 
-import { pathBetween, solveFreeMove } from './lessons.js';
+import { pathBetween, solveFreeMove, chooseDefenderMove } from './lessons.js';
 import { starsForPar, pointsFor } from './storage.js';
 
 const PROMO_PIECES = ['q', 'r', 'b', 'n'];
@@ -251,10 +251,9 @@ export function createLevel(level, ChessCtor, lang = 'en') {
             const res = game.move({ from, to, promotion: promotion ? promotion.toLowerCase() : undefined });
             if (!res) return { ok: false, reason: 'illegal' };
             st.moves++;
-            // Opponent-state flags: read BEFORE the extra-turn rewrite below —
-            // after game.move() the turn has flipped to the opponent, so
-            // in_check/in_checkmate/in_stalemate describe THEIR king. The
-            // rewrite would flip the side back and make these read OUR king.
+            // Opponent-state flags: read BEFORE any turn rewrite — after
+            // game.move() the turn has flipped to the opponent, so
+            // in_check/in_checkmate/in_stalemate describe THEIR king.
             let flags = null;
             try {
                 flags = {
@@ -263,10 +262,6 @@ export function createLevel(level, ChessCtor, lang = 'en') {
                     stalemate: game.in_stalemate(),
                 };
             } catch (_) { flags = null; }
-            // Extra-turn rule: force the turn back to the player.
-            const parts = game.fen().split(' ');
-            parts[1] = player;
-            loadTolerant(game, parts.join(' '));
             if (wantCollect.has(to)) st.collected.add(to);
             if (res.captured) {
                 const capSq = res.flags && res.flags.includes('e') ? to[0] + from[1] : to;
@@ -274,8 +269,36 @@ export function createLevel(level, ChessCtor, lang = 'en') {
             }
             st.selected = null;
             touch();
-            if (checkDone(to, mover.type, res.promotion, flags)) finish();
-            return { ok: true, move: res, done: st.done, result: st.result };
+            // Goal check first: a solved level never gets a reply.
+            const solved = checkDone(to, mover.type, res.promotion, flags);
+            // Defender reply (levels flagged "opponent"): the enemy answers
+            // through the SAME deterministic policy the BFS solver uses, so
+            // the chess on screen is the chess par was computed on. One undo
+            // reverts player move + reply together (single snapshot above).
+            let reply = null;
+            if (!solved && level.opponent) {
+                let uci = null;
+                try {
+                    const probe = adapter.load(game.fen());
+                    if (probe) uci = chooseDefenderMove(level, probe, player);
+                } catch (_) { uci = null; }
+                if (uci) {
+                    try {
+                        reply = game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] || undefined });
+                    } catch (_) { reply = null; }
+                    if (reply) touch();
+                }
+            }
+            // Extra-turn rule: force the turn back to the player (a reply
+            // already flipped it home; without one this hands the move over).
+            const parts = game.fen().split(' ');
+            parts[1] = player;
+            loadTolerant(game, parts.join(' '));
+            if (solved) finish();
+            return {
+                ok: true, move: res, done: st.done, result: st.result,
+                reply: reply ? { from: reply.from, to: reply.to, captured: reply.captured || null } : null,
+            };
         },
         undo() {
             const prev = st.undoStack.pop();

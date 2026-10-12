@@ -605,10 +605,16 @@ function appendLogRow(label, n) {
     autoscrollLog();
 }
 
-function pushLog(from, to, res) {
+function pushLog(from, to, res, reply) {
     const cap = res && res.captured ? 'x' : '-';
     const suf = res && res.promotion ? '=' + String(res.promotion).toUpperCase() : '';
-    const label = `${from}${cap}${to}${suf}`;
+    let label = `${from}${cap}${to}${suf}`;
+    // Opponent levels: the enemy's answer rides on the same row, so undo
+    // (one row = one engine snapshot) stays one click.
+    if (reply) {
+        const rcap = reply.captured ? 'x' : '-';
+        label += ` ${reply.from}${rcap}${reply.to}`;
+    }
     logMoves.push(label);
     appendLogRow(label, logMoves.length);
 }
@@ -760,11 +766,13 @@ function doMove(from, to, promo) {
         feedback('error', msg);
         return;
     }
-    pushLog(from, to, r.move);
+    pushLog(from, to, r.move, r.reply);
     sess.state.lastMove = { from, to };
     sess.state.rover = to;
     const captured = !!(r.move && r.move.captured);
     paint();
+    // The defender's capture lands after the player's: burst it too.
+    if (r.reply && r.reply.captured) board.burst(r.reply.to, 'target');
 
     // Goal feedback: celebrate whatever the move just scored.
     const starsAfter = collectRemaining().length + captureRemaining().length;
@@ -784,7 +792,13 @@ function doMove(from, to, promo) {
         if (starsAfter < starsBefore) say(T(sess.state.level.success) || 'Nicely done.');
         board.focusSquare(to);
         playLevelSound(captured, false);
-        feedback('info', starsAfter === 0 ? 'Goal reached — one more move to finish.' : 'Keep going — follow the stars.');
+        if (sess.inCheck()) {
+            feedback('error', 'Check! Your king is attacked — get it to safety.');
+        } else if (starsAfter === 0) {
+            feedback('info', 'Goal reached — one more move to finish.');
+        } else {
+            feedback('info', 'Keep going — follow the stars.');
+        }
     }
 }
 function collectedNow(sq) { return sess.state.collected.has(sq); }

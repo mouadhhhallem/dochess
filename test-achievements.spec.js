@@ -75,11 +75,37 @@ test('badges derive from real stores; founding grant on legacy data', async ({ p
   expect(out.founding).toBe(true);            // ccr_ predates the record
   for (const id of ['first-win', 'blitz-champion', 'rising-star',
     'perfect-game', 'sharp-eye', 'knight-fan', 'knowledge-seeker',
-    'speed-runner', 'daily-puzzle', 'tactics-expert', 'endgame-expert',
+    'tactics-expert', 'endgame-expert',
     'pathfinder', 'chess-lover', 'early-access', 'beta-tester', 'collector']) {
     expect(out.got, `badge ${id} should be earned`).toContain(id);
   }
   expect(out.freshIds).toContain('first-win'); // fresh list is real
+  // Rush mode and Daily challenges do not exist in the product: even with
+  // seeded rushBest/daily flags the badges stay honestly locked (community).
+  for (const id of ['speed-runner', 'daily-puzzle', 'tournament-winner']) {
+    expect(out.got, `badge ${id} must stay locked`).not.toContain(id);
+  }
+});
+
+test('puzzle-master tracks the real curriculum, not a frozen count', async ({ page }) => {
+  const out = await page.evaluate(() => {
+    const ids = window.DoChessLearn.curriculum.levels.filter(l => !l.planned).map(l => l.id);
+    const seed = (uid, n) => {
+      const stars = {};
+      ids.slice(0, n).forEach(id => { stars[id] = 3; });
+      localStorage.setItem('dochess:v1', JSON.stringify({ stars }));
+      const res = DoChessAchievements.evaluate(uid);
+      const d = JSON.parse(localStorage.getItem('cca_v1_' + uid));
+      return { earned: Object.keys(d.earned), total: ids.length };
+    };
+    const almost = seed('u_pm1', ids.length - 1);
+    localStorage.clear();
+    const all = seed('u_pm2', ids.length);
+    return { almost, all };
+  });
+  expect(out.almost.total).toBeGreaterThan(36); // curriculum outgrew the old frozen 36
+  expect(out.almost.earned).not.toContain('puzzle-master'); // one short: locked
+  expect(out.all.earned).toContain('puzzle-master');        // every playable level: earned
 });
 
 test('profile renders rank card + full badge gallery, honest states', async ({ page }) => {
