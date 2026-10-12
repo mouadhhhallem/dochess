@@ -1,6 +1,14 @@
 # Dependencies
 node_modules/
 
+# Secrets — never commit (see .env.example for the shape)
+.env
+.env.local
+.env.*.local
+
+# Local API development store (server/lib/db.mjs FileStore fallback)
+server/.data/
+
 # Playwright
 test-results/
 playwright-report/
@@ -12,6 +20,8 @@ skills/
 
 # Local logs and screenshots
 server.log
+server.out.log
+server.err.log
 *.png
 !assets/**/*.png
 

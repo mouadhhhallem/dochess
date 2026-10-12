@@ -46,11 +46,20 @@ test('a11y: skip link, live regions, named controls, keyboard board', async ({ p
   await expect(page.locator('#speech')).toHaveAttribute('aria-live', 'polite');
 
   // Mute + flip are icon-only buttons: they must expose accessible names.
+  // Two Flip controls exist on a lesson (dashboard row + sticky phone bar);
+  // the dashboard one is icon-only so it is the one that needs aria-label.
   const mute = page.locator('.mute-btn').first();
   await expect(mute).toHaveAttribute('aria-pressed', /true|false/);
   expect(await mute.getAttribute('aria-label')).toMatch(/mute/i);
-  const flip = page.locator('button[data-action="flip-board"]');
+  const flip = page.locator('.lesson-actions button[data-action="flip-board"]');
   await expect(flip).toHaveAttribute('aria-label', 'Flip board');
+  // The sticky bar is display:none above 860px — drop to a phone width so the
+  // control is actually in the accessibility tree before naming it.
+  const stickyFlip = page.locator('#lesson-sticky button[data-action="flip-board"]');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(stickyFlip).toBeVisible();
+  await expect(stickyFlip).toHaveAccessibleName(/flip/i);
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   // Screen switch moves focus to the new screen (no focus trap on hidden UI).
   await page.locator('#nav-progress').click();
@@ -74,16 +83,20 @@ test('a11y: skip link, live regions, named controls, keyboard board', async ({ p
   });
   // Reveal scroll is smooth: let it land before measuring.
   await page.waitForTimeout(800);
-  const dialogOk = await page.evaluate(() => {
+  const dialogState = await page.evaluate(() => {
     const card = document.getElementById('gameover-card');
-    if (!card || card.style.display === 'none') return false;
-    if (card.getAttribute('role') !== 'dialog') return false;
-    if (card.getAttribute('aria-labelledby') !== 'gameover-title') return false;
+    if (!card || card.style.display === 'none') return { ok: false, why: 'hidden' };
+    if (card.getAttribute('role') !== 'dialog') return { ok: false, why: 'role' };
+    if (card.getAttribute('aria-labelledby') !== 'gameover-title') return { ok: false, why: 'labelledby' };
     // Reveal: card scrolled into view, focus on the heading (announces result).
+    // 1px tolerance: fractional layout can land the bottom edge a sub-pixel
+    // past the fold without the card actually being cut off.
     const r = card.getBoundingClientRect();
-    const inView = r.top >= 0 && r.bottom <= window.innerHeight;
+    const inView = r.top >= 0 && r.bottom <= window.innerHeight + 1;
     const focused = document.activeElement && document.activeElement.id === 'gameover-title';
-    return inView && focused;
+    return { ok: inView && focused, top: r.top, bottom: r.bottom, innerH: window.innerHeight,
+             scrollY: window.scrollY, activeId: document.activeElement && document.activeElement.id };
   });
-  expect(dialogOk).toBe(true);
+  console.log('dialogState', JSON.stringify(dialogState));
+  expect(dialogState.ok).toBe(true);
 });

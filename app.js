@@ -165,6 +165,25 @@ class ChessCourseApp {
         this._bindGlobalButtons();
         this._syncProgress();
         this._preloadPieces();
+        // Cloud pull landed fresh progress: reload the in-memory copies so
+        // the screens reflect the account's data instead of this device's.
+        window.addEventListener('dochess:synced', (e) => {
+            const w = (e && e.detail && e.detail.written) || {};
+            if (w.lessons || w.playtime) {
+                this.progress = this._loadProgress();
+                this._syncProgress();
+                if (document.getElementById('lessons-screen')?.classList.contains('active')) this._renderLessons();
+                if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
+            }
+            if (w.settings) this._applyBoardSkin(this._boardSkin(), false);
+        });
+        window.addEventListener('dochess:sync', () => {
+            document.querySelectorAll('[data-sync-chip]').forEach((el) => {
+                const tmp = document.createElement('span');
+                tmp.innerHTML = this._syncChipHTML();
+                el.replaceWith(tmp.firstChild);
+            });
+        });
     }
 
     /* ── Piece preload: decode the 12 SVGs once at boot (idle) so the
@@ -262,6 +281,7 @@ class ChessCourseApp {
                 else if (a === 'hist-goto') this._histGoto(parseInt(action.dataset.ply, 10));
                 else if (a === 'hist-to-study') { if (window.DoChessStudy) window.DoChessStudy.importGame(action.dataset.game); }
                 else if (a === 'board-skin') this._setBoardSkin(action.dataset.skin);
+                else if (a === 'piece-set') this._setPieceSet(action.dataset.set);
                 else if (a === 'lobby-preset') this._lobbyPreset(parseInt(action.dataset.m, 10), parseInt(action.dataset.s, 10));
             });
         }
@@ -279,6 +299,8 @@ class ChessCourseApp {
     // sides on different releases warn instead of silently misbehaving.
     static APP_VERSION = 'v39';
     _pieceFile(piece) {
+        // Piece SET (folder) is chosen once in the Online lobby — see js/pieces.js.
+        if (window.DoChessPieces) return DoChessPieces.url(piece, ChessCourseApp.assetV());
         const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
         const white = piece === piece.toUpperCase();
         const kind = names[piece.toLowerCase()] || 'pawn';
@@ -488,6 +510,28 @@ class ChessCourseApp {
     _saveProgress() {
         try { localStorage.setItem(this._progressKey(), JSON.stringify(this.progress)); } catch (_) {}
     }
+    /* Cloud persistence (js/sync.js): the Clerk session token is the ONLY
+       credential — the server derives the user id from it, never from the
+       request body. Anonymous learners simply stay local. */
+    _startCloudSync() {
+        if (!window.DoChessSync) return;
+        if (!this.userId) { DoChessSync.stop(); return; }
+        if (DoChessSync.status().enabled && DoChessSync.status().userId === this.userId) {
+            DoChessSync.notify();
+            return;
+        }
+        DoChessSync.start({
+            userId: this.userId,
+            getToken: () => {
+                try {
+                    const s = this._clerk && this._clerk.session;
+                    if (s && typeof s.getToken === 'function') return s.getToken();
+                } catch (_) {}
+                return null;
+            }
+        });
+    }
+
     _setUser(userId) {
         if (this.userId === (userId || null)) return;
         this._flushStudyTime();
@@ -497,6 +541,7 @@ class ChessCourseApp {
         this._histShown = 10; // history paging is per player
         this._studyGameId = null; this._studyPly = null; // study viewer is per player
         this._syncProgress();
+        this._startCloudSync();
         if (document.getElementById('lessons-screen')?.classList.contains('active')) this._renderLessons();
         if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
         // Auth resolving (or signing out) mid-game: repaint my own photo
@@ -1866,6 +1911,20 @@ class ChessCourseApp {
                             </button>`).join('')}
                     </div>
                     <p class="lobby-hint">Applies to every board — online games, Study and lessons.</p>
+                </div>
+                <div class="dashboard-section">
+                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Piece style</h4>
+                    <div class="skin-row" role="radiogroup" aria-label="Piece style">
+                        ${ChessCourseApp.PIECE_SETS.map(k => `
+                            <button type="button" class="skin-swatch piece-swatch${this._pieceSet() === k.id ? ' on' : ''}" data-action="piece-set" data-set="${k.id}" role="radio" aria-checked="${this._pieceSet() === k.id}" title="${k.name} pieces">
+                                <span class="skin-prev piece-prev" aria-hidden="true">
+                                    <img src="assets/pieces/${k.dir}/white-king.svg?${ChessCourseApp.assetV()}" alt="" width="26" height="26" loading="lazy" draggable="false">
+                                    <img src="assets/pieces/${k.dir}/black-king.svg?${ChessCourseApp.assetV()}" alt="" width="26" height="26" loading="lazy" draggable="false">
+                                </span>
+                                <span class="skin-name">${k.name}</span>
+                            </button>`).join('')}
+                    </div>
+                    <p class="lobby-hint">Applies to every board — online games, Study, lessons, Learn and puzzles.</p>
                 </div>
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Play a friend</h4>
@@ -3666,6 +3725,13 @@ class ChessCourseApp {
         { id: 'purple', name: 'Purple', light: '#E0D3E8', dark: '#9070A8' }
     ];
 
+    /* Piece SETS — the artwork folders under assets/pieces/. The list is
+       mirrored in js/pieces.js (the resolver every screen uses); ids must
+       match. Chosen next to Board style in the Online lobby. */
+    static PIECE_SETS = (window.DoChessPieces && DoChessPieces.SETS) || [
+        { id: 'classic', name: 'Classic', dir: 'pieces-main' }
+    ];
+
     // Line icons for the online action bar. Phones hide the text labels
     // (btn-act-tx) and keep only these; desktop shows icon + label.
     static ACT_ICONS = {
@@ -3692,11 +3758,28 @@ class ChessCourseApp {
         else document.body.dataset.boardSkin = skin;
         if (persist) {
             try { localStorage.setItem('cc_board_skin', skin); } catch (_) {}
+            try { window.DoChessSync && DoChessSync.notify(); } catch (_) {}
         }
     }
 
     _setBoardSkin(id) {
         this._applyBoardSkin(id);
+        if (document.getElementById('online-content') && (!this.online || this.online.phase === 'lobby')) {
+            this._renderOnlineLobby();
+        }
+    }
+
+    /* ── Piece sets: artwork folder for every board. Same lifecycle as
+       board skins — read from storage, apply to <body>, re-render the
+       lobby so the swatch state follows the click. ── */
+    _pieceSet() {
+        if (window.DoChessPieces) return DoChessPieces.get();
+        return 'classic';
+    }
+
+    _setPieceSet(id) {
+        if (window.DoChessPieces) DoChessPieces.set(id);
+        try { window.DoChessSync && DoChessSync.notify(); } catch (_) {}
         if (document.getElementById('online-content') && (!this.online || this.online.phase === 'lobby')) {
             this._renderOnlineLobby();
         }
@@ -3790,7 +3873,7 @@ class ChessCourseApp {
             return `
             <section class="dc-panel dc-id" aria-label="Player identity">
                 <div class="dc-avatar">
-                    <img class="dc-avatar-img" src="assets/pieces/white-king.svg?${ChessCourseApp.assetV()}" width="88" height="88" alt="Guest learner">
+                    <img class="dc-avatar-img" src="${this._pieceFile('K')}" width="88" height="88" alt="Guest learner" data-fallback-piece="K">
                     <span class="dc-presence" title="${seen}"></span>
                 </div>
                 <div class="profile-id dc-id-main">
@@ -3832,11 +3915,32 @@ class ChessCourseApp {
                         <span class="dc-sep" aria-hidden="true">·</span>
                         <span class="dc-rate-chip" title="Current Blitz rating">Blitz <strong>${blitz}</strong>${trendChip}</span>
                         ${rankChip ? `<span class="dc-sep" aria-hidden="true">·</span>${rankChip}` : ''}
+                        <span class="dc-sep" aria-hidden="true">·</span>${this._syncChipHTML()}
                     </p>
                     ${this._profileBadgesHTML()}
                 </div>
                 <div class="dc-id-side">${this._profileNextHTML()}</div>
             </section>`;
+    }
+
+    /* Cloud-save state for the profile dossier. Kept as one tiny chip so
+       a learner always knows whether this browser or their account holds
+       the progress they are looking at. */
+    _syncChipHTML() {
+        let st = null;
+        try { st = window.DoChessSync && DoChessSync.status(); } catch (_) {}
+        if (!st || !st.enabled) {
+            return `<span class="dc-sync off" data-sync-chip><span class="dc-sync-dot" aria-hidden="true"></span>Saved on this device</span>`;
+        }
+        const map = {
+            saved: ['saved', 'Saved to your account'],
+            syncing: ['busy', 'Syncing…'],
+            offline: ['warn', 'Offline — will retry'],
+            error: ['warn', 'Sync problem — will retry'],
+            disabled: ['off', 'Local only']
+        };
+        const [kind, label] = map[st.status] || map.syncing;
+        return `<span class="dc-sync ${kind}" data-sync-chip title="Cloud progress for this DoChess account"><span class="dc-sync-dot" aria-hidden="true"></span>${label}</span>`;
     }
 
     _profileSignIn() {

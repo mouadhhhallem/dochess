@@ -18,6 +18,29 @@ import { starsForPar, pointsFor } from './storage.js';
 const PROMO_PIECES = ['q', 'r', 'b', 'n'];
 const EMPTY = [];
 
+/* ── Tolerant FEN load (vendor quirk) ─────────────────────────────────
+   chess.js 0.10.3 load() REJECTS an en-passant square no enemy pawn can
+   actually take (e.g. after our own d2d4 with no black pawn nearby) and
+   returns false WITHOUT touching the position. A silent no-op here is
+   catastrophic: the game object keeps its old turn/position and every
+   later move misbehaves (pieces report zero legal moves). In free-move
+   the enemy never replies, so a stale EP square is meaningless — retry
+   with it cleared. An EP capture can never be destroyed this way: EP
+   rights only ever arise from OUR OWN double push on the previous move,
+   and we can never capture our own pawn. */
+function loadTolerant(g, fen) {
+    try { if (g.load(fen)) return true; } catch (_) {}
+    try {
+        const parts = String(fen).split(' ');
+        if (parts[3] && parts[3] !== '-') {
+            parts[3] = '-';
+            if (g.load(parts.join(' '))) return true;
+        }
+    } catch (_) {}
+    try { if (typeof console !== 'undefined' && console.warn) console.warn('[DoChess] FEN load failed even sanitized:', String(fen).slice(0, 80)); } catch (_) {}
+    return false;
+}
+
 /* ── chess.js adapter for the BFS solver ─────────────────────────────── */
 export function ChessJsAdapter(ChessCtor) {
     const enemyOf = (side) => (side === 'w' ? 'b' : 'w');
@@ -29,10 +52,10 @@ export function ChessJsAdapter(ChessCtor) {
             setTurn(s) {
                 const parts = g.fen().split(' ');
                 parts[1] = s;
-                g.load(parts.join(' '));
+                loadTolerant(g, parts.join(' '));
             },
             snapshot: () => g.fen(),
-            restore: (snap) => { g.load(snap); },
+            restore: (snap) => { loadTolerant(g, snap); },
             boardKey: () => g.fen(),
             pieceOn(sq) {
                 const p = g.get(sq);
@@ -48,10 +71,10 @@ export function ChessJsAdapter(ChessCtor) {
                 try {
                     const parts = saved.split(' ');
                     parts[1] = want;
-                    g.load(parts.join(' '));
+                    loadTolerant(g, parts.join(' '));
                     return g.moves({ verbose: true }).some((m) => m.to === sq);
                 } finally {
-                    g.load(saved);
+                    loadTolerant(g, saved);
                 }
             },
             listMoves() {
@@ -84,7 +107,12 @@ export function ChessJsAdapter(ChessCtor) {
                 if (res.flags && res.flags.includes('e')) {
                     epCapture = res.to[0] + res.from[1];
                 }
-                return { captured: res.captured || null, specialMove: null, promotion: res.promotion || null, epCapture };
+                // Opponent-state flags, read BEFORE any turn rewrite: after
+                // g.move() the turn has already flipped to the opponent, so
+                // in_check/in_checkmate/in_stalemate describe THEIR king.
+                let check = false, mate = false, stalemate = false;
+                try { check = g.in_check(); mate = g.in_checkmate(); stalemate = g.in_stalemate(); } catch (_) {}
+                return { captured: res.captured || null, specialMove: null, promotion: res.promotion || null, epCapture, check, mate, stalemate };
             },
             isCheckmate: () => g.in_checkmate(),
             _game: g,
@@ -146,10 +174,10 @@ export function createLevel(level, ChessCtor, lang = 'en') {
         try {
             const parts = saved.split(' ');
             parts[1] = player === 'w' ? 'b' : 'w';
-            game.load(parts.join(' '));
+            loadTolerant(game, parts.join(' '));
             return game.moves({ verbose: true }).some((m) => m.to === sq);
         } finally {
-            game.load(saved);
+            loadTolerant(game, saved);
         }
     }
 
@@ -180,7 +208,7 @@ export function createLevel(level, ChessCtor, lang = 'en') {
         return (player === 'w' && to[1] === '8') || (player === 'b' && to[1] === '1');
     }
 
-    function checkDone(lastTo, moverType, promoted) {
+    function checkDone(lastTo, moverType, promoted, flags) {
         for (const s of wantCollect) if (!st.collected.has(s)) return false;
         for (const s of wantCapture) if (!st.captured.has(s)) return false;
         if (reach) {
@@ -188,6 +216,11 @@ export function createLevel(level, ChessCtor, lang = 'en') {
             if (reach.piece && moverType !== reach.piece.toLowerCase() &&
                 (promoted || '').toLowerCase() !== reach.piece.toLowerCase()) return false;
         }
+        // Opponent-state goals: flags captured after game.move() BEFORE the
+        // turn rewrite — they describe the enemy king (check/mate/stalemate).
+        if (goal.check === true && !(flags && flags.check)) return false;
+        if (goal.mate === true && !(flags && flags.mate)) return false;
+        if (goal.stalemate === true && !(flags && flags.stalemate)) return false;
         return true;
     }
 
@@ -218,10 +251,22 @@ export function createLevel(level, ChessCtor, lang = 'en') {
             const res = game.move({ from, to, promotion: promotion ? promotion.toLowerCase() : undefined });
             if (!res) return { ok: false, reason: 'illegal' };
             st.moves++;
+            // Opponent-state flags: read BEFORE the extra-turn rewrite below —
+            // after game.move() the turn has flipped to the opponent, so
+            // in_check/in_checkmate/in_stalemate describe THEIR king. The
+            // rewrite would flip the side back and make these read OUR king.
+            let flags = null;
+            try {
+                flags = {
+                    check: game.in_check(),
+                    mate: game.in_checkmate(),
+                    stalemate: game.in_stalemate(),
+                };
+            } catch (_) { flags = null; }
             // Extra-turn rule: force the turn back to the player.
             const parts = game.fen().split(' ');
             parts[1] = player;
-            game.load(parts.join(' '));
+            loadTolerant(game, parts.join(' '));
             if (wantCollect.has(to)) st.collected.add(to);
             if (res.captured) {
                 const capSq = res.flags && res.flags.includes('e') ? to[0] + from[1] : to;
@@ -229,17 +274,17 @@ export function createLevel(level, ChessCtor, lang = 'en') {
             }
             st.selected = null;
             touch();
-            if (checkDone(to, mover.type, res.promotion)) finish();
+            if (checkDone(to, mover.type, res.promotion, flags)) finish();
             return { ok: true, move: res, done: st.done, result: st.result };
         },
         undo() {
             const prev = st.undoStack.pop();
             if (!prev) return false;
-            game.load(prev.fen);
+            loadTolerant(game, prev.fen);
             // Re-apply the extra-turn rule (loaded fen carries opponent turn).
             const parts = game.fen().split(' ');
             parts[1] = player;
-            game.load(parts.join(' '));
+            loadTolerant(game, parts.join(' '));
             st.collected = new Set(prev.collected);
             st.captured = new Set(prev.captured);
             st.moves = prev.moves;

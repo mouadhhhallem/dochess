@@ -47,6 +47,10 @@ function squareName(r, c) {
 
 export function pieceImageSrc(type, color, prefix = 'v1') {
     const white = color === 'w';
+    // Piece SET (folder) is chosen once in the Online lobby — js/pieces.js.
+    if (typeof window !== 'undefined' && window.DoChessPieces) {
+        return window.DoChessPieces.url(white ? String(type).toUpperCase() : String(type), prefix);
+    }
     return `assets/pieces/${white ? 'white' : 'black'}-${PIECE_NAMES[type]}.svg?${prefix}`;
 }
 
@@ -334,6 +338,9 @@ export function createBoard(el, { onAction, prefix = 'v1' } = {}) {
         node.className = `chess-piece ${color === 'w' ? 'white' : 'black'}`;
         node.alt = pieceLabel(type, color);
         node.dataset.pk = key;
+        // Lets the piece-set switch (js/pieces.js) repaint this node in
+        // place, and the shared broken-image fallback replace it.
+        node.dataset.fallbackPiece = color === 'w' ? type.toUpperCase() : type;
         // Only assign when it actually differs: a redundant src write can
         // invalidate the decoded bitmap.
         if (node.getAttribute('src') !== src) node.src = src;

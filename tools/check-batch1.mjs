@@ -2,12 +2,11 @@
  * tools/check-batch1.mjs — node verification for Batch 1.
  * Run:  node tools/check-batch1.mjs        (from the repo root)
  * Tests storage.js (mock backend), lessons.js schema, and engine validation
- * of data/lessons.json using the repo's current rules engine as the adapter
- * (browser batch 2 re-runs the same checks with chess.js).
+ * of data/lessons.json using the legacy rules engine as the adapter
+ * (browser re-runs the same checks with chess.js via engine.js).
  * Exit code 0 = all green.
  */
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import {
     defaultState, isValidState, loadProgress, saveProgress,
     exportProgress, importProgress, resetProgress, touchDay, addXp,
@@ -17,9 +16,7 @@ import {
 import {
     validateSchema, validateEngine, starsForAttempt, CURRICULUM_VERSION,
 } from '../js/lessons.js';
-
-const require = createRequire(import.meta.url);
-const ChessGame = require('../chess.js'); // legacy engine as TEST adapter only
+import { legacyAdapter as adapter } from './legacy-adapter.mjs';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => {
@@ -73,97 +70,6 @@ ok('storage: stars rule 3/2/1/0 (single-move tactics)',
     starsForAttempt({ solved: true, tries: 9, hintsUsed: 9 }) === 1 &&
     starsForAttempt({ solved: false, tries: 1, hintsUsed: 0 }) === 0);
 
-// ── engine adapter over the legacy rules engine ──
-// Base surface (single-move validators) + full solver surface (free-move):
-// turn/setTurn, boardKey, attacked, epSquare, listDetailed, playDetailed.
-const rc = (sq) => [8 - parseInt(sq[1], 10), sq.charCodeAt(0) - 97];
-const alg = (r, c) => String.fromCharCode(97 + c) + (8 - r);
-const colorName = (side) => (side === 'w' ? 'white' : 'black');
-function wrapGame(g, fenTurn) {
-    const ownSide = () => (g.currentPlayer === 'white' ? 'w' : 'b');
-    const isOwn = (p) => !!p && ((ownSide() === 'w') === (p === p.toUpperCase()));
-    function rawMoves() {
-        const out = [];
-        for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
-            const p = g.board[r][c];
-            if (!p || !isOwn(p)) continue;
-            for (const [tr, tc] of g.getLegalMoves([r, c])) {
-                const dest = g.board[tr][tc];
-                // King captures are illegal in real chess: exclude them so
-                // the solver can never "solve" by taking the enemy king.
-                if (dest && dest.toLowerCase() === 'k' && !isOwn(dest)) continue;
-                out.push({ from: alg(r, c), to: alg(tr, tc), piece: p, captured: dest || null });
-            }
-        }
-        // En passant shows as a quiet diagonal pawn move: mark the victim.
-        if (g.enPassantTarget) {
-            const ep = alg(...g.enPassantTarget);
-            for (const m of out) {
-                if (!m.captured && m.piece.toLowerCase() === 'p' &&
-                    m.from[0] !== m.to[0] && m.to === ep) {
-                    m.captured = g.board[rc(m.from)[0]][rc(m.to)[1]] || 'p';
-                    m.ep = true;
-                }
-            }
-        }
-        return out;
-    }
-    return {
-        turn: () => ownSide(),
-        setTurn: (s) => { g.currentPlayer = colorName(s); },
-        snapshot: () => g.snapshot(),
-        restore: (s) => g.restore(s),
-        boardKey() {
-            let b = '';
-            for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) b += g.board[r][c] || '.';
-            const cr = g.castlingRights;
-            return b + '|' + (cr.K ? 'K' : '') + (cr.Q ? 'Q' : '') + (cr.k ? 'k' : '') + (cr.q ? 'q' : '') +
-                '|' + (g.enPassantTarget ? alg(...g.enPassantTarget) : '-');
-        },
-        attacked(sq, byName) {
-            const [r, c] = rc(sq);
-            return g._attacked(r, c, byName);
-        },
-        epSquare: () => (g.enPassantTarget ? alg(...g.enPassantTarget) : null),
-        pieceOn(sq) { const [r, c] = rc(sq); return (g.board[r] && g.board[r][c]) || null; },
-        listMoves: () => rawMoves().map((m) => m.from + m.to),
-        listDetailed: () => rawMoves().map((m) => ({ ...m, uci: m.from + m.to })),
-        play(uci) {
-            const res = g.movePiece(rc(uci.slice(0, 2)), rc(uci.slice(2, 4)), uci[4] || null);
-            return res !== null && res !== 'promotion-needed';
-        },
-        playDetailed(uci, promo) {
-            const from = rc(uci.slice(0, 2)), to = rc(uci.slice(2, 4));
-            const wasEp = !!g.enPassantTarget &&
-                uci.slice(2, 4) === alg(...g.enPassantTarget) &&
-                g.board[from[0]][from[1]] &&
-                g.board[from[0]][from[1]].toLowerCase() === 'p' && from[1] !== to[1];
-            const epVictimSq = wasEp ? String.fromCharCode(97 + to[1]) + uci.slice(1, 2) : null;
-            const res = g.movePiece(from, to, promo || uci[4] || null);
-            if (res === null || res === 'promotion-needed') return null;
-            return {
-                captured: res.captured || null,
-                specialMove: res.specialMove || null,
-                promotion: res.promotion || null,
-                epCapture: wasEp ? epVictimSq : null,
-            };
-        },
-        isCheckmate: () => g.isCheckmate(),
-    };
-}
-const adapter = {
-    load(fen) {
-        const g = new ChessGame();
-        try {
-            g.loadFEN(fen);
-        } catch {
-            return null;
-        }
-        const turn = (fen.split(' ')[1] === 'b') ? 'b' : 'w';
-        return wrapGame(g, turn);
-    },
-};
-
 // ── curriculum checks ──
 const data = JSON.parse(readFileSync(new URL('../data/lessons.json', import.meta.url), 'utf8'));
 ok('lessons: file version matches code', data.version === CURRICULUM_VERSION);
@@ -171,23 +77,48 @@ const schema = validateSchema(data);
 ok('lessons: schema 0 errors', schema.errors.length === 0, JSON.stringify(schema.errors.slice(0, 3)));
 console.log(`     schema warnings (missing fr/ar fall back to en): ${schema.warnings.length}`);
 const eng = validateEngine(data, adapter);
-for (const r of eng) ok(`engine: ${r.id} [${r.type}]`, r.status === 'pass', r.status === 'fail' ? r.detail : `(${r.status}: ${r.detail})`);
+for (const r of eng) ok(`engine: ${r.id} [${r.type}]`, r.status !== 'fail', r.status === 'fail' ? r.detail : `(${r.status}: ${r.detail})`);
 console.log('\n── BFS par table ──');
 for (const r of eng) console.log(`  ${r.id}: ${r.detail}`);
 
-// ── corrected schema-example mate-in-1 (was illegal Rf1-f8; now Re1-e8) ──
+// ── schema-example mate-in-1 (Re1-e8) — version-2 shape with sets[] ──
 const EXAMPLE_MATE = {
-    id: 'schema-example-mate-in-1', stage: 2, themes: ['mate', 'back-rank'],
+    id: 'schema-example-mate-in-1', stage: 2, set: 'ex-mate', themes: ['mate', 'back-rank'],
     type: 'mate-in-n', title: 't', goal: 'g', explain: 'e', success: 's', failHint: 'f',
     fen: '6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1',
     solution: { moves: ['e1e8'], mateIn: 1 },
     hints: ['h1', 'h2', 'h3'], xp: 20,
 };
 {
-    const { errors } = validateSchema({ version: 1, stages: [{ n: 2 }], levels: [EXAMPLE_MATE] });
+    const { errors } = validateSchema({
+        version: CURRICULUM_VERSION, stages: [{ n: 2 }],
+        sets: [{ id: 'ex-mate', stage: 2, title: 't' }], levels: [EXAMPLE_MATE],
+    });
     ok('example mate: schema clean', errors.length === 0, JSON.stringify(errors.slice(0, 2)));
     const [r] = validateEngine({ levels: [EXAMPLE_MATE] }, adapter);
     ok('example mate: Re1-e8 mates, unique as listed', r.status === 'pass', r.detail);
+}
+
+// ── goal.check / goal.mate / goal.stalemate (free-move opponent-state goals) ──
+{
+    const mk = (over) => ({
+        id: 'g-' + (over.goal.mate ? 'mate' : over.goal.stalemate ? 'stale' : 'check'),
+        stage: 3, set: 'ex', themes: ['t'], mode: 'free-move', type: 'free-move',
+        title: 't', goalText: 'g', explain: 'e', success: 's', failHint: 'f',
+        hints: ['h1', 'h2', 'h3'], xp: 10, par: 1, ...over,
+    });
+    const checkLv = mk({ goal: { check: true }, fen: '4k3/8/8/8/8/8/8/R3K3 w - - 0 1', movePieces: ['r'] });
+    const mateLv = mk({ goal: { mate: true }, fen: '6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1', movePieces: ['r'] });
+    const staleLv = mk({ goal: { stalemate: true }, fen: '7k/8/6K1/8/8/8/8/5Q2 w - - 0 1', movePieces: ['q'] });
+    const { errors } = validateSchema({
+        version: CURRICULUM_VERSION, stages: [{ n: 3 }],
+        sets: [{ id: 'ex', stage: 3, title: 't' }], levels: [checkLv, mateLv, staleLv],
+    });
+    ok('goal flags: schema clean', errors.length === 0, JSON.stringify(errors.slice(0, 2)));
+    for (const lv of [checkLv, mateLv, staleLv]) {
+        const [r] = validateEngine({ levels: [lv] }, adapter);
+        ok(`goal flag: ${lv.id} par 1`, r.status === 'pass', r.detail);
+    }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

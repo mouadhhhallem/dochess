@@ -82,7 +82,9 @@
         const white = piece === piece.toUpperCase();
         const kind = PIECE_NAMES[piece.toLowerCase()];
         if (!kind) return '';
-        return `<img src="assets/pieces/${white ? 'white' : 'black'}-${kind}.svg?${assetV()}" ` +
+        const src = (window.DoChessPieces && window.DoChessPieces.url(piece, assetV())) ||
+            `assets/pieces/${white ? 'white' : 'black'}-${kind}.svg?${assetV()}`;
+        return `<img src="${src}" ` +
             `class="pz-piece" alt="" draggable="false" data-fallback-piece="${piece}">`;
     }
 
@@ -177,12 +179,17 @@
                 if (S.hintMove && (S.hintMove[0] === alg || S.hintMove[1] === alg)) cls += ' pz-hint';
                 html += `<div class="${cls}" data-square="${alg}">`;
                 if (sq) html += pieceImg(sq.color === 'w' ? sq.type.toUpperCase() : sq.type);
-                if (isLegalTarget(alg)) html += '<span class="pz-dot"></span>';
+                if (isLegalTarget(alg)) {
+                    // Occupied square = capture ring; empty square = centre dot.
+                    html += sq ? '<span class="pz-ring"></span>' : '<span class="pz-dot"></span>';
+                }
                 if (isWrongTarget(alg)) html += '<span class="pz-x"></span>';
                 html += '</div>';
             }
         }
         board.innerHTML = html;
+        // "Your move" state drives the green frame glow (and the a11y label).
+        board.classList.toggle('pz-yourturn', !S.busy && !S.solved && !S.loading && !S.chess.game_over());
     }
 
     function isFlipped() {
@@ -246,8 +253,8 @@
         renderStats();
         hideSolution();
         paintBoard();
-        if (!S.fromApi) setFeedback('Find the best move.', 'info');
-        else setFeedback(`Find the best move for ${S.puzzle.solverColor === 'white' ? 'White' : 'Black'}.`, 'info');
+        if (!S.fromApi) setFeedback('Find the best move.', 'turn');
+        else setFeedback(`Find the best move for ${S.puzzle.solverColor === 'white' ? 'White' : 'Black'}.`, 'turn');
     }
 
     /* ── Move flow ──────────────────────────────────────────────────── */
@@ -303,10 +310,10 @@
                 S.busy = false;
                 paintBoard();
                 if (S.step >= S.solution.length) onSolved();
-                else setFeedback('Your move.', 'info');
+                else setFeedback('Your move.', 'turn');
             }, 550);
         } else {
-            setFeedback('Your move.', 'info');
+            setFeedback('Your move.', 'turn');
         }
     }
 

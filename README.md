@@ -38,7 +38,10 @@ Playwright uses the installed Edge/Chrome channel (`playwright.config.js`, 2 wor
 - `online.js` — rated P2P friend games (PeerJS share codes, host authority/clocks, Elo per time control, reconnect/resume, unrated self-play).
 - `perft.js` — move-generator correctness gate (startpos, kiwipete + positions 3–5).
 - `styles.css` — dark navy + emerald theme, match layout (desktop split-pane, phone-compact), clocks/captured/drag/result-card, `prefers-reduced-motion` support.
-- `assets/pieces/` — custom 12-piece SVG set. `assets/teacher*-192.png` — lightweight teacher portraits (full SVGs kept as sources).
+- `assets/pieces/pieces-main/` and `assets/pieces/pieces-second/` — two 12-piece SVG sets; the learner picks one in the Online lobby (Piece style) and `js/pieces.js` resolves every board through it. `assets/teacher*-192.png` — lightweight teacher portraits (full SVGs kept as sources).
+- `js/pieces.js` — the one piece-artwork resolver (`window.DoChessPieces`).
+- `js/sync.js` — mirrors localStorage progress to the API for signed-in learners (`window.DoChessSync`); fully optional.
+- `server/` — Node API + static host: MongoDB persistence, Clerk session verification, Upstash rate limits. See `docs/BACKEND.md`.
 - `vendor/` — self-hosted Inter + PeerJS (offline-capable, sub-500KB first paint).
 - `tools/build-learn.mjs` — compiles `js/*.js` + `data/lessons.json` into `js/learn.bundle.js` (`--check` verifies freshness).
 
@@ -50,7 +53,10 @@ Playwright uses the installed Edge/Chrome channel (`playwright.config.js`, 2 wor
 - Match chrome: active-turn + low-time clocks, captured pieces with material edge, board flip, pointer drag-and-drop (= click path), persisted mute.
 - Online: 6-letter codes, arbitrary base/increment wheel picker, per-game Elo (K40/20) with count-up, move navigator, forfeit/draw flows.
 - Study: analysis workspace (library + chapters, move tree with variations/comments/arrows, PGN/FEN import-export, real Stockfish 10 WASM analysis with MultiPV, explain, best-move practice trainer, keyboard shortcuts). See `docs/STUDY.md` and `docs/STOCKFISH.md`.
-- Optional Clerk sign-in (`clerk-config.js`, null by default): per-user progress namespace; fully offline without a key.
+- Customisation: six board skins and two piece sets, both chosen in the Online lobby and applied to every board in the product.
+- Puzzles: green move feedback — selected square, legal destinations, capture rings and last move all share one accent.
+- Optional Clerk sign-in (`clerk-config.js`): per-user progress namespace; fully offline without a key.
+- Optional cloud persistence (`npm run api`): signed-in progress, games, ratings, achievements, lessons, Learn stars and puzzle stats mirror into MongoDB. See `docs/BACKEND.md`.
 
 ## Accessibility
 
@@ -62,7 +68,7 @@ Playwright uses the installed Edge/Chrome channel (`playwright.config.js`, 2 wor
 
 ## Privacy / offline
 
-Static files only, no backend, no secret keys. Clerk/PeerJS are client-side and optional; the 10-lesson course works fully offline.
+The course is static files at its core and works fully offline; Clerk/PeerJS are client-side and optional. An optional local API (`npm run api`) adds signed-in cloud persistence into MongoDB — secrets live only in the gitignored `.env`. See `docs/BACKEND.md`.
 
 ## License
 

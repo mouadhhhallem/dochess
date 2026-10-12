@@ -64,10 +64,12 @@ function watchErrors(page) {
     return { pageErrors, cspViolations };
 }
 
-/** Solve every level with the in-page BFS solver through real clicks. */
+/** Solve every playable level with the in-page BFS solver through real clicks. */
 async function solveAllLevels(page, baseUrl) {
-    const ids = await page.evaluate(() => [...document.querySelectorAll('[data-lv]')].map((b) => b.dataset.lv));
-    expect(ids.length).toBe(36);
+    // Pinned: 66 playable levels (6 planned "Coming soon" excluded). If the
+    // curriculum grows, update this number — it guards against silent loss.
+    const ids = await page.evaluate(() => window.DoChessLearn.curriculum.levels.filter((l) => !l.planned).map((l) => l.id));
+    expect(ids.length).toBe(66);
 
     for (const id of ids) {
         await page.goto(`${baseUrl}?level=${id}`);
@@ -98,12 +100,18 @@ async function solveAllLevels(page, baseUrl) {
     }
 }
 
-test('file:// — all 36 levels load and solve (double-click index.html)', async ({ page }) => {
+test('file:// — all 66 levels load and solve (double-click index.html)', async ({ page }) => {
     const watch = watchErrors(page);
     await page.goto('index.html');
     await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
     await page.click('#nav-learn');
-    await page.waitForFunction(() => !!document.querySelector('[data-lv]'), null, { timeout: 15000 });
+    await page.waitForFunction(() => !!document.querySelector('[data-set]'), null, { timeout: 15000 });
+    // Six curriculum stages on the landing page.
+    expect(await page.locator('#picker .stage-block').count()).toBe(6);
+    // Set opens its own lesson collection (Rook = 6 lessons).
+    await page.click('[data-set="s1-rook"]');
+    await page.waitForFunction(() => !!document.querySelector('[data-lv-open]'), null, { timeout: 15000 });
+    expect(await page.locator('[data-lv-open]').count()).toBe(6);
     // Unicode must survive the bundle (charset mistakes show as mojibake stars).
     await expect(page.locator('.stars').first()).toHaveText('☆☆☆');
 
@@ -120,8 +128,12 @@ test('http + real CSP — levels render without bypassCSP', async ({ browser }) 
     await page.goto('index.html');
     await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
     await page.click('#nav-learn');
-    await page.waitForFunction(() => !!document.querySelector('[data-lv]'), null, { timeout: 15000 });
-    expect(await page.locator('[data-lv]').count()).toBe(36);
+    await page.waitForFunction(() => !!document.querySelector('[data-set]'), null, { timeout: 15000 });
+    expect(await page.locator('#picker .stage-block').count()).toBe(6);
+    // Open a set: its own lesson collection appears (Coming-soon set is locked).
+    await page.click('[data-set="s2-castle"]');
+    expect(await page.locator('[data-lv-open]').count()).toBe(3);
+    await expect(page.locator('#set-back')).toBeVisible();
 
     // Deep link straight into a level (what play.html and share links do).
     await page.goto('index.html?level=s1r-1');
@@ -138,4 +150,35 @@ test('http + real CSP — levels render without bypassCSP', async ({ browser }) 
     expect(watch.cspViolations).toEqual([]);
     expect(watch.pageErrors).toEqual([]);
     await ctx.close();
+});
+
+test('curriculum navigation + persistence: set → level → back, progress survives reload', async ({ page }) => {
+    await page.goto('index.html');
+    await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
+    await page.click('#nav-learn');
+    await page.waitForFunction(() => !!document.querySelector('[data-set]'), null, { timeout: 15000 });
+    await expect(page.locator('.learn-progress-panel')).toContainText('0/66');
+    // Coming-soon set exists but cannot be entered.
+    await expect(page.locator('[data-set-open="s4-plan"]')).toBeDisabled();
+
+    // Enter the Castling set, solve kingside castling with real clicks.
+    await page.click('[data-set="s2-castle"]');
+    await page.click('[data-lv-open="s2-castle-1"]');
+    await expect(page.locator('#levelview')).toBeVisible();
+    await page.click('#play-board .chess-square[data-square="e1"]');
+    await page.click('#play-board .chess-square[data-square="g1"]');
+    await expect(page.locator('#r-stars')).toHaveText('★★★', { timeout: 8000 });
+
+    // Back to the stages landing, progress updated.
+    await page.click('#back-btn');
+    await expect(page.locator('#picker')).toBeVisible();
+    await expect(page.locator('.learn-progress-panel')).toContainText('1/66');
+
+    // Progress survives a full reload.
+    await page.reload();
+    await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
+    await page.click('#nav-learn');
+    await expect(page.locator('.learn-progress-panel')).toContainText('1/66');
+    await page.click('[data-set="s2-castle"]');
+    await expect(page.locator('[data-lv-open="s2-castle-1"]')).toHaveText('Replay');
 });

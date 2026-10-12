@@ -1840,6 +1840,9 @@ body[data-theme='day'] .nav { background: #ffffff; }
     opacity: .05; pointer-events: none;
 }
 body[data-theme='day'] .dc-id::after { background-image: url('assets/pieces/black-knight.svg'); opacity: .05; }
+/* Follow the chosen piece set (js/pieces.js sets body[data-piece-set]). */
+body[data-piece-set='modern'] .dc-id::after { background-image: url('assets/pieces/pieces-second/white-knight.svg'); }
+body[data-piece-set='modern'][data-theme='day'] .dc-id::after { background-image: url('assets/pieces/pieces-second/black-knight.svg'); }
 .dc-id > * { position: relative; z-index: 1; }
 .dc-avatar { position: relative; width: 88px; height: 88px; flex-shrink: 0; }
 .dc-avatar-img {
@@ -1874,6 +1877,18 @@ body[data-theme='day'] .dc-id::after { background-image: url('assets/pieces/blac
 }
 .dc-sep { opacity: .6; }
 .dc-meta .presence-dot { margin-right: 0; }
+/* Cloud-save state chip (js/sync.js) — a dot plus a short verb, never a
+   colour-only signal: the label carries the meaning for a11y. */
+.dc-sync {
+    display: inline-flex; align-items: center; gap: .35rem;
+    border: 1px solid var(--glass-border); border-radius: 999px;
+    padding: .15rem .6rem; background: var(--bg-main); white-space: nowrap;
+}
+.dc-sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #64748b; flex-shrink: 0; }
+.dc-sync.saved .dc-sync-dot { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, .6); }
+.dc-sync.busy .dc-sync-dot { background: #fbbf24; animation: stPulse 1.2s ease-in-out infinite; }
+.dc-sync.warn .dc-sync-dot { background: #f59e0b; }
+.dc-sync.off .dc-sync-dot { background: #64748b; }
 .dc-rate-chip {
     display: inline-flex; align-items: center; gap: .35rem;
     border: 1px solid var(--glass-border); border-radius: 999px;
@@ -2403,6 +2418,22 @@ body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
     border-radius: 6px; overflow: hidden; border: 1px solid rgba(0, 0, 0, 0.3);
 }
 .skin-prev i { display: block; }
+
+/* ── Piece style picker (Online lobby): two artworks on a checker chip ── */
+.piece-swatch .skin-prev.piece-prev {
+    display: flex; align-items: center; justify-content: center; gap: 2px;
+    grid-template-columns: none;
+    background:
+        linear-gradient(45deg, #d7c6a6 25%, transparent 25%, transparent 75%, #d7c6a6 75%),
+        linear-gradient(45deg, #d7c6a6 25%, #b58863 25%, #b58863 75%, #d7c6a6 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+}
+.piece-swatch .skin-prev.piece-prev img {
+    width: 22px; height: 22px; display: block; object-fit: contain;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .45));
+}
+.piece-swatch.on .skin-prev.piece-prev { box-shadow: 0 0 0 2px rgba(16, 185, 129, .5); border-radius: 6px; }
 
 /* Phone time-control presets: tap icons instead of scrolling wheels. */
 .tc-presets { display: none; }
@@ -3811,18 +3842,57 @@ body[data-theme='day'] .st-cand-ev.pos { color: #15803d; } body[data-theme='day'
 .pz-board .chess-square { position: relative; }
 .pz-piece { width: 90%; height: 90%; object-fit: contain; display: block; pointer-events: none; user-select: none; -webkit-user-drag: none; margin: auto; }
 
-.pz-dot { position: absolute; left: 50%; top: 50%; width: 26%; height: 26%; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(15, 23, 42, 0.28); pointer-events: none; }
-body[data-theme='day'] .pz-dot { background: rgba(255, 255, 255, 0.55); box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12); }
+/* ── Move feedback: one green system for "where you are about to play".
+   Selected square, legal destinations, last move and the turn glow all
+   share the emerald accent so the eye finds the move instantly. ── */
+.pz-board {
+    --pz-green: 16 185 129;
+    --pz-sel: rgb(var(--pz-green) / .55);
+    --pz-last: rgb(var(--pz-green) / .38);
+    --pz-mark: rgb(var(--pz-green) / .95);
+    transition: box-shadow .2s ease;
+}
+.pz-board .chess-square.selected {
+    background-color: var(--pz-sel) !important;
+    box-shadow: inset 0 0 0 3px rgb(var(--pz-green) / .9);
+}
+.pz-board .chess-square.last-move { background-color: var(--pz-last) !important; }
+.pz-board .chess-square.last-move::after {
+    content: ''; position: absolute; inset: 4%;
+    border-radius: 4px; box-shadow: inset 0 0 0 2px rgb(var(--pz-green) / .45);
+    pointer-events: none;
+}
+.pz-board.pz-yourturn { box-shadow: 0 0 0 2px rgb(var(--pz-green) / .55), 0 0 22px rgb(var(--pz-green) / .28); }
+.pz-dot {
+    position: absolute; left: 50%; top: 50%; width: 30%; height: 30%;
+    transform: translate(-50%, -50%); border-radius: 50%;
+    background: var(--pz-mark); box-shadow: 0 0 0 3px rgba(255, 255, 255, .28);
+    pointer-events: none; animation: pzDotPop .16s ease-out;
+}
+.pz-ring {
+    position: absolute; inset: 6%; border-radius: 50%;
+    border: max(4px, .38vw) solid var(--pz-mark);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, .22);
+    pointer-events: none; animation: pzRingPop .16s ease-out;
+}
+@keyframes pzDotPop { from { transform: translate(-50%, -50%) scale(0); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@keyframes pzRingPop { from { transform: scale(.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .pz-x { position: absolute; left: 50%; top: 50%; width: 60%; height: 60%; transform: translate(-50%, -50%); pointer-events: none; background: radial-gradient(circle, rgba(239,68,68,.55) 0%, rgba(239,68,68,.55) 58%, transparent 60%); border-radius: 50%; }
 .pz-hint { box-shadow: inset 0 0 0 3px rgba(240, 189, 101, 0.85) !important; }
 .pz-wrong { animation: pz-shake .35s ease; background-color: rgba(239, 68, 68, 0.5) !important; }
 @keyframes pz-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) {
+    .pz-dot, .pz-ring { animation: none; }
+    .pz-board, .pz-board.pz-yourturn { transition: none; }
+}
 
 .pz-feedback { min-height: 1.4em; font-weight: 700; font-size: .95rem; text-align: center; color: var(--text-muted); }
 .pz-feedback.error { color: #f87171; }
 .pz-feedback.success { color: #4ade80; }
+.pz-feedback.turn { color: #34d399; text-shadow: 0 0 14px rgba(52, 211, 153, .35); }
 body[data-theme='day'] .pz-feedback.error { color: #dc2626; }
 body[data-theme='day'] .pz-feedback.success { color: #16a34a; }
+body[data-theme='day'] .pz-feedback.turn { color: #047857; text-shadow: none; }
 
 .pz-controls { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: center; }
 .pz-controls .btn-primary, .pz-controls .btn-secondary { min-height: 42px; }

@@ -16,7 +16,7 @@
 
 import { createBoard } from './board.js';
 import { createLevel } from './engine.js';
-import { loadProgress, saveProgress } from './storage.js';
+import { loadProgress, saveProgress, addXp, touchDay } from './storage.js';
 import { bootFocusMode, applyFocusMode } from './focus.js';
 
 const $ = (id) => document.getElementById(id);
@@ -26,6 +26,9 @@ let store = loadProgress();
 let sess = null;
 let board = null;
 let pendingPromo = null;
+// View router: 'home' (stages + sets) → 'set' (lesson rows) → 'level'.
+let view = 'home';
+let currentSetId = null;
 
 const lang = () => (store.state.settings && store.state.settings.lang) || 'en';
 const T = (obj, fb = '') => (obj && (obj[lang()] || obj.en)) || fb;
@@ -33,6 +36,84 @@ const inLearn = () => $('learn-screen') && $('learn-screen').classList.contains(
 const esc = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/* ── curriculum index (sets, progress, states) ─────────────────────────
+   Planned lessons are locked "Coming soon" skeletons — excluded from every
+   progress total so percentages stay honest. */
+const playableLevels = () => (DATA ? DATA.levels.filter((l) => !l.planned) : []);
+const levelsOfSet = (setId) => (DATA ? DATA.levels.filter((l) => l.set === setId) : []);
+const setById = (setId) => (DATA ? DATA.sets.find((s) => s.id === setId) : null);
+
+function starsOf(id) { return (store.state.stars && store.state.stars[id]) || 0; }
+
+/** 'planned' | 'done' | 'progress' | 'new' */
+function stateOf(lv) {
+    if (lv.planned) return 'planned';
+    if (starsOf(lv.id)) return 'done';
+    if (store.state.attempts && store.state.attempts[lv.id]) return 'progress';
+    return 'new';
+}
+
+function setStats(setId) {
+    const lvs = levelsOfSet(setId).filter((l) => !l.planned);
+    const done = lvs.filter((l) => starsOf(l.id)).length;
+    return { total: lvs.length, done };
+}
+
+function overallStats() {
+    const lvs = playableLevels();
+    const done = lvs.filter((l) => starsOf(l.id)).length;
+    return { total: lvs.length, done };
+}
+
+/** First unsolved playable level — the Continue CTA target. */
+function firstUnsolved() {
+    return playableLevels().find((l) => !starsOf(l.id)) || null;
+}
+
+const DIFF_LABEL = { 1: 'Easy', 2: 'Medium', 3: 'Hard' };
+const diffChip = (d) => {
+    const n = d === 2 ? 2 : d === 3 ? 3 : 1;
+    return `<span class="diff-chip d${n}">${DIFF_LABEL[n]}</span>`;
+};
+
+/* Set icons: one visual system per STAGE.
+   Stage 1 shows real piece artwork on a checker chip (so white pieces stay
+   legible). Stages 2+ use bold monochrome line icons — no emoji, works
+   offline. Each stage owns an accent so the grid reads as six chapters. */
+const SET_PIECE = { rook: 'r', bishop: 'b', queen: 'q', king: 'k', knight: 'n', pawn: 'p' };
+const STAGE_ACCENT = {
+    1: '#fbbf24', // gold — the pieces themselves
+    2: '#38bdf8', // sky — the special rules
+    3: '#fb7185', // rose — check & mate
+    4: '#a78bfa', // violet — attack & defence
+    5: '#34d399', // emerald — the endgame
+    6: '#f97316'  // orange — mastery
+};
+const ICON_SVG = {
+    castle: '<path d="M4.5 20.5h15M6.5 20.5v-8.2l1.6-1.6V6.2h2.2v2.6h3.4V6.2h2.2v4.5l1.6 1.6v8.2M10 20.5v-4.2h4v4.2"/><path d="M15.2 4.4l2.1 2.1-2.1 2.1"/>',
+    ep: '<path d="M7.5 20.5h9M9.2 17.2h5.6l-1-3.4a2.9 2.9 0 10-3.6 0z"/><path d="M12 3.2v3.4M10.2 4.8L12 3l1.8 1.8"/><path d="M17.6 12.4l3 3-3 3"/>',
+    crown: '<path d="M3.6 8.6l4.2 3.6L12 4.6l4.2 7.6 4.2-3.6-1.6 10.3H5.2z"/><path d="M5.2 21.6h13.6"/><path d="M9.6 15.4h4.8"/>',
+    target: '<circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/><path d="M12 1.6v2.4M12 20v2.4M1.6 12H4M20 12h2.4"/>',
+    mated: '<path d="M8.4 20.4h7.2"/><path d="M12 4.2l1.5 3.3 3.6.5-2.6 2.5.6 3.6-3.1-1.7-3.1 1.7.6-3.6-2.6-2.5 3.6-.5z"/><path d="M16.8 16.4l3.6 3.6M20.4 16.4l-3.6 3.6"/>',
+    flag: '<path d="M6 21.4V3.2"/><path d="M6 4.4h11.4l-2.4 4 2.4 4H6"/><path d="M10 15.4h7.4l-2 3.4 2 3.4H10"/>',
+    swords: '<path d="M3.4 3.4l8.6 8.6M20.6 3.4L12 12"/><path d="M14.2 12.8l2.6-2.6M9.8 12.8L7.2 10.2"/><path d="M4.2 19.8l3.4-3.4M19.8 19.8l-3.4-3.4"/><circle cx="12" cy="14.6" r="1.2" fill="currentColor" stroke="none"/>',
+    shield: '<path d="M12 2.8l8 3v6.1c0 4.9-3.4 8.4-8 9.9-4.6-1.5-8-5-8-9.9V5.8z"/><path d="M8.6 12.2l2.6 2.6 4.2-4.6"/>',
+    sunrise: '<path d="M3.2 19.4h17.6"/><path d="M6.2 15.6a5.8 5.8 0 1111.6 0"/><path d="M12 3.4v3.2M4.6 7.4l1.9 1.9M19.4 7.4l-1.9 1.9M2.4 12.4h2.4M19.2 12.4h2.4"/>'
+};
+function setIconHtml(set) {
+    // PIECE_FILE (letter → artwork name) is defined once below with the
+    // captured-material tray; stage-1 set icons are piece words ('rook'…).
+    const letter = SET_PIECE[set.icon];
+    if (letter) {
+        const pieceChar = letter.toUpperCase();
+        const src = (window.DoChessPieces && window.DoChessPieces.url(pieceChar, 'v24')) ||
+            `assets/pieces/white-${PIECE_FILE[letter]}.svg?v24`;
+        return `<img src="${src}" alt="" width="34" height="34" data-fallback-piece="${pieceChar}" draggable="false">`;
+    }
+    return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON_SVG[set.icon] || ICON_SVG.target}</svg>`;
+}
+function stageAccent(stage) { return STAGE_ACCENT[stage] || STAGE_ACCENT[1]; }
 
 export function showLearn() {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
@@ -52,30 +133,33 @@ export function showLearn() {
 
 function hideLearn() {
     $('learn-screen')?.classList.remove('active');
-    // Leaving Learn must not leave ?level= in the address bar — otherwise
-    // Home/Lessons keep a stale deep link and Learn nav re-opens that level
-    // instead of the picker.
-    clearLevelUrl();
-    // Reset to the picker WITHOUT re-showing: showPickerHome() calls
-    // showLearn(), which re-adds .active — stacking Learn under every
-    // legacy screen (Study, Profile, Lessons, …) navigated to mid-level.
+    // Leaving Learn must not leave ?level=/?set= in the address bar —
+    // otherwise Home/Lessons keep a stale deep link.
+    clearLearnUrl();
+    // Reset to the home view WITHOUT re-showing: showLearn() re-adds .active
+    // — stacking Learn under every legacy screen navigated to mid-level.
     $('levelview').hidden = true;
     $('learn-heading').hidden = false;
     $('picker').hidden = false;
-    renderPicker();
+    view = 'home';
+    currentSetId = null;
+    renderHome();
 }
 
-/** Keep a shareable deep link while a level is open; strip it on the picker. */
-function setLevelUrl(id) {
+/** Keep shareable deep links while a set/level is open; strip them on home. */
+function setLearnUrl({ level = null, set = null } = {}) {
     const url = new URL(location.href);
-    if (id) url.searchParams.set('level', id);
+    if (level) url.searchParams.set('level', level);
     else url.searchParams.delete('level');
+    if (set) url.searchParams.set('set', set);
+    else url.searchParams.delete('set');
     history.replaceState(null, '', url.pathname + url.search);
 }
 
-function clearLevelUrl() {
-    if (!new URLSearchParams(location.search).get('level')) return;
-    setLevelUrl(null);
+function clearLearnUrl() {
+    const p = new URLSearchParams(location.search);
+    if (!p.get('level') && !p.get('set')) return;
+    setLearnUrl();
 }
 
 /* ── Stars ───────────────────────────────────────────────────────────────
@@ -88,8 +172,6 @@ const starRow = (n) =>
     Array.from({ length: 3 }, (_, i) =>
         `<span class="${i < n ? 'on' : 'off'}">${i < n ? '★' : '☆'}</span>`).join('');
 
-function starsOf(id) { return store.state.stars[id] || 0; }
-
 /** Star burst on the picker button that just gained stars. */
 function popStars(btn) {
     if (!btn || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -97,47 +179,151 @@ function popStars(btn) {
     setTimeout(() => btn.classList.remove('just-scored'), 900);
 }
 
-function renderPicker() {
+/* ── Home view: overall progress + stage sections of set cards ────────── */
+function renderHome() {
     const pk = $('picker');
     if (!pk || !DATA) return;
-    const groups = [];
-    for (const lv of DATA.levels) {
-        let g = groups.find((x) => x.name === (lv.group || 'misc'));
-        if (!g) { g = { name: lv.group || 'misc', items: [] }; groups.push(g); }
-        g.items.push(lv);
-    }
-    pk.innerHTML = groups.map((g, gi) =>
-        `<div class="picker-group"><h2>${gi + 1}. ${esc(g.name)}</h2><div class="picker-row">` +
-        g.items.map((lv, i) => {
-            const n = starsOf(lv.id);
-            // Stagger entrance per card; pure transform+opacity.
-            const delay = Math.min(360, (gi * 4 + i) * 26);
-            const cta = n ? (n === 3 ? 'Play again' : 'Improve') : 'Start';
-            // Same three-part anatomy as a lesson card: header (title+meta),
-            // body (the goal), footer (one CTA).
-            return `<div class="lesson-card lvl-card${n ? ' solved' : ''}" style="animation-delay:${delay}ms">
-                <div class="lesson-header">
-                    <h3>${i + 1}. ${esc(T(lv.title))}</h3>
-                    <div class="lesson-meta">
-                        <span class="stars" aria-label="${n} of 3 stars">${starRow(n)}</span>
-                        <span class="lvl-par">par ${lv.par}</span>
+    view = 'home';
+    currentSetId = null;
+    const { total, done } = overallStats();
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const next = firstUnsolved();
+    const nextSet = next ? setById(next.set) : null;
+    const ctaLabel = next
+        ? (done === 0 ? 'Start learning' : `Continue · ${T(next.title)}`)
+        : 'All lessons cleared!';
+    let html = `<div class="learn-home">
+        <div class="learn-progress-panel">
+            <div class="lp-num">${done}/${total}</div>
+            <div class="lp-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Course progress">
+                <div class="lp-fill" style="width:${pct}%"></div>
+            </div>
+            <div class="lp-sub">${pct}% cleared${nextSet ? ` · next: ${esc(T(nextSet.title))}` : ''}</div>
+            <button class="btn-cta" id="continue-btn" type="button"${next ? '' : ' disabled'}>${esc(ctaLabel)}</button>
+        </div>`;
+    let gi = 0;
+    for (const stage of DATA.stages) {
+        const sets = DATA.sets.filter((s) => s.stage === stage.n);
+        if (!sets.length) continue;
+        html += `<section class="stage-block" aria-labelledby="stage-h-${stage.n}">
+            <div class="stage-head">
+                <span class="stage-n">Stage ${stage.n}</span>
+                <h3 id="stage-h-${stage.n}">${esc(T(stage.title))}</h3>
+                <p>${esc(T(stage.desc))}</p>
+            </div>
+            <div class="set-grid">`;
+        sets.forEach((set, si) => {
+            const st = setStats(set.id);
+            const spct = st.total ? Math.round((st.done / st.total) * 100) : 0;
+            const delay = Math.min(300, (gi * 3 + si) * 24);
+            const locked = st.total === 0;
+            html += `<div class="set-card${locked ? ' locked' : ''}" data-set="${esc(set.id)}" role="button" tabindex="0"
+                        style="animation-delay:${delay}ms" aria-label="${esc(T(set.title))}: ${st.done} of ${st.total} done">
+                    <div class="set-icon-wrap" data-stage="${set.stage}" aria-hidden="true">${setIconHtml(set)}</div>
+                    <div class="set-info">
+                        <h3>${esc(T(set.title))}</h3>
+                        <p>${esc(T(set.desc))}</p>
+                        <div class="set-progress">
+                            <div class="sp-bar"><div class="sp-fill" style="width:${spct}%"></div></div>
+                            <span class="sp-num">${st.done}/${st.total}${locked ? ' · soon' : ''}</span>
+                        </div>
                     </div>
+                    <button class="btn-secondary set-open" type="button" data-set-open="${esc(set.id)}"${locked ? ' disabled' : ''}>${st.done ? 'Review' : (locked ? 'Soon' : 'Open')}</button>
+                </div>`;
+        });
+        html += `</div></section>`;
+        gi++;
+    }
+    html += `</div>`;
+    pk.innerHTML = html;
+    pk.querySelectorAll('[data-set]').forEach((card) => {
+        const open = () => { if (!card.classList.contains('locked')) openSet(card.dataset.set); };
+        card.addEventListener('click', open);
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+        });
+    });
+    const cta = $('continue-btn');
+    if (cta && next) cta.addEventListener('click', () => openLevel(next.id));
+}
+
+/* ── Set view: one row per lesson (number, title, goal, difficulty, stars) ─ */
+function renderSetView(setId) {
+    const pk = $('picker');
+    const set = setById(setId);
+    if (!pk || !DATA || !set) { renderHome(); return; }
+    view = 'set';
+    currentSetId = setId;
+    const st = setStats(setId);
+    const spct = st.total ? Math.round((st.done / st.total) * 100) : 0;
+    const lvs = levelsOfSet(setId);
+    let html = `<div class="set-view">
+        <button class="btn-secondary" id="set-back" type="button">← All stages</button>
+        <div class="set-hero">
+            <div class="set-icon-wrap big" data-stage="${set.stage}" aria-hidden="true">${setIconHtml(set)}</div>
+            <div class="set-info">
+                <span class="stage-n">Stage ${set.stage}</span>
+                <h3>${esc(T(set.title))}</h3>
+                <p>${esc(T(set.desc))}</p>
+                <div class="set-progress">
+                    <div class="sp-bar"><div class="sp-fill" style="width:${spct}%"></div></div>
+                    <span class="sp-num">${st.done}/${st.total} cleared</span>
                 </div>
-                <div class="lesson-body"><p>${esc(T(lv.goalText))}</p></div>
-                <div class="lesson-footer">
-                    <button class="btn-primary lvl-open" data-lv="${esc(lv.id)}" type="button">${cta}</button>
-                </div>
-            </div>`;
-        }).join('') + `</div></div>`
-    ).join('');
-    pk.querySelectorAll('[data-lv]').forEach((b) => b.addEventListener('click', () => openLevel(b.dataset.lv)));
+            </div>
+        </div>
+        <ol class="lesson-rows">`;
+    let n = 0;
+    for (const lv of lvs) {
+        const state = stateOf(lv);
+        const isPlan = state === 'planned';
+        if (!isPlan) n++;
+        const stars = isPlan ? 0 : starsOf(lv.id);
+        const cta = state === 'done' ? 'Replay' : state === 'progress' ? 'Improve' : 'Start';
+        const delay = Math.min(320, n * 26);
+        html += `<li class="lesson-row ${state}" data-lv-row="${esc(lv.id)}" style="animation-delay:${delay}ms">
+            <span class="lr-num" aria-hidden="true">${isPlan ? '·' : n}</span>
+            <div class="lr-main">
+                <div class="lr-title">${esc(T(lv.title))}${isPlan ? '' : diffChip(lv.difficulty)}</div>
+                <div class="lr-goal">${esc(T(lv.goalText || lv.explain))}</div>
+            </div>
+            ${isPlan ? '' : `<span class="stars" aria-label="${stars} of 3 stars">${starRow(stars)}</span>`}
+            ${isPlan
+                ? `<span class="lr-soon">Coming soon</span>`
+                : `<button class="btn-primary lr-open" type="button" data-lv-open="${esc(lv.id)}">${cta}</button>`}
+        </li>`;
+    }
+    html += `</ol></div>`;
+    pk.innerHTML = html;
+    $('set-back')?.addEventListener('click', showPickerHome);
+    pk.querySelectorAll('[data-lv-open]').forEach((b) => {
+        b.addEventListener('click', (e) => { e.stopPropagation(); openLevel(b.dataset.lvOpen); });
+    });
+}
+
+function openSet(setId) {
+    if (!setById(setId)) return;
+    setLearnUrl({ set: setId });
+    showLearn();
+    $('levelview').hidden = true;
+    $('learn-heading').hidden = false;
+    $('picker').hidden = false;
+    renderSetView(setId);
+    window.scrollTo(0, 0);
 }
 
 function openLevel(id) {
     const lv = DATA.levels.find((l) => l.id === id);
-    if (!lv) return;
-    setLevelUrl(id);
+    if (!lv || lv.planned) return;
+    // Every entry counts as an attempt (tries), recorded additively.
+    try {
+        const a = store.state.attempts[id] || (store.state.attempts[id] = { tries: 0, hintsUsed: 0, solvedAt: null });
+        a.tries += 1;
+        saveProgress(store.state, store.backend);
+    } catch (_) {}
+    setLearnUrl({ level: id, set: lv.set });
     showLearn();
+    view = 'level';
+    currentSetId = lv.set || null;
     $('learn-heading').hidden = true;
     $('levelview').hidden = false;
     $('picker').hidden = true;
@@ -203,12 +389,12 @@ function openLevel(id) {
 }
 
 function showPickerHome() {
-    setLevelUrl(null);
+    clearLearnUrl();
     showLearn();
     $('levelview').hidden = true;
     $('learn-heading').hidden = false;
     $('picker').hidden = false;
-    renderPicker();
+    renderHome();
 }
 
 function firstOwnSquare() {
@@ -449,7 +635,10 @@ function buildCapturedTray() {
         item.dataset.capSq = sq;
         if (p && PIECE_FILE[p.type]) {
             const img = document.createElement('img');
-            img.src = `assets/pieces/${p.color === 'w' ? 'white' : 'black'}-${PIECE_FILE[p.type]}.svg?v24`;
+            const pc = p.color === 'w' ? p.type.toUpperCase() : p.type;
+            img.src = (window.DoChessPieces && window.DoChessPieces.url(pc, 'v24')) ||
+                `assets/pieces/${p.color === 'w' ? 'white' : 'black'}-${PIECE_FILE[p.type]}.svg?v24`;
+            img.dataset.fallbackPiece = pc;
             img.width = 20; img.height = 20;
             img.alt = `${p.color === 'w' ? 'White' : 'Black'} ${p.type} on ${sq}`;
             item.appendChild(img);
@@ -604,10 +793,22 @@ function showResult(res) {
     const s = sess.state;
     const id = s.level.id;
     const gained = res.stars > (store.state.stars[id] || 0);
+    const firstSolve = !store.state.attempts[id]?.solvedAt;
     if (gained) {
         store.state.stars[id] = res.stars;
-        saveProgress(store.state, store.backend);
     }
+    // Attempts + XP are additive and truthful: tries counted per entry in
+    // openLevel, hints/solve recorded here, XP only on the first solve.
+    try {
+        const a = store.state.attempts[id] || (store.state.attempts[id] = { tries: 0, hintsUsed: 0, solvedAt: null });
+        a.hintsUsed = Math.max(a.hintsUsed || 0, res.hintsUsed || 0);
+        if (firstSolve) {
+            a.solvedAt = new Date().toISOString();
+            if (s.level.xp) addXp(store.state, s.level.xp);
+            try { touchDay(store.state); } catch (_) {}
+        }
+        saveProgress(store.state, store.backend);
+    } catch (_) { try { saveProgress(store.state, store.backend); } catch (_) {} }
     const starsEl = $('r-stars');
     starsEl.innerHTML = starRow(res.stars);
     // Staggered pop so the stars land one after another (0/120/240ms).
@@ -735,6 +936,24 @@ export async function bootLearn() {
         if ((b.dataset.nav || '') === 'learn' || b.id === 'nav-learn') return;
         b.addEventListener('click', () => hideLearn());
     });
+    // Piece style switched in the Online lobby: the board pieces are swapped
+    // in place by js/pieces.js, but the icon/tray artwork needs a re-render.
+    window.addEventListener('dochess:pieces', () => {
+        if (!inLearn()) return;
+        if (view === 'home') renderHome();
+        else if (view === 'set' && currentSetId) renderSetView(currentSetId);
+        else if (sess) { buildCapturedTray(); syncCapturedTray(); }
+    });
+    // Cloud sync pulled newer learn progress for this account: reload the
+    // module store so stars/XP on screen match the server, not the device.
+    window.addEventListener('dochess:synced', (e) => {
+        const w = (e && e.detail && e.detail.written) || {};
+        if (!w.learn) return;
+        store = loadProgress();
+        if (!inLearn()) return;
+        if (view === 'home') renderHome();
+        else if (view === 'set' && currentSetId) renderSetView(currentSetId);
+    });
 
     try {
         // Bundle first: js/learn.bundle.js inlines the curriculum, so levels
@@ -759,8 +978,11 @@ export async function bootLearn() {
         console.error('[DoChess] levels failed to load:', e);
         return;
     }
-    const id = new URLSearchParams(location.search).get('level');
-    if (id && DATA.levels.some((l) => l.id === id)) { logMoves = []; renderLog(); openLevel(id); setLevelUrl(null); }
+    const params = new URLSearchParams(location.search);
+    const id = params.get('level');
+    const set = params.get('set');
+    if (id && DATA.levels.some((l) => l.id === id && !l.planned)) { logMoves = []; renderLog(); openLevel(id); }
+    else if (set && setById(set)) { openSet(set); }
     // play.html redirects here as index.html?level=x#learn — honor the marker
     // so the redirect actually lands on the picker instead of Home.
     else if (location.hash === '#learn') showPickerHome();

@@ -698,8 +698,10 @@ function pieceImg(piece, size) {
     const white = piece === piece.toUpperCase();
     const kind = names[piece.toLowerCase()] || 'pawn';
     const v = (window.ChessCourseApp && ChessCourseApp.assetV) ? ChessCourseApp.assetV() : 'v24';
+    const src = (window.DoChessPieces && DoChessPieces.url(piece, v)) ||
+        `assets/pieces/${white ? 'white' : 'black'}-${kind}.svg?${v}`;
     const label = (white ? 'White ' : 'Black ') + kind;
-    return `<img src="assets/pieces/${white ? 'white' : 'black'}-${kind}.svg?${v}" class="st-piece" alt="${esc(label)}" width="${size || 45}" height="${size || 45}" draggable="false" data-fallback-piece="${piece}">`;
+    return `<img src="${src}" class="st-piece" alt="${esc(label)}" width="${size || 45}" height="${size || 45}" draggable="false" data-fallback-piece="${piece}">`;
 }
 function confirmDlg({ title, body, okLabel }) {
     if (window.app && typeof window.app._confirmModal === 'function') {

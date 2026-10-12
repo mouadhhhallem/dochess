@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "stages": [
     {
       "n": 1,
@@ -12,6 +12,418 @@
         "en": "How each piece moves. Land on stars, capture targets — fewer moves, more points.",
         "fr": "Comment chaque pièce se déplace. Atteignez les étoiles, capturez les cibles — moins de coups, plus de points.",
         "ar": "كيف تتحرك كل قطعة. اجمع النجوم والتقط القطع — كلما قلّت النقلات زادت النقاط."
+      }
+    },
+    {
+      "n": 2,
+      "title": {
+        "en": "Special moves",
+        "fr": "Coups spéciaux",
+        "ar": "النقلات الخاصة"
+      },
+      "desc": {
+        "en": "Castling, en passant, and promotion — the moves that surprise beginners.",
+        "fr": "Roque, prise en passant et promotion — les coups qui surprennent.",
+        "ar": "التحصين والأخذ في المرور والترقية — نقلات تفاجئ المبتدئين."
+      }
+    },
+    {
+      "n": 3,
+      "title": {
+        "en": "Check, checkmate & stalemate",
+        "fr": "Échec, mat et patt",
+        "ar": "الكش والكش مات والتعادل بالجمود"
+      },
+      "desc": {
+        "en": "Attack the king: check, the game-ending checkmate, and the drawing stalemate.",
+        "fr": "Attaquez le roi : échec, mat et patt.",
+        "ar": "هاجم الملك: الكش والكش مات والجمود."
+      }
+    },
+    {
+      "n": 4,
+      "title": {
+        "en": "Tactics",
+        "fr": "Tactiques",
+        "ar": "الاشتباكات التكتيكية"
+      },
+      "desc": {
+        "en": "Win material with hanging pieces, pins, and discovered attacks.",
+        "fr": "Gagnez du matériel avec les pièces pendantes, les pins et les attaques découvertes.",
+        "ar": "اربح القطع عبر القطع المعلقة والتثبيت والهجوم المكتشف."
+      }
+    },
+    {
+      "n": 5,
+      "title": {
+        "en": "Strategy",
+        "fr": "Stratégie",
+        "ar": "الاستراتيجية"
+      },
+      "desc": {
+        "en": "Develop pieces, fight for the center, place rooks well, push pawns.",
+        "fr": "Développez vos pièces, luttez pour le centre, placez vos tours, poussez vos pions.",
+        "ar": "طوّر قطعك وسيطر على المركز ووضع الرخوص وأبعد البيادق."
+      }
+    },
+    {
+      "n": 6,
+      "title": {
+        "en": "Endgames",
+        "fr": "Finales",
+        "ar": "النهايات"
+      },
+      "desc": {
+        "en": "King + pawn, rook endings, and how to save a lost game.",
+        "fr": "Roi + pion, finales de tours, et comment sauver une partie perdue.",
+        "ar": "الملك والبيدق ونهايات الرخوص وكيف تُنقذ لعبة خاسرة."
+      }
+    }
+  ],
+  "sets": [
+    {
+      "id": "s1-rook",
+      "stage": 1,
+      "icon": "rook",
+      "title": {
+        "en": "Rook",
+        "fr": "Tour",
+        "ar": "الرخ"
+      },
+      "desc": {
+        "en": "Straight lines, any distance — land on every star.",
+        "fr": "Lignes droites, n’importe quelle distance.",
+        "ar": "خطوط مستقيمة بأي مسافة."
+      }
+    },
+    {
+      "id": "s1-bishop",
+      "stage": 1,
+      "icon": "bishop",
+      "title": {
+        "en": "Bishop",
+        "fr": "Fou",
+        "ar": "الفيل"
+      },
+      "desc": {
+        "en": "Diagonals forever — one color, endless reach.",
+        "fr": "Les diagonales à l’infini.",
+        "ar": "قطرات لا تنتهي — لون واحد ونطاق واسع."
+      }
+    },
+    {
+      "id": "s1-queen",
+      "stage": 1,
+      "icon": "queen",
+      "title": {
+        "en": "Queen",
+        "fr": "Dame",
+        "ar": "الوزير"
+      },
+      "desc": {
+        "en": "Rook + bishop in one — the most powerful piece.",
+        "fr": "Tour et fou en un.",
+        "ar": "رخ وفيل في قطعة واحدة."
+      }
+    },
+    {
+      "id": "s1-king",
+      "stage": 1,
+      "icon": "king",
+      "title": {
+        "en": "King",
+        "fr": "Roi",
+        "ar": "الملك"
+      },
+      "desc": {
+        "en": "One square at a time — but it rules the board.",
+        "fr": "Une case à la fois.",
+        "ar": "مربع واحد في كل نقلة."
+      }
+    },
+    {
+      "id": "s1-knight",
+      "stage": 1,
+      "icon": "knight",
+      "title": {
+        "en": "Knight",
+        "fr": "Cavalier",
+        "ar": "الحصان"
+      },
+      "desc": {
+        "en": "The L-jumper — the only piece that leaps.",
+        "fr": "Le cavalier qui saute.",
+        "ar": "القطعة الوحيدة التي تقفز."
+      }
+    },
+    {
+      "id": "s1-pawn",
+      "stage": 1,
+      "icon": "pawn",
+      "title": {
+        "en": "Pawn",
+        "fr": "Pion",
+        "ar": "البيدق"
+      },
+      "desc": {
+        "en": "Small but mighty — captures diagonally, promotes to anything.",
+        "fr": "Petit mais costaud.",
+        "ar": "صغير لكنه قوي."
+      }
+    },
+    {
+      "id": "s2-castle",
+      "stage": 2,
+      "icon": "castle",
+      "title": {
+        "en": "Castling",
+        "fr": "Roque",
+        "ar": "التحصين"
+      },
+      "desc": {
+        "en": "One move that guards the king and activates a rook.",
+        "fr": "Un coup pour protéger le roi.",
+        "ar": "نقلة واحدة تحمي الملك وتحرّك الرخ."
+      }
+    },
+    {
+      "id": "s2-ep",
+      "stage": 2,
+      "icon": "ep",
+      "title": {
+        "en": "En passant",
+        "fr": "Prise en passant",
+        "ar": "الأخذ في المرور"
+      },
+      "desc": {
+        "en": "Capture a pawn the instant it tries to slip past.",
+        "fr": "Capturez le pion au passage.",
+        "ar": "التقط البيدق لحظة عبوره."
+      }
+    },
+    {
+      "id": "s2-promo",
+      "stage": 2,
+      "icon": "crown",
+      "title": {
+        "en": "Promotion",
+        "fr": "Promotion",
+        "ar": "الترقية"
+      },
+      "desc": {
+        "en": "A pawn on the last rank becomes any piece.",
+        "fr": "Le pion devient n'importe quelle pièce.",
+        "ar": "البيدق في الرتبة الأخيرة يصبح أي قطعة."
+      }
+    },
+    {
+      "id": "s3-check",
+      "stage": 3,
+      "icon": "target",
+      "title": {
+        "en": "Check",
+        "fr": "Échec",
+        "ar": "الكش"
+      },
+      "desc": {
+        "en": "Attack the king — it must respond at once.",
+        "fr": "Attaquez le roi : réponse obligée.",
+        "ar": "هاجم الملك — لا بد من الرد فورًا."
+      }
+    },
+    {
+      "id": "s3-mate",
+      "stage": 3,
+      "icon": "mated",
+      "title": {
+        "en": "Checkmate",
+        "fr": "Échec et mat",
+        "ar": "الكش مات"
+      },
+      "desc": {
+        "en": "Check with no escape — the game ends.",
+        "fr": "Échec sans échappatoire.",
+        "ar": "كش بلا مخرج — تنتهي اللعبة."
+      }
+    },
+    {
+      "id": "s3-draw",
+      "stage": 3,
+      "icon": "flag",
+      "title": {
+        "en": "Stalemate",
+        "fr": "Patt",
+        "ar": "الجمود"
+      },
+      "desc": {
+        "en": "No moves, no check — half a point saved.",
+        "fr": "Pas de coup, pas d’échec.",
+        "ar": "لا نقلات ولا كش — يُنقذ نصف نقطة."
+      }
+    },
+    {
+      "id": "s4-hang",
+      "stage": 4,
+      "icon": "swords",
+      "title": {
+        "en": "Hanging pieces",
+        "fr": "Pièces pendantes",
+        "ar": "القطع المعلقة"
+      },
+      "desc": {
+        "en": "Undefended enemy pieces are free material.",
+        "fr": "Les pièces non défendues sont gratuites.",
+        "ar": "القطع غير المحمية مادة مجانية."
+      }
+    },
+    {
+      "id": "s4-pin",
+      "stage": 4,
+      "icon": "shield",
+      "title": {
+        "en": "Pins",
+        "fr": "Pins",
+        "ar": "التثبيت"
+      },
+      "desc": {
+        "en": "Trap a piece against something precious behind it.",
+        "fr": "Immobilisez une pièce.",
+        "ar": "ثبّت قطعة أمام قطعة ثمينة."
+      }
+    },
+    {
+      "id": "s4-plan",
+      "stage": 4,
+      "icon": "sunrise",
+      "title": {
+        "en": "Coming soon",
+        "fr": "Bientôt",
+        "ar": "قريبًا"
+      },
+      "desc": {
+        "en": "Skewers, forks, deflection & more — lessons in the workshop.",
+        "fr": "Pions fourchus, déflections…",
+        "ar": "التحاميل والشوك والتشتيت — قيد الإعداد."
+      }
+    },
+    {
+      "id": "s5-dev",
+      "stage": 5,
+      "icon": "sunrise",
+      "title": {
+        "en": "Development",
+        "fr": "Développement",
+        "ar": "التطوير"
+      },
+      "desc": {
+        "en": "Wake your pieces up before the fight begins.",
+        "fr": "Réveillez vos pièces.",
+        "ar": "أيقظ قطعك قبل بدء القتال."
+      }
+    },
+    {
+      "id": "s5-center",
+      "stage": 5,
+      "icon": "target",
+      "title": {
+        "en": "The center",
+        "fr": "Le centre",
+        "ar": "المركز"
+      },
+      "desc": {
+        "en": "Central pawns = space, scope, and options.",
+        "fr": "Pions centraux = espace.",
+        "ar": "بيادق المركز = مساحة ونطاق."
+      }
+    },
+    {
+      "id": "s5-rook",
+      "stage": 5,
+      "icon": "rook",
+      "title": {
+        "en": "Rook play",
+        "fr": "Jeu de tours",
+        "ar": "لعب الرخوص"
+      },
+      "desc": {
+        "en": "Open files and the 7th rank — rook highways.",
+        "fr": "Fiches ouvertes et 7e rangée.",
+        "ar": "الخطوط المفتوحة والرتبة السابعة."
+      }
+    },
+    {
+      "id": "s5-pawn",
+      "stage": 5,
+      "icon": "pawn",
+      "title": {
+        "en": "Pawn play",
+        "fr": "Jeu de pions",
+        "ar": "لعب البيادق"
+      },
+      "desc": {
+        "en": "Passed pawns race to promotion.",
+        "fr": "Les pions passants courent à la promotion.",
+        "ar": "البيادق المارّة تنطلق نحو الترقية."
+      }
+    },
+    {
+      "id": "s5-king",
+      "stage": 5,
+      "icon": "king",
+      "title": {
+        "en": "King activity",
+        "fr": "Activité du roi",
+        "ar": "نشاط الملك"
+      },
+      "desc": {
+        "en": "In the endgame, the king joins the attack.",
+        "fr": "En finale, le roi se bat.",
+        "ar": "في النهاية يشارك الملك في القتال."
+      }
+    },
+    {
+      "id": "s6-kp",
+      "stage": 6,
+      "icon": "crown",
+      "title": {
+        "en": "King + pawn",
+        "fr": "Roi + pion",
+        "ar": "الملك والبيدق"
+      },
+      "desc": {
+        "en": "Push the passed pawn home — the simplest win.",
+        "fr": "Poussez le pion passé.",
+        "ar": "ادفع البيدق المار إلى النهاية."
+      }
+    },
+    {
+      "id": "s6-rook",
+      "stage": 6,
+      "icon": "rook",
+      "title": {
+        "en": "Rook endings",
+        "fr": "Finales de tours",
+        "ar": "نهايات الرخوص"
+      },
+      "desc": {
+        "en": "Activity rules: hunt pawns, deliver the ladder mate.",
+        "fr": "L'activité domine.",
+        "ar": "النشاط هو الأهم: اصطد البيادق وأكمل السلّم."
+      }
+    },
+    {
+      "id": "s6-draw",
+      "stage": 6,
+      "icon": "flag",
+      "title": {
+        "en": "Drawing techniques",
+        "fr": "Techniques nulles",
+        "ar": "طرق التعادل"
+      },
+      "desc": {
+        "en": "Stalemate tricks to save lost games.",
+        "fr": "Sauvez des parties perdues.",
+        "ar": "حيل الجمود لإنقاذ الألعاب الخاسرة."
       }
     }
   ],
@@ -86,7 +498,9 @@
         "fr": "Comptez vos arrivées : chaque étoile demande son arrêt.",
         "ar": "احسب وقفاتك: كل نجمة تحتاج توقفًا."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-rook",
+      "difficulty": 2
     },
     {
       "id": "s1r-2",
@@ -153,7 +567,9 @@
         "fr": "Le roi e1 impose la colonne a. Haut, traversée, bas.",
         "ar": "ملك e1 يفرض طريق العمود a. اصعد ثم اعبر ثم انزل."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-rook",
+      "difficulty": 2
     },
     {
       "id": "s1r-3",
@@ -219,7 +635,9 @@
         "fr": "a6 est infranchissable. Rectangle : sortie, montée, retour.",
         "ar": "لا يمكن عبور a6. مستطيل: اخرج ثم اصعد ثم عُد."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-rook",
+      "difficulty": 3
     },
     {
       "id": "s1r-4",
@@ -286,7 +704,9 @@
         "fr": "Suivez la chaîne a5 → e5 → e8.",
         "ar": "اتبع السلسلة a5 ← e5 ← e8."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-rook",
+      "difficulty": 2
     },
     {
       "id": "s1r-5",
@@ -356,7 +776,9 @@
         "fr": "a8 et h1 brûlent. La route de la colonne d est sûre.",
         "ar": "a8 وh1 تحرقان. طريق العمود d آمن."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-rook",
+      "difficulty": 2
     },
     {
       "id": "s1r-6",
@@ -424,7 +846,9 @@
         "fr": "L'ordre compte : h2–b2 partagent une rangée, b2–b7 une colonne, b7–h7 une rangée.",
         "ar": "الترتيب مهم: h2–b2 في صف واحد وb2–b7 في عمود وb7–h7 في صف."
       },
-      "xp": 20
+      "xp": 20,
+      "set": "s1-rook",
+      "difficulty": 3
     },
     {
       "id": "s1b-1",
@@ -495,7 +919,9 @@
         "fr": "Restez sur la diagonale c1–h6 : e3 et g5.",
         "ar": "ابقَ على قطر c1–h6: e3 وg5."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-bishop",
+      "difficulty": 2
     },
     {
       "id": "s1b-2",
@@ -562,7 +988,9 @@
         "fr": "b2 et a3 partagent une diagonale ; e7 exige la longue route a3–f8.",
         "ar": "b2 وa3 على قطر واحد؛ e7 يحتاج طريق a3–f8 الطويل."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-bishop",
+      "difficulty": 2
     },
     {
       "id": "s1b-3",
@@ -628,7 +1056,9 @@
         "fr": "Gauche, haut, traversée, bas : a3, f8, h6, f4.",
         "ar": "يسار ثم صعود ثم عبور ثم نزول: a3 وf8 وh6 وf4."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-bishop",
+      "difficulty": 3
     },
     {
       "id": "s1b-4",
@@ -695,7 +1125,9 @@
         "fr": "Ordre : b2 d'abord, retour, puis montée e3–g5.",
         "ar": "الترتيب: b2 أولًا ثم العودة ثم الصعود e3–g5."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-bishop",
+      "difficulty": 3
     },
     {
       "id": "s1b-5",
@@ -765,7 +1197,9 @@
         "fr": "Ne touchez jamais g5 : b2, a3, f8, h6.",
         "ar": "لا تلمس g5 أبدًا: b2 ثم a3 ثم f8 ثم h6."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-bishop",
+      "difficulty": 3
     },
     {
       "id": "s1b-6",
@@ -833,7 +1267,9 @@
         "fr": "f4–h6 partagent une route, a3–e7 aussi. Traversez une fois, en c1.",
         "ar": "f4–h6 على طريق واحد وa3–e7 كذلك. اعبر مرة واحدة عبر c1."
       },
-      "xp": 20
+      "xp": 20,
+      "set": "s1-bishop",
+      "difficulty": 3
     },
     {
       "id": "s1q-1",
@@ -905,7 +1341,9 @@
         "fr": "Tout droit sur la colonne d : d4, d6, d8.",
         "ar": "مباشرة في العمود d: d4 ثم d6 ثم d8."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-queen",
+      "difficulty": 2
     },
     {
       "id": "s1q-2",
@@ -972,7 +1410,9 @@
         "fr": "Fou d'abord (h5), puis glissades de tour (a5, a8).",
         "ar": "الفيل أولًا (h5) ثم انزلاقات الرخ (a5 وa8)."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-queen",
+      "difficulty": 2
     },
     {
       "id": "s1q-3",
@@ -1038,7 +1478,9 @@
         "fr": "Autour, pas à travers : h5, d5, d6, d8.",
         "ar": "حوله لا خلاله: h5 ثم d5 ثم d6 ثم d8."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-queen",
+      "difficulty": 3
     },
     {
       "id": "s1q-4",
@@ -1105,7 +1547,9 @@
         "fr": "D'abord la colonne : d5, d7, puis vers h5.",
         "ar": "العمود أولًا: d5 ثم d7 ثم نحو h5."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-queen",
+      "difficulty": 3
     },
     {
       "id": "s1q-5",
@@ -1176,7 +1620,9 @@
         "fr": "h1, d8, h5 brûlent — passez par a1, a8, h8.",
         "ar": "h1 وd8 وh5 تحرق — سِر a1 ثم a8 ثم h8."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-queen",
+      "difficulty": 2
     },
     {
       "id": "s1q-6",
@@ -1245,7 +1691,9 @@
         "fr": "h5–a5–a8–h8–e8 : ne vous arrêtez jamais à vide.",
         "ar": "h5–a5–a8–h8–e8: لا تقف فارغًا أبدًا."
       },
-      "xp": 20
+      "xp": 20,
+      "set": "s1-queen",
+      "difficulty": 3
     },
     {
       "id": "s1k-1",
@@ -1317,7 +1765,9 @@
         "fr": "Haut, haut, haut : e2, e3, e4.",
         "ar": "اصعد اصعد اصعد: e2 ثم e3 ثم e4."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-king",
+      "difficulty": 2
     },
     {
       "id": "s1k-2",
@@ -1384,7 +1834,9 @@
         "fr": "d1, puis d2, puis e2.",
         "ar": "d1 ثم d2 ثم e2."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-king",
+      "difficulty": 2
     },
     {
       "id": "s1k-3",
@@ -1450,7 +1902,9 @@
         "fr": "Autour du pion : d2, e3, e4.",
         "ar": "حول البيدق: d2 ثم e3 ثم e4."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-king",
+      "difficulty": 2
     },
     {
       "id": "s1k-4",
@@ -1516,7 +1970,9 @@
         "fr": "xd2 d'abord (gratuit), transit e3, puis xf3.",
         "ar": "xd2 أولًا (مجاني) ثم عبور e3 ثم xf3."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-king",
+      "difficulty": 2
     },
     {
       "id": "s1k-5",
@@ -1583,7 +2039,9 @@
         "fr": "e2 et f1 brûlent. Marchez d2–e3–f2.",
         "ar": "e2 وf1 تحرقان. امشِ d2–e3–f2."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-king",
+      "difficulty": 2
     },
     {
       "id": "s1k-6",
@@ -1651,7 +2109,9 @@
         "fr": "d1–d2, traversez par e3, f2–f1.",
         "ar": "d1–d2 ثم اعبر عبر e3 ثم f2–f1."
       },
-      "xp": 20
+      "xp": 20,
+      "set": "s1-king",
+      "difficulty": 3
     },
     {
       "id": "s1n-1",
@@ -1722,7 +2182,9 @@
         "fr": "g1 vers f3 vers h4 — deux L.",
         "ar": "g1 إلى f3 إلى h4 — حرفا L."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-knight",
+      "difficulty": 2
     },
     {
       "id": "s1n-2",
@@ -1789,7 +2251,9 @@
         "fr": "e2, puis f4, puis d5.",
         "ar": "e2 ثم f4 ثم d5."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-knight",
+      "difficulty": 2
     },
     {
       "id": "s1n-3",
@@ -1858,7 +2322,9 @@
         "fr": "Oubliez e2 — volez vers f3, puis d4.",
         "ar": "انسَ e2 — طِر إلى f3 ثم d4."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-knight",
+      "difficulty": 2
     },
     {
       "id": "s1n-4",
@@ -1925,7 +2391,9 @@
         "fr": "Montez l'échelle : f3, e5, d7.",
         "ar": "اصعد السلم: f3 ثم e5 ثم d7."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-knight",
+      "difficulty": 2
     },
     {
       "id": "s1n-5",
@@ -1995,7 +2463,9 @@
         "fr": "Autour de la lave : e2, g3, h5.",
         "ar": "حول الحمم: e2 ثم g3 ثم h5."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-knight",
+      "difficulty": 2
     },
     {
       "id": "s1n-6",
@@ -2064,7 +2534,9 @@
         "fr": "f3–h4–f5–e3–d5 : chaque arrivée compte.",
         "ar": "f3–h4–f5–e3–d5: كل وقفة محسوبة."
       },
-      "xp": 20
+      "xp": 20,
+      "set": "s1-knight",
+      "difficulty": 3
     },
     {
       "id": "s1p-1",
@@ -2135,7 +2607,9 @@
         "fr": "Un pas à la fois : e3, puis e4.",
         "ar": "خطوة كل مرة: e3 ثم e4."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-pawn",
+      "difficulty": 2
     },
     {
       "id": "s1p-2",
@@ -2203,7 +2677,9 @@
         "fr": "Mangez d'abord (exd3), puis marchez (d4).",
         "ar": "كُل أولًا (exd3) ثم تقدّم (d4)."
       },
-      "xp": 10
+      "xp": 10,
+      "set": "s1-pawn",
+      "difficulty": 2
     },
     {
       "id": "s1p-3",
@@ -2269,7 +2745,9 @@
         "fr": "Tout droit est mort — capturez en d3, puis montez.",
         "ar": "المستقيم ميت — التقط إلى d3 ثم اصعد."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-pawn",
+      "difficulty": 2
     },
     {
       "id": "s1p-4",
@@ -2335,7 +2813,9 @@
         "fr": "c3, pas, b5 : dxc3, c4, cxb5.",
         "ar": "c3 ثم خطوة ثم b5: dxc3 ثم c4 ثم cxb5."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-pawn",
+      "difficulty": 2
     },
     {
       "id": "s1p-5",
@@ -2404,7 +2884,9 @@
         "fr": "dxc3, c4, cxb5, b6, b7.",
         "ar": "dxc3 ثم c4 ثم cxb5 ثم b6 ثم b7."
       },
-      "xp": 15
+      "xp": 15,
+      "set": "s1-pawn",
+      "difficulty": 3
     },
     {
       "id": "s1p-6",
@@ -2473,7 +2955,1730 @@
         "fr": "Montez, couronnez, conquérez : a7, a8, h8.",
         "ar": "اصعد وتوَّج واسُد: a7 ثم a8 ثم h8."
       },
-      "xp": 20
+      "xp": 20,
+      "set": "s1-pawn",
+      "difficulty": 2
+    },
+    {
+      "id": "s2-castle-1",
+      "stage": 2,
+      "set": "s2-castle",
+      "group": "Castling",
+      "themes": [
+        "castling",
+        "king-safety"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Castle kingside"
+      },
+      "intro": {
+        "en": "Castling tucks the king away and brings a rook to the center. One move does both!"
+      },
+      "goalText": {
+        "en": "Castle kingside — land the king on g1."
+      },
+      "fen": "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "reach": {
+          "square": "g1",
+          "piece": "k"
+        }
+      },
+      "par": 1,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "The king can jump two squares toward the rook to castle."
+        },
+        {
+          "en": "Slide the king from e1 to g1 — the rook hops over automatically."
+        },
+        {
+          "en": "Play Ke1-g1 (written O-O)."
+        }
+      ],
+      "explain": {
+        "en": "Castling moves the king two squares toward a rook, and the rook hops to the square the king crossed. It is the only move where two pieces move at once."
+      },
+      "success": {
+        "en": "Castled! The king is safe on the wing."
+      },
+      "failHint": {
+        "en": "Drag the king from e1 to g1 — not a normal one-square step."
+      },
+      "xp": 20,
+      "difficulty": 1
+    },
+    {
+      "id": "s2-castle-2",
+      "stage": 2,
+      "set": "s2-castle",
+      "group": "Castling",
+      "themes": [
+        "castling",
+        "king-safety"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Castle queenside"
+      },
+      "intro": {
+        "en": "Queenside castling sends the king to c1. Same idea, other direction."
+      },
+      "goalText": {
+        "en": "Castle queenside — land the king on c1."
+      },
+      "fen": "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "reach": {
+          "square": "c1",
+          "piece": "k"
+        }
+      },
+      "par": 1,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "The king moves toward the a-file rook this time."
+        },
+        {
+          "en": "Drag the king from e1 to c1."
+        },
+        {
+          "en": "Play Ke1-c1 (written O-O-O)."
+        }
+      ],
+      "explain": {
+        "en": "Queenside castling moves the king to c1 and the a-file rook to d1. It covers three squares the king crosses, so it needs a clear path just like kingside."
+      },
+      "success": {
+        "en": "Queenside! The rook lands on d1 ready for action."
+      },
+      "failHint": {
+        "en": "Drag the king from e1 toward the queenside rook (c1)."
+      },
+      "xp": 20,
+      "difficulty": 1
+    },
+    {
+      "id": "s2-castle-3",
+      "stage": 2,
+      "set": "s2-castle",
+      "group": "Castling",
+      "themes": [
+        "castling",
+        "king-safety",
+        "check"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "No castling through check"
+      },
+      "intro": {
+        "en": "You cannot castle through, out of, or into check. The rook eyes g1 — go the other way."
+      },
+      "goalText": {
+        "en": "The rook guards g1 — castle queenside to c1 instead."
+      },
+      "fen": "6r1/8/8/8/8/8/8/R3K2R w KQ - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "reach": {
+          "square": "c1",
+          "piece": "k"
+        }
+      },
+      "par": 1,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "Kingside castling would cross f1 and land on g1 — both attacked by the rook."
+        },
+        {
+          "en": "Only the queenside path is safe."
+        },
+        {
+          "en": "Play Ke1-c1 (O-O-O)."
+        }
+      ],
+      "explain": {
+        "en": "A king may not castle if it would pass through or land on an attacked square. With a rook firing down the g-file, kingside castling is illegal — queenside is the safe choice."
+      },
+      "success": {
+        "en": "Good read — you castled away from the fire."
+      },
+      "failHint": {
+        "en": "Kingside is illegal here (through check). Try c1."
+      },
+      "xp": 25,
+      "difficulty": 1
+    },
+    {
+      "id": "s2-ep-1",
+      "stage": 2,
+      "set": "s2-ep",
+      "group": "En passant",
+      "themes": [
+        "en-passant",
+        "pawns"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Capture en passant"
+      },
+      "intro": {
+        "en": "A pawn that just advanced two squares can be captured as if it moved one. Grab it!"
+      },
+      "goalText": {
+        "en": "Capture the black pawn on d5 en passant."
+      },
+      "fen": "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "capture": [
+          "d5"
+        ]
+      },
+      "par": 1,
+      "maxMoves": 4,
+      "hints": [
+        {
+          "en": "En passant target squares show up right after a two-square pawn push."
+        },
+        {
+          "en": "Your e5 pawn captures onto d6 — the square behind the d5 pawn."
+        },
+        {
+          "en": "Play e5-d6 (exd6 e.p.)."
+        }
+      ],
+      "explain": {
+        "en": "When a pawn advances two squares past an enemy pawn, that enemy pawn may capture it on the bypassed square — en passant (\"in passing\"). The capture lands on the square the pawn skipped."
+      },
+      "success": {
+        "en": "En passant! The sneaky pawn capture."
+      },
+      "failHint": {
+        "en": "Capture diagonally onto d6, not onto d5 directly."
+      },
+      "xp": 25,
+      "difficulty": 1
+    },
+    {
+      "id": "s2-promo-1",
+      "stage": 2,
+      "set": "s2-promo",
+      "group": "Promotion",
+      "themes": [
+        "promotion",
+        "pawns"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Promote to a queen"
+      },
+      "intro": {
+        "en": "A pawn reaching the last rank becomes any piece. A queen is usually best!"
+      },
+      "goalText": {
+        "en": "Push the pawn to e8 and promote to a queen."
+      },
+      "fen": "7k/4P3/8/8/8/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "reach": {
+          "square": "e8",
+          "piece": "p"
+        }
+      },
+      "par": 1,
+      "maxMoves": 4,
+      "hints": [
+        {
+          "en": "Pawns promote on the 8th rank (for White)."
+        },
+        {
+          "en": "Advance the e7 pawn to e8."
+        },
+        {
+          "en": "Play e7-e8 and pick the queen."
+        }
+      ],
+      "explain": {
+        "en": "When a pawn reaches the far rank it MUST promote — to a queen, rook, bishop, or knight. The queen, combining rook and bishop power, is the usual choice."
+      },
+      "success": {
+        "en": "A new queen! Biggest upgrade on the board."
+      },
+      "failHint": {
+        "en": "Move the e7 pawn to e8, then choose the queen."
+      },
+      "xp": 20,
+      "difficulty": 1
+    },
+    {
+      "id": "s2-promo-2",
+      "stage": 2,
+      "set": "s2-promo",
+      "group": "Promotion",
+      "themes": [
+        "promotion",
+        "mate",
+        "back-rank"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Promote with mate"
+      },
+      "intro": {
+        "en": "Sometimes promoting ends the game at once. Find the mating promotion."
+      },
+      "goalText": {
+        "en": "Promote on e8 — the new queen (or rook) delivers checkmate."
+      },
+      "fen": "6k1/4P1pp/8/8/8/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "mate": true
+      },
+      "par": 1,
+      "maxMoves": 4,
+      "hints": [
+        {
+          "en": "The black king is boxed in by its own pawns on f7, g7, h7."
+        },
+        {
+          "en": "A queen or rook on e8 would check along the open 8th rank."
+        },
+        {
+          "en": "Play e7-e8 and promote to queen (or rook)."
+        }
+      ],
+      "explain": {
+        "en": "Promotion is not just about material — a promoting pawn can deliver the final blow. Here the back rank is weak: a queen (or rook) on e8 checks the trapped king with no escape."
+      },
+      "success": {
+        "en": "Promotion mate! A textbook finish."
+      },
+      "failHint": {
+        "en": "Promote on e8 — a queen or rook both mate here."
+      },
+      "xp": 30,
+      "difficulty": 1
+    },
+    {
+      "id": "s2-promo-3",
+      "stage": 2,
+      "set": "s2-promo",
+      "group": "Promotion",
+      "themes": [
+        "promotion",
+        "underpromotion"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Sometimes promote to a knight"
+      },
+      "intro": {
+        "en": "Most promotions are queens — but not every promotion should be. Here only a knight works."
+      },
+      "goalText": {
+        "en": "Promote on e8 — but only a knight completes the goal."
+      },
+      "fen": "7k/4P3/8/8/8/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "reach": {
+          "square": "e8",
+          "piece": "n"
+        }
+      },
+      "par": 1,
+      "maxMoves": 4,
+      "hints": [
+        {
+          "en": "The goal demands a knight specifically — the piece type matters."
+        },
+        {
+          "en": "Advance e7-e8, then pick the knight from the menu."
+        },
+        {
+          "en": "Play e7-e8 and choose N (underpromotion)."
+        }
+      ],
+      "explain": {
+        "en": "Underpromotion means choosing a piece other than a queen. It is rare, but sometimes a knight (the only piece that can fork from a new square) or a rook (avoiding stalemate) is exactly right."
+      },
+      "success": {
+        "en": "Underpromotion! Right tool for the job."
+      },
+      "failHint": {
+        "en": "Promote to a knight, not a queen."
+      },
+      "xp": 30,
+      "difficulty": 1
+    },
+    {
+      "id": "s3-check-1",
+      "stage": 3,
+      "set": "s3-check",
+      "group": "Check",
+      "themes": [
+        "check",
+        "rook"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Give check with the rook"
+      },
+      "intro": {
+        "en": "Check attacks the king — it must move (or block/capture). Find any rook check."
+      },
+      "goalText": {
+        "en": "Move the rook to give check to the black king."
+      },
+      "fen": "4k3/8/8/8/8/8/8/R3K3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "check": true
+      },
+      "par": 1,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "A rook checks by attacking the king along a rank or file."
+        },
+        {
+          "en": "The e-file leads straight to the black king on e8."
+        },
+        {
+          "en": "Play Ra1-e1 (or any square on the e-file or 8th rank)."
+        }
+      ],
+      "explain": {
+        "en": "Check is an attack on the king. The opponent cannot ignore it — they must capture the attacker, block the line, or move the king. Rooks are natural checkers with their long straight lines."
+      },
+      "success": {
+        "en": "Check! The king must respond."
+      },
+      "failHint": {
+        "en": "Land the rook on the e-file or 8th rank to attack the king."
+      },
+      "xp": 15,
+      "difficulty": 1
+    },
+    {
+      "id": "s3-check-2",
+      "stage": 3,
+      "set": "s3-check",
+      "group": "Check",
+      "themes": [
+        "check",
+        "knight"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Give check with the knight"
+      },
+      "intro": {
+        "en": "Knights give brutal checks — they jump over everything and cannot be blocked."
+      },
+      "goalText": {
+        "en": "Jump the knight to give check to the black king."
+      },
+      "fen": "4k3/8/8/1N6/8/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "check": true
+      },
+      "par": 1,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "A knight on c7 or d6 would attack the king on e8."
+        },
+        {
+          "en": "Knights move in an L and cannot be blocked."
+        },
+        {
+          "en": "Play Nb5-c7 or Nb5-d6."
+        }
+      ],
+      "explain": {
+        "en": "Knight checks are extra dangerous because no piece can block a knight — the king itself must move (or capture). Squares like c7 and d6 are classic knight-check outposts."
+      },
+      "success": {
+        "en": "Knight check! Unstoppable by blocking."
+      },
+      "failHint": {
+        "en": "Move the knight so it attacks e8 (try c7 or d6)."
+      },
+      "xp": 15,
+      "difficulty": 1
+    },
+    {
+      "id": "s3-check-3",
+      "stage": 3,
+      "set": "s3-check",
+      "group": "Check",
+      "themes": [
+        "check",
+        "discovered"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Discovered check"
+      },
+      "intro": {
+        "en": "Slide a piece away to uncover a hidden check behind it. Devastating!"
+      },
+      "goalText": {
+        "en": "Move the knight away to reveal the rook’s check on the king."
+      },
+      "fen": "8/4k3/8/8/4N3/8/2K5/4R3 w - - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "check": true
+      },
+      "par": 1,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "The rook on e1 already stares at the king — only the knight blocks it."
+        },
+        {
+          "en": "Any knight move off the e-file unleashes the rook."
+        },
+        {
+          "en": "Play the e4 knight anywhere (e.g. Ne4-d2)."
+        }
+      ],
+      "explain": {
+        "en": "A discovered check happens when one piece moves away and uncovers an attack from a piece behind it. The moving piece is also free to go anywhere — often giving a double threat."
+      },
+      "success": {
+        "en": "Discovered check! The hidden rook fires."
+      },
+      "failHint": {
+        "en": "Move the knight off the e-file to uncover the rook."
+      },
+      "xp": 25,
+      "difficulty": 1
+    },
+    {
+      "id": "s3-mate-1",
+      "stage": 3,
+      "set": "s3-mate",
+      "group": "Checkmate",
+      "themes": [
+        "mate",
+        "back-rank"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Back-rank mate"
+      },
+      "intro": {
+        "en": "The king is trapped behind its own pawns. One rook on the back rank ends it."
+      },
+      "goalText": {
+        "en": "Deliver checkmate on the back rank."
+      },
+      "fen": "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "mate": true
+      },
+      "par": 1,
+      "maxMoves": 4,
+      "hints": [
+        {
+          "en": "The black king on g8 is blocked by its own f7, g7, h7 pawns."
+        },
+        {
+          "en": "A rook on the 8th rank checks with no escape."
+        },
+        {
+          "en": "Play Re1-e8 (Re8#)."
+        }
+      ],
+      "explain": {
+        "en": "The back-rank mate exploits pawns that never advanced, sealing the king’s escape squares. A single rook on the back rank delivers mate. Always be alert for this pattern — for both sides!"
+      },
+      "success": {
+        "en": "Back-rank mate! Textbook finish."
+      },
+      "failHint": {
+        "en": "Slide the rook to the 8th rank (e8)."
+      },
+      "xp": 25,
+      "difficulty": 1
+    },
+    {
+      "id": "s3-mate-2",
+      "stage": 3,
+      "set": "s3-mate",
+      "group": "Checkmate",
+      "themes": [
+        "mate",
+        "queen",
+        "king"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Queen + king mate"
+      },
+      "intro": {
+        "en": "With a queen and king, herd the lone king to the edge and close the net."
+      },
+      "goalText": {
+        "en": "Checkmate the black king with your queen."
+      },
+      "fen": "7k/8/5K2/8/8/8/8/6Q1 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "mate": true
+      },
+      "par": 1,
+      "maxMoves": 5,
+      "hints": [
+        {
+          "en": "The queen needs the king’s support to deliver mate safely."
+        },
+        {
+          "en": "Place the queen on g7 — right next to the king, defended by your king."
+        },
+        {
+          "en": "Play Qg1-g7 (Qg7#)."
+        }
+      ],
+      "explain": {
+        "en": "Queen-and-king mate works by shrinking the enemy king’s space to the edge, then placing the queen adjacent (supported by the king) so it checks with no capture or flight. The queen alone cannot mate — the king must help."
+      },
+      "success": {
+        "en": "Queen mate! The net is closed."
+      },
+      "failHint": {
+        "en": "Put the queen on g7, defended by your king on g6."
+      },
+      "xp": 25,
+      "difficulty": 1
+    },
+    {
+      "id": "s3-mate-3",
+      "stage": 3,
+      "set": "s3-mate",
+      "group": "Checkmate",
+      "themes": [
+        "mate",
+        "rook",
+        "king"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rook + king mate"
+      },
+      "intro": {
+        "en": "The rook mates on the edge while the king takes away the escape squares."
+      },
+      "goalText": {
+        "en": "Checkmate the black king with your rook."
+      },
+      "fen": "k7/8/1K6/8/8/8/8/7R w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "mate": true
+      },
+      "par": 1,
+      "maxMoves": 5,
+      "hints": [
+        {
+          "en": "The king on b6 already covers a7, b7, c7."
+        },
+        {
+          "en": "A rook on the 8th rank checks the cornered king."
+        },
+        {
+          "en": "Play Rh1-h8 (Rh8#)."
+        }
+      ],
+      "explain": {
+        "en": "Rook-and-king mate forces the enemy king to the edge using the friendly king as a wall, then the rook delivers a distant check along the edge rank or file."
+      },
+      "success": {
+        "en": "Rook mate! King and rook teamwork."
+      },
+      "failHint": {
+        "en": "Check along the 8th rank with Rh8."
+      },
+      "xp": 25,
+      "difficulty": 1
+    },
+    {
+      "id": "s3-mate-4",
+      "stage": 3,
+      "set": "s3-mate",
+      "group": "Checkmate",
+      "themes": [
+        "mate",
+        "queen",
+        "pawn"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Queen mate with pawn cover"
+      },
+      "intro": {
+        "en": "A pawn can take away the key escape square. Combine it with the queen."
+      },
+      "goalText": {
+        "en": "Checkmate the black king — your pawn covers the flight square."
+      },
+      "fen": "7k/8/5KP1/8/8/8/8/3Q4 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "mate": true
+      },
+      "par": 1,
+      "maxMoves": 5,
+      "hints": [
+        {
+          "en": "The pawn on g6 covers h7 — the king’s only flight square."
+        },
+        {
+          "en": "A queen on the 8th rank checks; h7 is taken by the pawn."
+        },
+        {
+          "en": "Play Qd1-d8 (Qd8#)."
+        }
+      ],
+      "explain": {
+        "en": "Mates often need a helper. Here the g6 pawn covers h7, so a queen on d8 checks along the rank with the king boxed between the queen and its own edge — no escape remains."
+      },
+      "success": {
+        "en": "Mate with a little pawn help!"
+      },
+      "failHint": {
+        "en": "Check on the 8th rank (Qd8) — the pawn guards h7."
+      },
+      "xp": 30,
+      "difficulty": 1
+    },
+    {
+      "id": "s3-draw-1",
+      "stage": 3,
+      "set": "s3-draw",
+      "group": "Stalemate",
+      "themes": [
+        "stalemate",
+        "draw"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Stalemate is a draw"
+      },
+      "intro": {
+        "en": "If the opponent has no legal move and is NOT in check, the game is drawn. Sometimes that saves you!"
+      },
+      "goalText": {
+        "en": "Stalemate the black king (no moves, not in check)."
+      },
+      "fen": "k7/8/1K6/8/8/8/2Q5/8 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "stalemate": true
+      },
+      "par": 1,
+      "maxMoves": 5,
+      "hints": [
+        {
+          "en": "Stalemate is NOT check — the queen must cover every flight square without attacking the king."
+        },
+        {
+          "en": "The king on a8 has squares a7, b7, b8 — cover all three without checking."
+        },
+        {
+          "en": "Play Qc2-c7 (Qc7 — stalemate)."
+        }
+      ],
+      "explain": {
+        "en": "Stalemate: the side to move has no legal move and their king is not in check → draw. A player losing badly can sometimes force stalemate to save half a point. The queen on c7 covers a7, b7, and b8 while leaving the king unstopped but uncheckmated."
+      },
+      "success": {
+        "en": "Stalemate — a brilliant save!"
+      },
+      "failHint": {
+        "en": "Cover a7, b7, b8 with the queen — but do NOT check the king."
+      },
+      "xp": 30,
+      "difficulty": 1
+    },
+    {
+      "id": "s4-hang-1",
+      "stage": 4,
+      "set": "s4-hang",
+      "group": "Hanging pieces",
+      "themes": [
+        "hanging",
+        "capture"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Take the hanging piece"
+      },
+      "intro": {
+        "en": "A hanging piece is undefended. Free material — just grab it."
+      },
+      "goalText": {
+        "en": "Capture the undefended black knight on d5."
+      },
+      "fen": "4k3/8/8/3n4/2B5/8/8/4K3 w - - 0 1",
+      "movePieces": [
+        "b"
+      ],
+      "goal": {
+        "capture": [
+          "d5"
+        ]
+      },
+      "par": 1,
+      "maxMoves": 4,
+      "hints": [
+        {
+          "en": "Look for enemy pieces with no defender nearby."
+        },
+        {
+          "en": "The knight on d5 is guarded by nothing."
+        },
+        {
+          "en": "Play Bc4xd5."
+        }
+      ],
+      "explain": {
+        "en": "A hanging (undefended) piece can be captured for free. Before every move, scan: can I take something the opponent cannot recapture? Here the knight on d5 sits alone."
+      },
+      "success": {
+        "en": "Clean capture — free knight!"
+      },
+      "failHint": {
+        "en": "Take the knight on d5 with the bishop."
+      },
+      "xp": 15,
+      "difficulty": 1
+    },
+    {
+      "id": "s4-hang-2",
+      "stage": 4,
+      "set": "s4-hang",
+      "group": "Hanging pieces",
+      "themes": [
+        "hanging",
+        "capture"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Win both hanging pieces"
+      },
+      "intro": {
+        "en": "Two undefended pieces line up. Take them both."
+      },
+      "goalText": {
+        "en": "Capture both hanging black pieces (bishop on d4, knight on d5)."
+      },
+      "fen": "4k3/8/8/3n4/3b4/8/8/3QK3 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "capture": [
+          "d4",
+          "d5"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 5,
+      "hints": [
+        {
+          "en": "Both black pieces sit on the d-file, stacked."
+        },
+        {
+          "en": "The queen can take them one after the other."
+        },
+        {
+          "en": "Play Qd1xd4, then Qd4xd5."
+        }
+      ],
+      "explain": {
+        "en": "When several pieces hang, take them in the order that keeps your attacks flowing. Here the queen sweeps the d-file, gobbling the bishop then the knight."
+      },
+      "success": {
+        "en": "Double harvest! Two free pieces."
+      },
+      "failHint": {
+        "en": "Take the bishop on d4 first, then the knight on d5."
+      },
+      "xp": 20,
+      "difficulty": 2
+    },
+    {
+      "id": "s4-pin-1",
+      "stage": 4,
+      "set": "s4-pin",
+      "group": "Pins",
+      "themes": [
+        "pin",
+        "capture"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Capture the pinned piece"
+      },
+      "intro": {
+        "en": "A pinned piece cannot move away — it is stuck protecting what is behind it. Win it!"
+      },
+      "goalText": {
+        "en": "The knight is pinned to the king — capture it."
+      },
+      "fen": "4k3/8/8/4n3/8/8/8/3KR3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "capture": [
+          "e5"
+        ]
+      },
+      "par": 1,
+      "maxMoves": 4,
+      "hints": [
+        {
+          "en": "The knight on e5 is pinned against the king on e8 by your rook."
+        },
+        {
+          "en": "A pinned piece cannot legally move (it would expose its king)."
+        },
+        {
+          "en": "Play Re1-e5 (Rxe5)."
+        }
+      ],
+      "explain": {
+        "en": "An absolute pin traps a piece against the king — it has zero legal moves. You can simply win it, because it cannot flee. Here the rook pins the knight to the king along the e-file."
+      },
+      "success": {
+        "en": "The pinned knight falls — free material."
+      },
+      "failHint": {
+        "en": "The knight on e5 is pinned; take it with the rook."
+      },
+      "xp": 20,
+      "difficulty": 1
+    },
+    {
+      "id": "s4-pin-2",
+      "stage": 4,
+      "set": "s4-pin",
+      "group": "Pins",
+      "themes": [
+        "pin",
+        "capture"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Pin to the queen"
+      },
+      "intro": {
+        "en": "Pins are not only against kings. A piece shielding a queen is also stuck — win it."
+      },
+      "goalText": {
+        "en": "The knight is pinned to the queen — capture it."
+      },
+      "fen": "4q3/8/8/4n3/8/8/8/2K1R3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "capture": [
+          "e5"
+        ]
+      },
+      "par": 1,
+      "maxMoves": 4,
+      "hints": [
+        {
+          "en": "The knight on e5 blocks the rook’s attack on the queen behind it."
+        },
+        {
+          "en": "Moving the knight would lose the queen — so it stays put."
+        },
+        {
+          "en": "Capture the knight on e5 with the rook (Rxe5)."
+        }
+      ],
+      "explain": {
+        "en": "A relative pin traps a piece against a valuable piece (not the king). The pinned piece can legally move, but doing so loses the piece behind it — effectively stuck. Here the knight guards the queen and pays the price."
+      },
+      "success": {
+        "en": "Relative pin converted to material."
+      },
+      "failHint": {
+        "en": "Take the pinned knight on e5."
+      },
+      "xp": 25,
+      "difficulty": 1
+    },
+    {
+      "id": "s4-skewer",
+      "stage": 4,
+      "set": "s4-plan",
+      "group": "Planned",
+      "themes": [
+        "skewer"
+      ],
+      "planned": true,
+      "title": {
+        "en": "Skewers"
+      },
+      "explain": {
+        "en": "Attack two pieces in a line: the front one flees, the back one falls."
+      },
+      "difficulty": 1
+    },
+    {
+      "id": "s4-fork",
+      "stage": 4,
+      "set": "s4-plan",
+      "group": "Planned",
+      "themes": [
+        "fork"
+      ],
+      "planned": true,
+      "title": {
+        "en": "Forks"
+      },
+      "explain": {
+        "en": "One piece attacks two targets at once — the opponent cannot save both."
+      },
+      "difficulty": 1
+    },
+    {
+      "id": "s4-remove-defender",
+      "stage": 4,
+      "set": "s4-plan",
+      "group": "Planned",
+      "themes": [
+        "defender"
+      ],
+      "planned": true,
+      "title": {
+        "en": "Remove the defender"
+      },
+      "explain": {
+        "en": "Capture the piece that guards another, then take the now-defenseless prize."
+      },
+      "difficulty": 1
+    },
+    {
+      "id": "s4-deflection",
+      "stage": 4,
+      "set": "s4-plan",
+      "group": "Planned",
+      "themes": [
+        "deflection"
+      ],
+      "planned": true,
+      "title": {
+        "en": "Deflection"
+      },
+      "explain": {
+        "en": "Force a defender away from the square or piece it must protect."
+      },
+      "difficulty": 1
+    },
+    {
+      "id": "s4-decoy",
+      "stage": 4,
+      "set": "s4-plan",
+      "group": "Planned",
+      "themes": [
+        "decoy"
+      ],
+      "planned": true,
+      "title": {
+        "en": "Decoys"
+      },
+      "explain": {
+        "en": "Lure a piece to a square where it falls victim to a fork, pin, or mate."
+      },
+      "difficulty": 1
+    },
+    {
+      "id": "s4-zwischenzug",
+      "stage": 4,
+      "set": "s4-plan",
+      "group": "Planned",
+      "themes": [
+        "zwischenzug"
+      ],
+      "planned": true,
+      "title": {
+        "en": "Zwischenzug"
+      },
+      "explain": {
+        "en": "Insert an unexpected intermediate move (often a check) before the expected recapture."
+      },
+      "difficulty": 1
+    },
+    {
+      "id": "s5-dev-1",
+      "stage": 5,
+      "set": "s5-dev",
+      "group": "Development",
+      "themes": [
+        "development",
+        "knights"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Develop both knights"
+      },
+      "intro": {
+        "en": "Knights first! They are slow to the edges and quick to the center."
+      },
+      "goalText": {
+        "en": "Develop both knights to c3 and f3."
+      },
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "movePieces": [
+        "n"
+      ],
+      "goal": {
+        "collect": [
+          "c3",
+          "f3"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "The b1 and g knights aim for c3 and f3."
+        },
+        {
+          "en": "Knights develop in one jump — no need to clear a path."
+        },
+        {
+          "en": "Play Nb1-c3, then Ng1-f3."
+        }
+      ],
+      "explain": {
+        "en": "Development means bringing pieces off the back rank into the game. Knights to c3/f3 (or c6/f6 for Black) control central squares and clear the way for castling."
+      },
+      "success": {
+        "en": "Both knights developed — nice control of the center."
+      },
+      "failHint": {
+        "en": "Land the knights on c3 and f3."
+      },
+      "xp": 20,
+      "difficulty": 2
+    },
+    {
+      "id": "s5-dev-2",
+      "stage": 5,
+      "set": "s5-dev",
+      "group": "Development",
+      "themes": [
+        "development",
+        "bishops"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Develop the bishops"
+      },
+      "intro": {
+        "en": "Bishops love open diagonals. Point them at the enemy camp."
+      },
+      "goalText": {
+        "en": "Develop both bishops to active squares (c4 and f4)."
+      },
+      "fen": "4k3/8/8/8/8/8/8/2B1KB2 w - - 0 1",
+      "movePieces": [
+        "b"
+      ],
+      "goal": {
+        "collect": [
+          "c4",
+          "f4"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "Bishops slide diagonally as far as the board allows."
+        },
+        {
+          "en": "The c1 bishop reaches c4; the f1 bishop reaches f4."
+        },
+        {
+          "en": "Play Bc1-c4, then Bf1-f4."
+        }
+      ],
+      "explain": {
+        "en": "Developing bishops to active diagonals (often pointing at the opponent’s king) is a core opening goal. On their starting squares they are passive; one move makes them powerful."
+      },
+      "success": {
+        "en": "Both bishops on active diagonals."
+      },
+      "failHint": {
+        "en": "Move the bishops to c4 and f4."
+      },
+      "xp": 20,
+      "difficulty": 2
+    },
+    {
+      "id": "s5-center-1",
+      "stage": 5,
+      "set": "s5-center",
+      "group": "Center",
+      "themes": [
+        "center",
+        "pawns"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Occupy the center"
+      },
+      "intro": {
+        "en": "Pawns in the center (d4/e4 for White) control key squares and free your pieces."
+      },
+      "goalText": {
+        "en": "Push your center pawns to d4 and e4."
+      },
+      "fen": "4k3/8/8/8/8/8/3PPPPP/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "collect": [
+          "d4",
+          "e4"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "Pawns advance one square (or two from their start)."
+        },
+        {
+          "en": "The d2 and e2 pawns are your central duo."
+        },
+        {
+          "en": "Play d2-d4 and e2-e4."
+        }
+      ],
+      "explain": {
+        "en": "Central pawns on d4/e4 (or d5/e5) grab space, control key squares, and open diagonals for bishops. Classical openings fight for this center from move one."
+      },
+      "success": {
+        "en": "Central pawns established — space and scope."
+      },
+      "failHint": {
+        "en": "Advance the d and e pawns two squares each."
+      },
+      "xp": 20,
+      "difficulty": 2
+    },
+    {
+      "id": "s5-rook-1",
+      "stage": 5,
+      "set": "s5-rook",
+      "group": "Rook play",
+      "themes": [
+        "rooks",
+        "open-files"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rooks on open files"
+      },
+      "intro": {
+        "en": "Rooks belong on open files — lanes with no pawns — where they slice into enemy territory."
+      },
+      "goalText": {
+        "en": "Move both rooks to the open d- and e-files."
+      },
+      "fen": "4k3/8/8/8/8/8/8/KR4R1 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "collect": [
+          "d1",
+          "e1"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "The d- and e-files have no pawns — they are open."
+        },
+        {
+          "en": "The b1 rook slides to d1; the g1 rook to e1."
+        },
+        {
+          "en": "Play Rb1-d1 and Rg1-e1."
+        }
+      ],
+      "explain": {
+        "en": "Rooks are strongest on open or half-open files, aiming at the enemy king and pawns. Central files (d, e) are the most prized in the opening and middlegame."
+      },
+      "success": {
+        "en": "Both rooks on open files — real pressure."
+      },
+      "failHint": {
+        "en": "Place the rooks on d1 and e1."
+      },
+      "xp": 20,
+      "difficulty": 2
+    },
+    {
+      "id": "s5-rook-2",
+      "stage": 5,
+      "set": "s5-rook",
+      "group": "Rook play",
+      "themes": [
+        "rooks",
+        "seventh-rank"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rook on the 7th"
+      },
+      "intro": {
+        "en": "A rook on the 7th rank attacks pawns from behind and cramps the enemy king."
+      },
+      "goalText": {
+        "en": "Lift the rook to the 7th rank (a7)."
+      },
+      "fen": "4k3/8/8/8/8/8/1P6/R3K3 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "reach": {
+          "square": "a7",
+          "piece": "r"
+        }
+      },
+      "par": 1,
+      "maxMoves": 5,
+      "hints": [
+        {
+          "en": "The 7th rank is the row just before the enemy’s home rank."
+        },
+        {
+          "en": "The a-file is clear in front of the rook."
+        },
+        {
+          "en": "Play Ra1-a7."
+        }
+      ],
+      "explain": {
+        "en": "Rooks on the 7th (or 2nd for Black) are famously strong: they attack the enemy pawns from behind and restrict the king to the back rank. Many attacks are built on a “rook lift” to the 7th."
+      },
+      "success": {
+        "en": "Rook established on the 7th — big pressure."
+      },
+      "failHint": {
+        "en": "Slide the a1 rook up to a7."
+      },
+      "xp": 20,
+      "difficulty": 1
+    },
+    {
+      "id": "s5-pawn-1",
+      "stage": 5,
+      "set": "s5-pawn",
+      "group": "Pawn play",
+      "themes": [
+        "passed-pawn",
+        "pawns"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Push the passed pawn"
+      },
+      "intro": {
+        "en": "A passed pawn has no enemy pawns blocking or guarding its path. Race it home!"
+      },
+      "goalText": {
+        "en": "March the passed e-pawn up to e7."
+      },
+      "fen": "7k/8/8/8/8/8/4P3/4K3 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "collect": [
+          "e7"
+        ]
+      },
+      "par": 4,
+      "maxMoves": 8,
+      "hints": [
+        {
+          "en": "No black pawn blocks or guards the e-file."
+        },
+        {
+          "en": "Pawns advance toward the 8th rank — push it!"
+        },
+        {
+          "en": "Play e2-e4, then e4-e5, e5-e6, e6-e7."
+        }
+      ],
+      "explain": {
+        "en": "A passed pawn is a potential queen. In the endgame, pushing passed pawns — supported by the king — is often the whole strategy. Here the e-pawn walks free to the 7th."
+      },
+      "success": {
+        "en": "The passed pawn is nearly a queen."
+      },
+      "failHint": {
+        "en": "Keep pushing the e-pawn up the board."
+      },
+      "xp": 25,
+      "difficulty": 3
+    },
+    {
+      "id": "s5-king-1",
+      "stage": 5,
+      "set": "s5-king",
+      "group": "King activity",
+      "themes": [
+        "king",
+        "endgame"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Centralize the king"
+      },
+      "intro": {
+        "en": "In the endgame the king becomes a fighter. Bring it to the center!"
+      },
+      "goalText": {
+        "en": "March your king to the central square e4."
+      },
+      "fen": "8/8/8/8/8/8/8/K1k5 w - - 0 1",
+      "movePieces": [
+        "k"
+      ],
+      "goal": {
+        "collect": [
+          "e4"
+        ]
+      },
+      "par": 5,
+      "maxMoves": 10,
+      "hints": [
+        {
+          "en": "The king moves one square in any direction."
+        },
+        {
+          "en": "Head diagonally toward the middle: b2, c3, d4, e4."
+        },
+        {
+          "en": "Play Ka1-b2, Kb2-c3, Kc3-d4, Kd4-e4."
+        }
+      ],
+      "explain": {
+        "en": "Early game: hide the king. Endgame: activate it! A centralized king controls squares, supports pawns, and harasses enemy pieces. Walking it to e4 is a model journey."
+      },
+      "success": {
+        "en": "King centralized — a real endgame asset."
+      },
+      "failHint": {
+        "en": "Walk the king toward the center square e4."
+      },
+      "xp": 25,
+      "difficulty": 3
+    },
+    {
+      "id": "s6-kp-1",
+      "stage": 6,
+      "set": "s6-kp",
+      "group": "King + pawn",
+      "themes": [
+        "endgame",
+        "promotion",
+        "pawn"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Escort the pawn home"
+      },
+      "intro": {
+        "en": "With no enemy pieces, just push the pawn to promotion. The king can help if needed."
+      },
+      "goalText": {
+        "en": "Push the e-pawn all the way to e8 and promote."
+      },
+      "fen": "7k/8/8/8/8/5K2/4P3/8 w - - 0 1",
+      "movePieces": [
+        "p"
+      ],
+      "goal": {
+        "reach": {
+          "square": "e8",
+          "piece": "p"
+        }
+      },
+      "par": 5,
+      "maxMoves": 10,
+      "hints": [
+        {
+          "en": "The path is clear — no black pieces in the way."
+        },
+        {
+          "en": "Advance the pawn down the e-file, square by square."
+        },
+        {
+          "en": "Play e2-e4, e4-e5, e5-e6, e6-e7, e7-e8=Q."
+        }
+      ],
+      "explain": {
+        "en": "In a pure pawn endgame, a passed pawn promotes with no opposition. Push it steadily — every step brings a new queen closer. This is the simplest winning endgame."
+      },
+      "success": {
+        "en": "The pawn promotes — game over."
+      },
+      "failHint": {
+        "en": "Keep pushing the e-pawn toward the 8th rank."
+      },
+      "xp": 25,
+      "difficulty": 3
+    },
+    {
+      "id": "s6-rook-1",
+      "stage": 6,
+      "set": "s6-rook",
+      "group": "Rook endings",
+      "themes": [
+        "endgame",
+        "rook",
+        "capture"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Rooks eat pawns"
+      },
+      "intro": {
+        "en": "Active rooks in the endgame harvest weak pawns. Grab the black pawn."
+      },
+      "goalText": {
+        "en": "Use the rook to capture the black pawn on g2."
+      },
+      "fen": "7k/8/8/8/8/8/6p1/R5K1 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "capture": [
+          "g2"
+        ]
+      },
+      "par": 2,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "The g-file and 2nd rank both lead to the pawn."
+        },
+        {
+          "en": "Bring the rook to the 2nd rank first, then take."
+        },
+        {
+          "en": "Play Ra1-a2, then Ra2-g2."
+        }
+      ],
+      "explain": {
+        "en": "Rook endgames are drawn to activity: an active rook attacks enemy pawns from the side or behind. Here the rook swings to the 2nd rank and collects the loose pawn."
+      },
+      "success": {
+        "en": "Pawn captured — activity pays off."
+      },
+      "failHint": {
+        "en": "Route the rook to g2 and take the pawn."
+      },
+      "xp": 20,
+      "difficulty": 2
+    },
+    {
+      "id": "s6-rook-2",
+      "stage": 6,
+      "set": "s6-rook",
+      "group": "Rook endings",
+      "themes": [
+        "endgame",
+        "mate",
+        "rook"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Ladder mate with two rooks"
+      },
+      "intro": {
+        "en": "Two rooks take turns checking along ranks, herding the king to the edge — the ladder."
+      },
+      "goalText": {
+        "en": "Checkmate the lone king with two rooks (the ladder)."
+      },
+      "fen": "7k/8/8/8/8/8/8/RR6 w - - 0 1",
+      "movePieces": [
+        "r"
+      ],
+      "goal": {
+        "mate": true
+      },
+      "par": 2,
+      "maxMoves": 6,
+      "hints": [
+        {
+          "en": "One rook cuts off a rank; the other checks on the next."
+        },
+        {
+          "en": "First take away the 7th rank, then check on the 8th."
+        },
+        {
+          "en": "Play Rb1-b7 (cut 7th), then Ra1-a8 (Ra8#)."
+        }
+      ],
+      "explain": {
+        "en": "The ladder mate is the fastest way to mate a lone king: one rook seals off a rank while the other checks on the next, pushing the king back rank by rank until the edge delivers mate."
+      },
+      "success": {
+        "en": "Ladder complete — checkmate!"
+      },
+      "failHint": {
+        "en": "Cut the 7th rank with one rook, mate on the 8th with the other."
+      },
+      "xp": 30,
+      "difficulty": 2
+    },
+    {
+      "id": "s6-draw-1",
+      "stage": 6,
+      "set": "s6-draw",
+      "group": "Drawing techniques",
+      "themes": [
+        "endgame",
+        "stalemate",
+        "draw"
+      ],
+      "mode": "free-move",
+      "type": "free-move",
+      "title": {
+        "en": "Save the game with stalemate"
+      },
+      "intro": {
+        "en": "Losing badly? If you have no pieces left, stalemate can steal a draw. Find it."
+      },
+      "goalText": {
+        "en": "Stalemate the black king — secure the half-point."
+      },
+      "fen": "7k/8/6K1/8/8/8/8/Q7 w - - 0 1",
+      "movePieces": [
+        "q"
+      ],
+      "goal": {
+        "stalemate": true
+      },
+      "par": 1,
+      "maxMoves": 5,
+      "hints": [
+        {
+          "en": "With only a queen left to move, stalemate is your friend."
+        },
+        {
+          "en": "Cover g8 and h7 without checking the king on h8."
+        },
+        {
+          "en": "Play Qa1-a2 (Qa2 — stalemate; the queen covers g8, your king covers h7 and g7)."
+        }
+      ],
+      "explain": {
+        "en": "When you are lost, check for stalemate tricks: leave the opponent with no legal move and no check. A queen can often force stalemate against a bare king if the defender plays accurately (here, Qa2 — the diagonal covers g8 while the king seals h7 and g7)."
+      },
+      "success": {
+        "en": "Stalemate! From lost to draw — great save."
+      },
+      "failHint": {
+        "en": "Place the queen so it covers g8 and h7 but does not check h8."
+      },
+      "xp": 30,
+      "difficulty": 1
     }
   ]
 }

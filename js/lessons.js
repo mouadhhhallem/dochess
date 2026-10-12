@@ -44,7 +44,7 @@
  *   console.table(runAllTests(lessonsJson, api));
  */
 
-export const CURRICULUM_VERSION = 1;
+export const CURRICULUM_VERSION = 2;
 export const LEVEL_TYPES = [
     'reach-square', 'capture-all', 'best-move',
     'mate-in-n', 'defend', 'avoid-stalemate',
@@ -93,8 +93,25 @@ function validateLevelSchema(lv, seen, errors, warnings) {
     seen.add(lv.id);
     if (!Number.isInteger(lv.stage)) errors.push(`${path}: stage must be an integer`);
     if (!Array.isArray(lv.themes) || lv.themes.length === 0) errors.push(`${path}: themes[] required`);
-    if (!LEVEL_TYPES.includes(lv.type)) errors.push(`${path}: unknown type ${JSON.stringify(lv.type)}`);
+    // planned lessons are skeletons ("Coming soon"): type/mode may be omitted.
+    if (lv.planned !== true && !LEVEL_TYPES.includes(lv.type)) {
+        errors.push(`${path}: unknown type ${JSON.stringify(lv.type)}`);
+    }
     t(lv.title, path, errors, warnings, 'title');
+    if (lv.set !== undefined && (typeof lv.set !== 'string' || !lv.set)) {
+        errors.push(`${path}: set must be a non-empty string`);
+    }
+    if (lv.difficulty !== undefined && !(lv.difficulty >= 1 && lv.difficulty <= 3)) {
+        errors.push(`${path}: difficulty must be 1, 2 or 3`);
+    }
+    // planned lessons: skeleton only ("Coming soon" in the UI). No FEN, goal,
+    // hints, par or xp — everything chess-specific is skipped; they are
+    // excluded from progress totals and never validated against an engine.
+    if (lv.planned === true) {
+        t(lv.explain, path, errors, warnings, 'explain');
+        if (lv.goalText !== undefined) t(lv.goalText, path, errors, warnings, 'goalText');
+        return;
+    }
     if (lv.mode === 'free-move') {
         t(lv.goalText, path, errors, warnings, 'goalText');
     } else {
@@ -121,13 +138,14 @@ function validateLevelSchema(lv, seen, errors, warnings) {
     if (lv.intro !== undefined) t(lv.intro, path, errors, warnings, 'intro');
     if (lv.mode === 'free-move') {
         const g = lv.goal && typeof lv.goal === 'object' && !Array.isArray(lv.goal) ? lv.goal : null;
-        if (!g) errors.push(`${path}: goal object required for free-move ({collect,capture,reach})`);
+        if (!g) errors.push(`${path}: goal object required for free-move ({collect,capture,reach,check,mate,stalemate})`);
         else {
             const hasCollect = Array.isArray(g.collect) && g.collect.length > 0;
             const hasCapture = Array.isArray(g.capture) && g.capture.length > 0;
             const hasReach = g.reach && typeof g.reach.square === 'string';
-            if (!hasCollect && !hasCapture && !hasReach) {
-                errors.push(`${path}: goal needs collect[], capture[] or reach.square`);
+            const hasFlag = g.check === true || g.mate === true || g.stalemate === true;
+            if (!hasCollect && !hasCapture && !hasReach && !hasFlag) {
+                errors.push(`${path}: goal needs collect[], capture[], reach.square or check/mate/stalemate true`);
             }
             for (const s of [...(g.collect || []), ...(g.capture || [])]) {
                 if (!SQ_RE.test(s)) errors.push(`${path}: bad goal square ${s}`);
@@ -137,6 +155,14 @@ function validateLevelSchema(lv, seen, errors, warnings) {
                 if (g.reach.piece !== undefined && !/^[prnbqk]$/i.test(g.reach.piece)) {
                     errors.push(`${path}: bad reach.piece`);
                 }
+            }
+            for (const flag of ['check', 'mate', 'stalemate']) {
+                if (g[flag] !== undefined && typeof g[flag] !== 'boolean') {
+                    errors.push(`${path}: goal.${flag} must be boolean`);
+                }
+            }
+            if (g.mate === true && g.stalemate === true) {
+                errors.push(`${path}: goal cannot demand both mate and stalemate`);
             }
         }
         if (lv.obstacles !== undefined && (!Array.isArray(lv.obstacles) || !lv.obstacles.every((s) => SQ_RE.test(s)))) {
@@ -186,12 +212,33 @@ export function validateSchema(data) {
     if (data.version !== CURRICULUM_VERSION) errors.push(`root: version must be ${CURRICULUM_VERSION}`);
     if (!Array.isArray(data.stages) || data.stages.length === 0) errors.push('root: stages[] required');
     if (!Array.isArray(data.levels) || data.levels.length === 0) errors.push('root: levels[] required');
+    if (!Array.isArray(data.sets) || data.sets.length === 0) errors.push('root: sets[] required');
     const stageNos = new Set((data.stages || []).map((s) => s.n));
+    const setIds = new Set();
+    for (const set of data.sets || []) {
+        if (!set || typeof set.id !== 'string' || !set.id) { errors.push('sets[]: each set needs a string id'); continue; }
+        if (setIds.has(set.id)) errors.push(`set ${set.id}: duplicate id`);
+        setIds.add(set.id);
+        if (!Number.isInteger(set.stage) || !stageNos.has(set.stage)) {
+            errors.push(`set ${set.id}: stage ${set.stage} not in stages[]`);
+        }
+        t(set.title, `set ${set.id}`, errors, warnings, 'title');
+        if (set.desc !== undefined) t(set.desc, `set ${set.id}`, errors, warnings, 'desc');
+    }
     const seen = new Set();
     for (const lv of data.levels || []) {
         validateLevelSchema(lv, seen, errors, warnings);
         if (Number.isInteger(lv.stage) && !stageNos.has(lv.stage)) {
             errors.push(`level ${lv.id}: stage ${lv.stage} not in stages[]`);
+        }
+        if (lv.set !== undefined && !setIds.has(lv.set)) {
+            errors.push(`level ${lv.id}: set ${JSON.stringify(lv.set)} not in sets[]`);
+        }
+    }
+    // Every set must own at least one level (otherwise the UI shows an empty card).
+    for (const set of data.sets || []) {
+        if (set && set.id && !(data.levels || []).some((l) => l.set === set.id)) {
+            errors.push(`set ${set.id}: no levels reference it`);
         }
     }
     return { errors, warnings };
@@ -291,6 +338,11 @@ export function solveFreeMove(level, api, maxDepth) {
             if (reach.piece && lastMove.mover !== reach.piece.toLowerCase() &&
                 lastMove.promoted !== reach.piece.toLowerCase()) return false;
         }
+        // Opponent-state goals: flags captured right after the move, before the
+        // turn rewrite — they describe the ENEMY king (check/mate/stalemate).
+        if (goal.check === true && !(lastMove && lastMove.check)) return false;
+        if (goal.mate === true && !(lastMove && lastMove.mate)) return false;
+        if (goal.stalemate === true && !(lastMove && lastMove.stalemate)) return false;
         return true;
     };
 
@@ -349,7 +401,10 @@ export function solveFreeMove(level, api, maxDepth) {
                     const capSq = rec.epCapture || m.to;
                     if (wantCapture.has(capSq)) capSet.add(capSq);
                 }
-                const lastMove = { to: m.to, mover, promoted: promo };
+                const lastMove = {
+                    to: m.to, mover, promoted: promo,
+                    check: !!(rec && rec.check), mate: !!(rec && rec.mate), stalemate: !!(rec && rec.stalemate),
+                };
                 if (goalMet(coll, capSet, lastMove)) {
                     solutions.push([...node.path, uci]);
                     if (solutions.length >= 3) {
@@ -388,6 +443,7 @@ function checkLevel(lv, api) {
     const fail = (detail) => ({ id: lv.id, type: lv.type, status: 'fail', detail });
     const pass = (detail) => ({ id: lv.id, type: lv.type, status: 'pass', detail });
     const skip = (detail) => ({ id: lv.id, type: lv.type, status: 'skip', detail });
+    if (lv.planned === true) return skip('planned lesson (Coming soon) — no engine check');
     if (lv.mode === 'free-move') {
         if (typeof api.load !== 'function' || typeof api.load(lv.fen)?.setTurn !== 'function') {
             return skip('needs full solver API (setTurn/attacked/snapshot) — chess.js adapter in batch 2');
