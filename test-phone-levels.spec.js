@@ -225,8 +225,8 @@ test('phone: focus mode is remembered and shared with Lessons', async ({ browser
     // Lessons honours the same preference.
     await page.goto('index.html');
     await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
-    await page.click('#menu-btn');
-    await page.click('#nav-lessons');
+    await page.click('[data-nav="more"]');
+    await page.click('#more-sheet [data-nav="lessons"]');
     await page.waitForTimeout(500);
     await page.click('[data-open-lesson="1"]');
     await page.waitForTimeout(1000);
@@ -259,8 +259,8 @@ test('phone: next lesson is on screen without scrolling (Lessons)', async ({ bro
     await page.goto('index.html');
     await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
     await page.evaluate(() => { window.app.markDone(1); window.app.markDone(2); });
-    await page.click('#menu-btn');
-    await page.click('#nav-lessons');
+    await page.click('[data-nav="more"]');
+    await page.click('#more-sheet [data-nav="lessons"]');
     await page.waitForTimeout(500);
     await page.click('[data-open-lesson="1"]');
     await page.waitForTimeout(1100);

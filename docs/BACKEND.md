@@ -21,6 +21,9 @@ One Node process serves **both** the static site and the API on `PORT`
 | `POST /api/games` | Clerk session | append a finished game (idempotent per user+`gameId`) |
 | `GET /api/games?limit&before` | Clerk session | paginated history, newest first |
 | `GET /api/leaderboard?cat=` | Clerk session | top players per rating category (30 s Redis cache) |
+| `POST /api/mm/join` | Clerk session | quick-match queue join (pairs closest ELO, any gap — testing mode) |
+| `GET /api/mm/poll?ticket=` | Clerk session | queue position or `{code, role, opp}` match |
+| `POST /api/mm/leave` | Clerk session | leave the quick-match queue |
 | `*` | none | static files from the project root |
 
 `server/`, `node_modules/`, `.git`, `skills/` and the screenshot folders are

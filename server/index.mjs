@@ -10,6 +10,9 @@
  *   POST /api/games               append a finished game (idempotent on gameId)
  *   GET  /api/games?limit&before  paginated game history, newest first
  *   GET  /api/leaderboard?cat=    top players for one rating category
+ *   POST /api/mm/join             quick-match queue: join (pairs closest ELO, any gap)
+ *   GET  /api/mm/poll?ticket=     quick-match queue: waiting position or match
+ *   POST /api/mm/leave            quick-match queue: leave
  *   *                             static files from the project root
  *
  * Identity is Clerk session JWTs (lib/auth.mjs). MongoDB is the permanent
@@ -26,6 +29,7 @@ import { identify, authStatus, authMode } from './lib/auth.mjs';
 import { redisStatus, rateLimit, get as rget, set as rset } from './lib/redis.mjs';
 import { sendJson, sendError, readJson, pathOf, query, cors, securityHeaders, header } from './lib/http.mjs';
 import { SECTION_MODES } from './lib/merge.mjs';
+import { createMatcher } from './lib/mm.mjs';
 
 const STARTED = Date.now();
 const VERSION = 'api-1';
@@ -199,6 +203,35 @@ async function handleLeaderboard(req, res) {
 
 /* ── router ─────────────────────────────────────────────────────────── */
 
+/* ── quick match (server/lib/mm.mjs) ─────────────────────────────
+   In-memory ELO queue shared by every searcher on this process. The uid
+   comes from the Clerk session (same identity as the rest of the API);
+   the ticket is the only capability the poller needs. */
+const MM = createMatcher();
+setInterval(() => { try { MM.sweep(); } catch (_) {} }, 30000).unref?.();
+
+async function handleMmJoin(req, res, userId) {
+    let body = {};
+    try { body = await readJson(req); } catch (e) {
+        if (e && e.code === 'BAD_JSON') { sendError(res, 400, 'bad-json'); return; }
+        throw e;
+    }
+    const r = MM.join({ uid: userId, name: body.name, elo: body.elo, cat: body.cat });
+    sendJson(res, 200, { ok: true, ...r });
+}
+
+async function handleMmPoll(req, res) {
+    const q = query(req);
+    const r = MM.poll(q.ticket);
+    sendJson(res, 200, { ok: true, ...r });
+}
+
+async function handleMmLeave(req, res) {
+    let body = {};
+    try { body = await readJson(req); } catch (_) { body = {}; }
+    sendJson(res, 200, { ok: MM.leave(body.ticket) });
+}
+
 async function handleApi(req, res) {
     const p = pathOf(req);
 
@@ -218,6 +251,9 @@ async function handleApi(req, res) {
     if (p === '/api/games' && req.method === 'POST') { await handlePostGames(req, res, id.userId); return; }
     if (p === '/api/games' && req.method === 'GET') { await handleGetGames(req, res, id.userId); return; }
     if (p === '/api/leaderboard' && req.method === 'GET') { await handleLeaderboard(req, res); return; }
+    if (p === '/api/mm/join' && req.method === 'POST') { await handleMmJoin(req, res, id.userId); return; }
+    if (p === '/api/mm/poll' && req.method === 'GET') { await handleMmPoll(req, res); return; }
+    if (p === '/api/mm/leave' && req.method === 'POST') { await handleMmLeave(req, res); return; }
 
     sendError(res, 404, 'not-found');
 }

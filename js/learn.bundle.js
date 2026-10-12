@@ -2993,10 +2993,13 @@ function restartLevel(msg) {
 
 async function bootLearn() {
     bootFocusMode();
-    bind('nav-learn', () => {
-        // Always the picker. A leftover ?level= must not trap the player on
-        // one puzzle when they tap Learn again from another screen.
-        showPickerHome();
+    // Every Learn entry (header, side rail, tab bar) opens the picker.
+    // A leftover ?level= must not trap the player on one puzzle when they
+    // tap Learn again from another screen.
+    document.querySelectorAll('#nav-learn, [data-nav="learn"]').forEach((el) => {
+        if (el.dataset.learnBound) return;
+        el.dataset.learnBound = '1';
+        el.addEventListener('click', showPickerHome);
     });
     bind('start-levels-btn', () => showPickerHome());
     bind('back-btn', showPickerHome);
@@ -3069,8 +3072,10 @@ async function bootLearn() {
         else if (k === 'n') { nextLevel(); }
     });
     // Legacy nav clicks hide Learn (app.js handlers still run untouched).
+    // The More sheet is not navigation — opening it must not hide Learn.
     document.querySelectorAll('.nav-btn').forEach((b) => {
-        if ((b.dataset.nav || '') === 'learn' || b.id === 'nav-learn') return;
+        const nv = b.dataset.nav || '';
+        if (nv === 'learn' || nv === 'more' || b.id === 'nav-learn') return;
         b.addEventListener('click', () => hideLearn());
     });
     // Piece style switched in the Online lobby: the board pieces are swapped

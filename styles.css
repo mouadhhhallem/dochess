@@ -4078,3 +4078,151 @@ body[data-theme='day'] .pz-chip.pz-offline { color: #b45309; }
         pointer-events: none;
     }
 }
+
+/* -- Lumichess-style side rail (desktop) + chess.com-style tab bar (small screens) -- */
+#side-nav, #tab-bar, #more-sheet, #more-scrim { display: none; }
+#more-sheet[hidden], #more-scrim[hidden] { display: none !important; }
+
+@media (min-width: 1025px) {
+    .header { display: none; }
+    .menu-btn { display: none; }
+    body { padding-left: 216px; }
+    #side-nav {
+        display: flex; flex-direction: column; position: fixed; z-index: 300;
+        top: 0; left: 0; bottom: 0; width: 216px;
+        background: var(--bg-card); border-right: 1px solid var(--glass-border);
+        padding: 16px 12px 12px;
+    }
+    .sn-logo {
+        display: flex; align-items: center; gap: .6rem; padding: .4rem .6rem;
+        background: none; border: 0; cursor: pointer; text-align: left; width: 100%;
+    }
+    .sn-logo img { width: 34px; height: 34px; border-radius: 8px; flex: none; }
+    .sn-logo-tx { font-weight: 800; font-size: 1.15rem; color: var(--text-main); letter-spacing: -0.01em; }
+    .sn-logo-tx em { font-style: normal; color: var(--accent-bright); }
+    .sn-links { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; flex: 1; }
+    .sn-link {
+        display: flex; align-items: center; gap: 12px; width: 100%;
+        padding: 10px 12px; border: 0; border-radius: 10px; cursor: pointer;
+        background: none; color: var(--text-muted);
+        font: inherit; font-weight: 600; font-size: .95rem; text-align: left;
+    }
+    .sn-link svg { width: 22px; height: 22px; flex: none; }
+    .sn-link:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.05); }
+    body[data-theme="day"] .sn-link:hover { background: rgba(15, 23, 42, 0.05); }
+    .sn-link.active { color: var(--accent-bright); background: rgba(212, 164, 75, 0.14); }
+    .sn-foot { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--glass-border); padding-top: 10px; }
+    .sn-foot .theme-toggle-label { font-size: .95rem; }
+}
+
+@media (max-width: 1024px) {
+    .menu-btn { display: none; }
+    body { padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+    /* Full-focus surfaces own every pixel: no tab bar, no padding strip
+       (the focus-mode dead-scroll test and the no-scroll match test pin
+       scrollHeight - innerHeight to ~0). Scoped to .active: focus classes
+       persist on hidden screens as the remembered preference, and the
+       online board DOM survives navigation mid-game. */
+    body:has(.lv-focus.screen.active),
+    body:has(#online-screen.active #online-board-wrapper) { padding-bottom: 0; }
+    body:has(.lv-focus.screen.active) #tab-bar,
+    body:has(#online-screen.active #online-board-wrapper) #tab-bar { display: none; }
+    #tab-bar {
+        display: flex; align-items: flex-end; justify-content: space-around;
+        position: fixed; z-index: 300; left: 0; right: 0; bottom: 0;
+        background: var(--bg-card); border-top: 1px solid var(--glass-border);
+        padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    }
+    .tb-link {
+        flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+        padding: 6px 0 2px; background: none; border: 0; cursor: pointer;
+        color: var(--text-muted); font: inherit; font-size: .68rem; font-weight: 700;
+    }
+    .tb-link svg { width: 24px; height: 24px; }
+    .tb-link.active { color: var(--accent-bright); }
+    .tb-play {
+        flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+        width: 62px; height: 62px; border-radius: 50%; margin: -28px 8px 0; padding: 0;
+        background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+        color: #231804; border: 0; cursor: pointer; position: relative;
+        font: inherit; font-size: .68rem; font-weight: 800;
+        box-shadow: 0 8px 24px rgba(212, 164, 75, 0.45);
+    }
+    .tb-play svg { width: 26px; height: 26px; }
+    .tb-play::after {
+        content: ""; position: absolute; inset: -4px; border-radius: 50%;
+        border: 2px solid var(--accent-glow); animation: tbPulse 2.2s ease-out infinite;
+        pointer-events: none;
+    }
+    .tb-play.active { outline: 2px solid var(--accent-bright); outline-offset: 3px; }
+    @keyframes tbPulse {
+        0% { transform: scale(0.86); opacity: 0.9; }
+        70% { transform: scale(1.1); opacity: 0; }
+        100% { transform: scale(1.1); opacity: 0; }
+    }
+    #more-scrim { display: block; position: fixed; inset: 0; z-index: 390; background: rgba(0, 0, 0, 0.5); }
+    #more-sheet {
+        display: flex; flex-direction: column; position: fixed; z-index: 391;
+        left: 0; right: 0; bottom: 0;
+        background: var(--bg-card); border-top: 1px solid var(--glass-border);
+        border-radius: 16px 16px 0 0;
+        padding: 8px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+        animation: msUp 0.22s ease-out;
+    }
+    @keyframes msUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .ms-link {
+        display: flex; align-items: center; gap: 12px; width: 100%;
+        padding: 12px 8px; background: none; border: 0; border-bottom: 1px solid var(--glass-border);
+        color: var(--text-main); font: inherit; font-weight: 600; font-size: 1rem; cursor: pointer; text-align: left;
+    }
+    .ms-link:last-child { border-bottom: 0; }
+    .ms-link svg { width: 22px; height: 22px; color: var(--accent-bright); }
+}
+
+/* -- Quick match: lobby section + searching overlay -- */
+.qm-section { border-color: rgba(212, 164, 75, 0.35); }
+.qm-myelo { color: var(--accent-bright); font-weight: 800; }
+#qm-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    display: flex; align-items: center; justify-content: center; padding: 1rem;
+    background: rgba(10, 8, 5, 0.72); backdrop-filter: blur(6px);
+    animation: qmIn 0.25s ease-out;
+}
+@keyframes qmIn { from { opacity: 0; } to { opacity: 1; } }
+.qm-card {
+    position: relative; width: min(420px, 100%); text-align: center;
+    background: var(--bg-card); border: 1px solid rgba(212, 164, 75, 0.4); border-radius: 18px;
+    padding: 2rem 1.5rem 1.5rem; overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 44px rgba(212, 164, 75, 0.12);
+    animation: qmPop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes qmPop { from { transform: scale(0.94) translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+.qm-radar { position: relative; width: 148px; height: 148px; margin: 0 auto 1rem; }
+.qm-radar::before, .qm-radar::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid var(--accent-glow); animation: qmRing 2.4s ease-out infinite;
+}
+.qm-radar::after { animation-delay: 1.2s; }
+@keyframes qmRing { 0% { transform: scale(0.35); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+.qm-knight {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    animation: qmBob 2.4s ease-in-out infinite;
+}
+.qm-knight img { width: 72px; height: 72px; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5)); }
+@keyframes qmBob { 0%, 100% { transform: translateY(-5px); } 50% { transform: translateY(5px); } }
+.qm-title { font-size: 1.25rem; font-weight: 800; color: var(--text-main); margin-bottom: .3rem; }
+.qm-sub { color: var(--text-muted); font-size: .9rem; margin-bottom: .9rem; }
+.qm-range {
+    display: inline-block; font-variant-numeric: tabular-nums; font-weight: 800;
+    color: var(--accent-bright); background: rgba(212, 164, 75, 0.12);
+    border: 1px solid rgba(212, 164, 75, 0.35); border-radius: 999px;
+    padding: .3rem .9rem; margin-bottom: .9rem;
+}
+.qm-meta { display: flex; justify-content: center; gap: 1.2rem; color: var(--text-muted); font-size: .85rem; margin-bottom: 1.1rem; font-variant-numeric: tabular-nums; }
+.qm-meta strong { color: var(--text-main); }
+.qm-cancel { width: 100%; }
+.qm-dots::after { content: ""; animation: qmDots 1.2s steps(4) infinite; }
+@keyframes qmDots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+@media (prefers-reduced-motion: reduce) {
+    .tb-play::after, .qm-radar::before, .qm-radar::after, .qm-knight, .qm-dots::after, #more-sheet { animation: none; }
+}

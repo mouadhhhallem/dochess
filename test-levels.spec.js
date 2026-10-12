@@ -104,7 +104,7 @@ test('file:// — all 66 levels load and solve (double-click index.html)', async
     const watch = watchErrors(page);
     await page.goto('index.html');
     await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
-    await page.click('#nav-learn');
+    await page.click('#side-nav [data-nav="learn"]');
     await page.waitForFunction(() => !!document.querySelector('[data-set]'), null, { timeout: 15000 });
     // Six curriculum stages on the landing page.
     expect(await page.locator('#picker .stage-block').count()).toBe(6);
@@ -127,7 +127,7 @@ test('http + real CSP — levels render without bypassCSP', async ({ browser }) 
 
     await page.goto('index.html');
     await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
-    await page.click('#nav-learn');
+    await page.click('#side-nav [data-nav="learn"]');
     await page.waitForFunction(() => !!document.querySelector('[data-set]'), null, { timeout: 15000 });
     expect(await page.locator('#picker .stage-block').count()).toBe(6);
     // Open a set: its own lesson collection appears (Coming-soon set is locked).
@@ -155,7 +155,7 @@ test('http + real CSP — levels render without bypassCSP', async ({ browser }) 
 test('curriculum navigation + persistence: set → level → back, progress survives reload', async ({ page }) => {
     await page.goto('index.html');
     await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
-    await page.click('#nav-learn');
+    await page.click('#side-nav [data-nav="learn"]');
     await page.waitForFunction(() => !!document.querySelector('[data-set]'), null, { timeout: 15000 });
     await expect(page.locator('.learn-progress-panel')).toContainText('0/66');
     // Coming-soon set exists but cannot be entered.
@@ -177,7 +177,7 @@ test('curriculum navigation + persistence: set → level → back, progress surv
     // Progress survives a full reload.
     await page.reload();
     await page.waitForFunction(() => !!window.app, null, { timeout: 15000 });
-    await page.click('#nav-learn');
+    await page.click('#side-nav [data-nav="learn"]');
     await expect(page.locator('.learn-progress-panel')).toContainText('1/66');
     await page.click('[data-set="s2-castle"]');
     await expect(page.locator('[data-lv-open="s2-castle-1"]')).toHaveText('Replay');

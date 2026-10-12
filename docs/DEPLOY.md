@@ -53,6 +53,13 @@ Promote the Clerk instance first: development instances show dev-mode walls
 and have dev-only rate limits. Create/use a **production** Clerk instance,
 put its publishable key in `clerk-config.js` and its secret key in Railway.
 
+3. Quick match before the frontend points at the API: the client tries
+   same-origin `/api/mm/*` only when the node server serves the page. On
+   GitHub Pages it falls back to P2P bucket rendezvous (works, no server
+   needed). To force the server queue on Pages, set
+   `localStorage.cc_api_base = 'https://<your-api>.up.railway.app'` in the
+   browser console (also needs the `connect-src` CSP entry from item 1).
+
 ## 3. Atlas network access, permissions, backups
 
 - Railway/Render free tiers have **no static outbound IPs**, so Atlas IP

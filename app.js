@@ -157,6 +157,8 @@ class ChessCourseApp {
         this._applyBoardSkin(this._boardSkin(), false);
         this._initAuth();
         this._bindMenu();
+        this._bindMoreSheet();
+        this._qm = null; // quick-match session (overlay, timers, ticket)
         this._bindImgFallback();
         window.addEventListener('beforeunload', () => this._flushStudyTime());
         document.addEventListener('visibilitychange', () => { if (document.hidden) this._flushStudyTime(); else this._studySince = Date.now(); });
@@ -258,6 +260,8 @@ class ChessCourseApp {
                 else if (a === 'online-join') this._onlineJoin();
                 else if (a === 'online-join-code') this._onlineJoin(action.dataset.code, true);
                 else if (a === 'online-leave') this._onlineLeave();
+                else if (a === 'online-quick') this._quickMatch();
+                else if (a === 'qm-cancel') this._quickCancel();
                 else if (a === 'online-resign-ask') this._onlineResignAsk();
                 else if (a === 'online-leave-ask') this._onlineLeaveAsk();
                 else if (a === 'online-rematch') this._onlineRematch();
@@ -1931,6 +1935,14 @@ class ChessCourseApp {
                     </div>
                     <p class="lobby-hint">Applies to every board — online games, Study, lessons, Learn and puzzles.</p>
                 </div>
+                <div class="dashboard-section qm-section">
+                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Quick match</h4>
+                    <p class="lobby-hint">Paired with a live player near your rating (<span class="qm-myelo">${signed ? OnlineRatings.get(this.userId, cur.id) : '–'}</span> ${esc(cur.name)}). No code needed — just search and play.</p>
+                    <div class="lobby-actions">
+                        <button class="btn-primary" data-action="online-quick" ${signed ? '' :
+                'disabled'}>Find opponent</button>
+                    </div>
+                </div>
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Play a friend</h4>
                     <p class="lobby-hint">Share a 6-letter code. Your tabs connect directly; the host's tab validates every move and owns both clocks. Dropped connections auto-rejoin with the same code, and every move is saved so a dead tab can resume.</p>
@@ -2194,8 +2206,11 @@ class ChessCourseApp {
                 // Unknown code: fail fast every time — no host will
                 // ever appear for it, so retries only waste a minute.
                 if (e && e.message === 'not-found') {
-                    this._onlineLeave();
-                    this._onlineLobbyMsg('No game with that code is online.', 'error');
+                    // Quick-match room probes stay silent: the searching
+                    // overlay owns the screen, so no lobby flash allowed.
+                    const silent = this._qm && this._qm.active && this._qm.silentJoin;
+                    this._onlineLeave(!silent);
+                    if (!silent) this._onlineLobbyMsg('No game with that code is online.', 'error');
                     return;
                 }
             }
@@ -2212,6 +2227,253 @@ class ChessCourseApp {
             if (c && c.code && c.code.length === 6) return c.code;
         } catch (_) {}
         return null;
+    }
+
+    /* ── Quick match: ELO-paired live opponents ──────────────────
+       Two layers, one waiting room:
+       1. Server queue (POST /api/mm/join + poll): the closest-ELO waiter
+          in the same category pairs instantly. Testing mode: ANY gap
+          pairs — a far opponent beats no opponent, and the gap is shown.
+       2. P2P bucket rendezvous (no backend needed): both searchers derive
+          the same 6-letter room from control + a 3-minute UTC window and
+          host-or-join it — the host-race loser joins. This is what makes
+          matching work on the static Pages build today; the server queue
+          wins whenever it answers. */
+    _apiBase() {
+        try {
+            const ov = localStorage.getItem('cc_api_base');
+            if (ov) return String(ov).replace(/\/+$/, '');
+        } catch (_) {}
+        // Same-origin /api exists only when the node server serves the
+        // page (local dev / Railway). GitHub Pages and file:// have none.
+        try {
+            if (location.protocol.indexOf('http') === 0 && !/\.github\.io$/.test(location.hostname)) return '';
+        } catch (_) {}
+        return null;
+    }
+
+    static quickBucketCode(catId, win) {
+        // Deterministic 6-letter room both searchers derive independently.
+        const ABC = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+        const src = `${catId}:${win}:${ChessCourseApp.APP_VERSION}`;
+        let h1 = 0x811c9dc5, h2 = 0x01000193;
+        for (let i = 0; i < src.length; i++) {
+            const c = src.charCodeAt(i);
+            h1 = Math.imul(h1 ^ c, 16777619) >>> 0;
+            h2 = Math.imul(h2 + c, 31) >>> 0;
+        }
+        let h = (BigInt(h1) << 32n) | BigInt(h2);
+        let out = '';
+        for (let i = 0; i < 6; i++) { out += ABC[Number(h % 32n)]; h /= 32n; }
+        return out;
+    }
+
+    async _quickMatch() {
+        if (!this._clerk?.user) { this._onlineLobbyMsg('Sign in to find an opponent.', 'error'); return; }
+        if (this._qm && this._qm.active) return; // already searching
+        const control = this._onlineControl();
+        const elo = OnlineRatings.get(this.userId, control.id);
+        this._qm = { active: true, done: false, silentJoin: false, t0: Date.now(), ticket: null, base: null, mode: null, range: 100, timer: null, pollTimer: null };
+        this._renderQuickOverlay(control, elo);
+        // Server queue first; P2P rendezvous when it doesn't answer.
+        const base = this._apiBase();
+        if (base !== null) {
+            try {
+                const u = this._clerk.user;
+                const joined = await this._mmJoin(base, {
+                    name: (u.fullName || u.username || 'Player'), elo, cat: control.id,
+                });
+                if (!this._qm || !this._qm.active) return;
+                if (joined && joined.ticket) {
+                    this._qm.mode = 'api';
+                    this._qm.base = base;
+                    this._qm.ticket = joined.ticket;
+                    if (joined.matched) { this._quickStartMatch(joined.matched.code, joined.matched.role, joined.matched.opp); return; }
+                    this._qmSetStatus('In the queue — closest rating pairs first.');
+                    this._qmPoll(base);
+                    return;
+                }
+            } catch (_) { /* fall through to P2P rendezvous */ }
+        }
+        if (!this._qm || !this._qm.active) return;
+        this._quickBucket(control);
+    }
+
+    _renderQuickOverlay(control, elo) {
+        this._quickCloseOverlay();
+        let knight = '';
+        try { knight = (window.DoChessPieces && window.DoChessPieces.url('N', ChessCourseApp.assetV())) || ''; } catch (_) {}
+        const div = document.createElement('div');
+        div.id = 'qm-overlay';
+        div.innerHTML = `
+            <div class="qm-card" role="dialog" aria-label="Finding opponent" aria-live="polite">
+                <div class="qm-radar"><span class="qm-knight">${knight ? `<img src="${knight}" alt="" draggable="false">` : ''}</span></div>
+                <div class="qm-title">Finding opponent<span class="qm-dots"></span></div>
+                <div class="qm-sub" id="qm-status">Contacting matchmaking…</div>
+                <div class="qm-range" id="qm-range">±100</div>
+                <div class="qm-meta"><span>You <strong>${elo}</strong></span><span>${esc(control.label || control.name || '')}</span><span><strong id="qm-time">0:00</strong></span></div>
+                <button class="btn-secondary qm-cancel" data-action="qm-cancel" type="button">Cancel search</button>
+            </div>`;
+        document.body.appendChild(div);
+        const qm = this._qm;
+        qm.timer = setInterval(() => {
+            if (!qm.active) return;
+            const s = Math.floor((Date.now() - qm.t0) / 1000);
+            qm.range = 100 + Math.floor(s / 5) * 100;
+            const t = document.getElementById('qm-time');
+            if (t) t.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+            const r = document.getElementById('qm-range');
+            if (r) r.textContent = `±${qm.range}`;
+        }, 500);
+    }
+
+    _qmSetStatus(txt) {
+        const el = document.getElementById('qm-status');
+        if (el) el.textContent = txt;
+    }
+
+    _quickCloseOverlay() {
+        const qm = this._qm;
+        if (qm) {
+            try { if (qm.timer) clearInterval(qm.timer); } catch (_) {}
+            try { if (qm.pollTimer) clearTimeout(qm.pollTimer); } catch (_) {}
+            qm.timer = null; qm.pollTimer = null;
+        }
+        try { document.getElementById('qm-overlay')?.remove(); } catch (_) {}
+    }
+
+    _quickCancel() {
+        const qm = this._qm;
+        if (!qm || !qm.active || qm.done) return;
+        qm.active = false;
+        // Tell the server queue we're gone (fire-and-forget).
+        // NOTE: base '' means same-origin — falsy but valid.
+        try {
+            if (qm.mode === 'api' && qm.ticket && qm.base !== null && qm.base !== undefined) {
+                fetch(`${qm.base}/api/mm/leave`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: qm.ticket }), keepalive: true }).catch(() => {});
+            }
+        } catch (_) {}
+        this._quickCloseOverlay();
+        this._onlineCleanup();
+        this.online = null;
+        this._qm = null;
+        this._renderOnlineLobby();
+    }
+
+    async _mmFetch(base, path, body) {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 6000);
+        try {
+            const res = await fetch(`${base}/api/mm/${path}`, {
+                method: body === undefined ? 'GET' : 'POST',
+                headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+                body: body === undefined ? undefined : JSON.stringify(body),
+                signal: ctrl.signal,
+            });
+            if (!res.ok) throw new Error('mm-http-' + res.status);
+            return await res.json();
+        } finally { clearTimeout(to); }
+    }
+
+    async _mmJoin(base, who) {
+        const r = await this._mmFetch(base, 'join', who);
+        if (!r || r.ok !== true) throw new Error('mm-join');
+        return r;
+    }
+
+    _qmPoll(base) {
+        const qm = this._qm;
+        const loop = async () => {
+            if (!qm.active) return;
+            try {
+                const r = await this._mmFetch(base, `poll?ticket=${encodeURIComponent(qm.ticket)}`);
+                if (!qm.active) return;
+                if (r && r.status === 'matched') { this._quickStartMatch(r.code, r.role, r.opp); return; }
+                if (r && r.status === 'waiting') {
+                    const bits = [];
+                    if (typeof r.position === 'number') bits.push(`#${r.position} in queue`);
+                    if (typeof r.minGap === 'number') bits.push(`closest ±${r.minGap}`);
+                    this._qmSetStatus(bits.length ? bits.join(' · ') : 'In the queue — closest rating pairs first.');
+                } else if (r && (r.status === 'expired' || r.status === 'gone')) {
+                    // Lost our seat: drop to P2P rendezvous, no dead end.
+                    qm.mode = 'bucket'; qm.ticket = null;
+                    this._quickBucket(this._onlineControl());
+                    return;
+                }
+            } catch (_) { /* one failed poll: next tick retries */ }
+            qm.pollTimer = setTimeout(loop, 1500);
+        };
+        loop();
+    }
+
+    _quickStartMatch(code, role, opp) {
+        const qm = this._qm;
+        if (!qm || !qm.active) return;
+        qm.done = true; // cancel becomes inert; overlay closes on play
+        this._qmSetStatus(opp && opp.name ? `Opponent found: ${opp.name} (${typeof opp.elo === 'number' ? opp.elo : '?'})!` : 'Opponent found!');
+        if (role === 'join') {
+            // The host needs a head start opening the room.
+            setTimeout(() => { if (this._qm && this._qm.done) this._onlineJoin(code); }, 1200);
+        } else {
+            this._onlineHost(code);
+        }
+        // If the handoff fails (lobby phase), don't strand the overlay.
+        setTimeout(() => {
+            const q2 = this._qm;
+            if (q2 && q2.done && this.online && this.online.phase === 'lobby') {
+                this._quickCloseOverlay();
+                this._qm = null;
+            }
+        }, 25000);
+    }
+
+    _quickBucket(control) {
+        const qm = this._qm;
+        if (!qm || !qm.active) return;
+        qm.mode = 'bucket';
+        qm.ticket = null;
+        qm.silentJoin = true;
+        this._qmSetStatus('Searching live rooms…');
+        const W = Math.floor(Date.now() / 180000);
+        const prev = ChessCourseApp.quickBucketCode(control.id, W - 1);
+        this._onlineJoin(prev).then(() => {
+            if (!qm.active) return;
+            // Probe connected us: hello sent, play incoming — nothing left.
+            if (this.online && this.online.phase !== 'lobby' && this.online.phase !== null) {
+                if (this.online.phase === 'play') return;
+            }
+            qm.silentJoin = false;
+            this._quickHostOrJoin(ChessCourseApp.quickBucketCode(control.id, Math.floor(Date.now() / 180000)));
+        });
+    }
+
+    async _quickHostOrJoin(code) {
+        const qm = this._qm;
+        if (!qm || !qm.active) return;
+        this._onlineCleanup();
+        const control = this._onlineControl();
+        this.online = { phase: 'waiting', role: 'host', code, control, epoch: 0, resumed: false, quick: true, net: new OnlineNet((t, m, c) => this._onNetMsg(t, m, c)) };
+        this._qmSetStatus('Room open — waiting for a rival…');
+        try {
+            await this.online.net.host(code);
+            if (!qm.active || !this.online) return;
+            this.online.epoch = OnlineStore.nextEpoch(code);
+            // Opponent arrival flows through _onNetMsg → welcome → play,
+            // and the overlay closes the moment the game starts.
+        } catch (e) {
+            if (!qm.active) return;
+            // Lost the host race: someone else opened this room — join them.
+            if (e && e.message === 'taken') {
+                this._qmSetStatus('Room found — joining…');
+                qm.silentJoin = false;
+                this._onlineJoin(code);
+                return;
+            }
+            this._quickCloseOverlay();
+            this.online = null; this._qm = null;
+            this._renderOnlineLobby();
+            this._onlineLobbyMsg('Could not open a game. Check your connection and try again.', 'error');
+        }
     }
 
     _renderOnlineWaiting(code, msg) {
@@ -2235,7 +2497,7 @@ class ChessCourseApp {
         if (el2) { el2.style.display = ''; el2.textContent = msg; el2.className = `feedback ${type}`; }
     }
 
-    _onlineLeave() {
+    _onlineLeave(renderLobby = true) {
         const s = this.online;
         // Host leaving a live game warns the peer first so it aborts
         // cleanly instead of hanging on a dead session.
@@ -2245,7 +2507,7 @@ class ChessCourseApp {
         this._clearRejoin();
         this._onlineCleanup();
         this.online = null;
-        this._renderOnlineLobby();
+        if (renderLobby) this._renderOnlineLobby();
     }
 
     _onlineCleanup() {
@@ -2851,6 +3113,11 @@ class ChessCourseApp {
 
     /* ── Online game view ── */
     _renderOnlineGame() {
+        // A quick-match game starting closes the searching room.
+        if (this._qm && this.online && this.online.phase === 'play') {
+            this._quickCloseOverlay();
+            this._qm = null;
+        }
         const s = this.online;
         const box = document.getElementById('online-content');
         if (!box || !s) return;
@@ -3841,12 +4108,13 @@ class ChessCourseApp {
     }
 
     _syncThemeButton() {
-        const btn = document.getElementById('theme-toggle');
-        if (!btn) return;
+        // Every theme toggle (header, side rail) stays in sync.
         const isDay = this.theme === 'day';
-        btn.querySelector('.theme-toggle-label').textContent = isDay ? 'Day' : 'Night';
-        btn.setAttribute('aria-pressed', isDay ? 'true' : 'false');
-        btn.title = isDay ? 'Switch to night mode' : 'Switch to day mode';
+        document.querySelectorAll('.theme-toggle').forEach((btn) => {
+            btn.querySelector('.theme-toggle-label').textContent = isDay ? 'Day' : 'Night';
+            btn.setAttribute('aria-pressed', isDay ? 'true' : 'false');
+            btn.title = isDay ? 'Switch to night mode' : 'Switch to day mode';
+        });
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -4573,6 +4841,29 @@ class ChessCourseApp {
         btn.setAttribute('aria-label', 'Open menu');
     }
 
+    // Phone "More" tab: bottom action sheet for the screens that don't fit
+    // the tab bar. Sheet items are plain .nav-btns, so navigation +
+    // highlight ride the existing handlers; this only opens/closes.
+    _bindMoreSheet() {
+        const trig = document.querySelector('#tab-bar [data-nav="more"]');
+        const sheet = document.getElementById('more-sheet');
+        const scrim = document.getElementById('more-scrim');
+        if (!trig || !sheet || !scrim || trig.dataset.moreBound) return;
+        trig.dataset.moreBound = '1';
+        const close = () => {
+            sheet.hidden = true; scrim.hidden = true;
+            trig.setAttribute('aria-expanded', 'false');
+        };
+        trig.addEventListener('click', () => {
+            const open = sheet.hidden;
+            sheet.hidden = !open; scrim.hidden = !open;
+            trig.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        sheet.addEventListener('click', (e) => { if (e.target.closest('[data-nav]')) close(); });
+        scrim.addEventListener('click', close);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    }
+
     /* ── Study time + presence (real seconds on learning screens) ── */
     _trackScreen(id) {
         this._flushStudyTime();
@@ -4640,7 +4931,8 @@ class ChessCourseApp {
         const active = navFor[id];
         document.querySelectorAll('.nav-btn').forEach(b => {
             const key = b.dataset.nav || b.textContent.trim().toLowerCase();
-            b.classList.toggle('active', key === active);
+            // Learn is module-owned (learn-screen): highlight its buttons too.
+            b.classList.toggle('active', key === active || (id === 'learn-screen' && key === 'learn'));
         });
         window.scrollTo(0, 0);
     }

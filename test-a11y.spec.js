@@ -62,7 +62,7 @@ test('a11y: skip link, live regions, named controls, keyboard board', async ({ p
   await page.setViewportSize({ width: 1280, height: 720 });
 
   // Screen switch moves focus to the new screen (no focus trap on hidden UI).
-  await page.locator('#nav-progress').click();
+  await page.locator('#side-nav [data-nav="progress"]').click();
   await expect(page.locator('#progress-screen')).toBeFocused();
 
   // Game-over card exposes a labelled dialog when a free game ends.

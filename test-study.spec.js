@@ -37,9 +37,9 @@ const studyUrl = () => `http://127.0.0.1:${PORT}/index.html`;
 test('study nav, library, board moves, variations, keyboard', async ({ page }) => {
   await page.goto('index.html');
   await page.waitForFunction(() => !!window.app && !!window.DoChessStudy, null, { timeout: 15000 });
-  await page.click('#nav-study');
+  await page.click('#side-nav [data-nav="study"]');
   await expect(page.locator('#study-screen')).toBeVisible();
-  await expect(page.locator('#nav-study')).toHaveClass(/active/);
+  await expect(page.locator('#side-nav [data-nav="study"]')).toHaveClass(/active/);
 
   // Create a study + chapter via dialogs.
   await page.click('.st-new');
@@ -90,7 +90,7 @@ test('study nav, library, board moves, variations, keyboard', async ({ page }) =
 test('study PGN import/export round-trip with comments, NAGs, variations', async ({ page }) => {
   await page.goto('index.html');
   await page.waitForFunction(() => !!window.app && !!window.DoChessStudy, null, { timeout: 15000 });
-  await page.click('#nav-study');
+  await page.click('#side-nav [data-nav="study"]');
   await page.click('.st-new');
   await page.fill('#st-dlg-input', 'Import');
   await page.click('[data-st="study-create"]');
@@ -115,7 +115,7 @@ test('study PGN import/export round-trip with comments, NAGs, variations', async
 test('study persistence across reload', async ({ page }) => {
   await page.goto('index.html');
   await page.waitForFunction(() => !!window.app && !!window.DoChessStudy, null, { timeout: 15000 });
-  await page.click('#nav-study');
+  await page.click('#side-nav [data-nav="study"]');
   await page.click('.st-new');
   await page.fill('#st-dlg-input', 'PersistMe');
   await page.click('[data-st="study-create"]');
@@ -127,7 +127,7 @@ test('study persistence across reload', async ({ page }) => {
   await page.waitForTimeout(600); // debounced save flush
   await page.reload();
   await page.waitForFunction(() => !!window.app && !!window.DoChessStudy, null, { timeout: 15000 });
-  await page.click('#nav-study');
+  await page.click('#side-nav [data-nav="study"]');
   await expect(page.locator('.st-ctitle h3')).toContainText('PersistMe');
   await expect(page.locator('#st-moves')).toContainText('e4');
 });
@@ -200,7 +200,7 @@ test('live Stockfish analysis over http (skipped if no server)', async ({ page }
   test.skip(!(await httpUp()), 'static server unavailable — Stockfish needs http, not file://');
   await page.goto(studyUrl());
   await page.waitForFunction(() => !!window.app && !!window.DoChessStudy, null, { timeout: 15000 });
-  await page.click('#nav-study');
+  await page.click('#side-nav [data-nav="study"]');
   await page.click('.st-new');
   await page.fill('#st-dlg-input', 'EngineLive');
   await page.click('[data-st="study-create"]');
@@ -220,7 +220,7 @@ test('live Stockfish analysis over http (skipped if no server)', async ({ page }
 test('study falls back honestly on file:// (no fake engine)', async ({ page }) => {
   await page.goto('index.html'); // file://: workers cannot construct
   await page.waitForFunction(() => !!window.app && !!window.DoChessStudy, null, { timeout: 15000 });
-  await page.click('#nav-study');
+  await page.click('#side-nav [data-nav="study"]');
   await page.click('.st-new');
   await page.fill('#st-dlg-input', 'Offline');
   await page.click('[data-st="study-create"]');
@@ -235,8 +235,8 @@ test('study mobile layout has no overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('index.html');
   await page.waitForFunction(() => !!window.app && !!window.DoChessStudy, null, { timeout: 15000 });
-  await page.click('#menu-btn'); // hamburger on small screens
-  await page.click('#nav-study');
+  await page.click('[data-nav="more"]'); // bottom tab bar on small screens
+  await page.click('#more-sheet [data-nav="study"]');
   await expect(page.locator('.st-mobiletabs')).toBeVisible();
   await page.click('[data-st="mtab"][data-t="library"]');
   await expect(page.locator('.st-left')).toBeVisible();
