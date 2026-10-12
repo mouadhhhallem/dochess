@@ -653,24 +653,7 @@ class ChessCourseApp {
                     <div id="lesson-feedback" class="feedback info" role="status" aria-live="polite" data-focus-hide>
                         Welcome to <strong>${esc(l.title)}</strong>! ${free ? 'You are White — make your first move!' : 'Follow the exercise above.'}
                     </div>
-                    <div class="lesson-actions" data-focus-hide>
-                        <button class="btn-secondary" data-action="reset-board">Reset Board</button>
-                        <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
-                        ${this._muteBtnHTML()}
-                        ${free ? `<label class="diff-label">Computer:
-                            <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
-                                <option value="easy" selected>Easy</option>
-                                <option value="medium">Medium</option>
-                            </select></label>` : ''}
-                        ${btn}
-                        <!-- Next stage right under the board: advancing to the
-                             following lesson never needs a trip back to the grid.
-                             Deliberately .btn-cta, NOT .btn-primary — the primary
-                             action of a lesson stays uniquely "Complete Lesson". -->
-                        <button class="btn-cta" data-action="next-lesson" id="next-lesson-btn" type="button"
-                                title="Jump to the next lesson">Next lesson →</button>
-                    </div>
-                    
+
                     <div class="profile-card player" id="profile-you" data-focus-hide>
                         <img class="avatar" src="${this._pieceFile('P')}" width="52" height="52" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
                         <div class="info">
@@ -690,6 +673,22 @@ class ChessCourseApp {
                     <div class="dashboard-section">
                         <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Move Log</h4>
                         <div class="move-log" id="move-log" role="log" aria-live="polite" aria-label="Move log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
+                    </div>
+                    <div class="lesson-actions" data-focus-hide>
+                        <button class="btn-secondary" data-action="reset-board">Reset Board</button>
+                        <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
+                        ${this._muteBtnHTML()}
+                        ${free ? `<label class="diff-label">Computer:
+                            <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
+                                <option value="easy" selected>Easy</option>
+                                <option value="medium">Medium</option>
+                            </select></label>` : ''}
+                        ${btn}
+                        <!-- Next stage sits with the controls under the Move Log.
+                             Deliberately .btn-cta, NOT .btn-primary — the primary
+                             action of a lesson stays uniquely "Complete Lesson". -->
+                        <button class="btn-cta" data-action="next-lesson" id="next-lesson-btn" type="button"
+                                title="Jump to the next lesson">Next lesson →</button>
                     </div>
                     <div id="gameover-card" style="display:none" role="dialog" aria-modal="false" aria-labelledby="gameover-title"></div>
                 </div>

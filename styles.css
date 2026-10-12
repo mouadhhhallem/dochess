@@ -1387,14 +1387,17 @@ body {
     margin-top: 2rem;
     flex-wrap: wrap;
 }
-/* Lessons: keep the advance CTA inline in the same row as the other
-   controls (Reset / Flip / Complete), pushed to the right — matching the
-   Learn screen's denser inline row (.lv-actions), so "Next: … →" is
-   visible without scrolling on a normal desktop view. */
-#lesson-screen .lesson-actions .btn-cta {
-    margin-left: auto;
-    min-width: 172px;
+/* Lessons: action controls live in the dashboard column under the Move Log
+   (a narrow ~400px sidebar), so they stack vertically full-width — not the
+   inline row used by Learn's wider board column (.lv-actions). */
+#lesson-screen .lesson-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: .6rem;
+    margin-top: 0;
 }
+#lesson-screen .lesson-actions .diff-label { justify-content: space-between; }
+#lesson-screen .lesson-actions .btn-cta { margin-left: 0; min-width: 0; }
 
 .diff-label {
     display: inline-flex;
