@@ -171,8 +171,7 @@
                 const cc = flip ? 7 - c : c;
                 const sq = rows[rr][cc];
                 const alg = rcToAlg(rr, cc);
-                const dark = (rr + cc) % 2 === 1;
-                let cls = 'chess-square' + (dark ? ' dark' : ' light');
+                let cls = 'chess-square ' + ((rr + cc) % 2 === 0 ? 'white' : 'black');
                 if (S.sel === alg) cls += ' selected';
                 if (S.lastMove && (S.lastMove[0] === alg || S.lastMove[1] === alg)) cls += ' last-move';
                 if (S.hintMove && (S.hintMove[0] === alg || S.hintMove[1] === alg)) cls += ' pz-hint';
