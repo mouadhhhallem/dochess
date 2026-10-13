@@ -362,7 +362,7 @@
     let presenceCache = { at: 0, map: {} };
     async function heartbeat() {
         try {
-            if (apiBase() === null || document.hidden) return;
+            if (apiBase() === null || document.hidden || uidOf() === 'guest') return;
             await api('presence', { name: meName() });
         } catch (_) {}
     }
@@ -677,7 +677,7 @@
                 if (!r || !Array.isArray(r.players) || !r.players.length) return;
                 if (!document.body.contains(out) || input.value !== q) return;
                 const have = new Set(search(q).rows.map((x) => x.uid));
-                const extra = r.players.filter((p) => p && p.uid && !have.has(p.uid)).map((p) => ({ uid: p.uid, name: p.name, friend: !!S.friends[p.uid], rating: null, img: p.img || null, fromServer: true }));
+                const extra = r.players.filter((p) => p && p.uid && !have.has(p.uid)).map((p) => ({ uid: p.uid, name: p.name, friend: !!(p.friend || S.friends[p.uid]), rating: null, img: p.img || null, fromServer: true }));
                 if (extra.length) renderFound(search(q).rows, extra);
             } catch (_) {}
         };
@@ -856,6 +856,7 @@
     /* ── boot ───────────────────────────────────────────────── */
     try { renderBell(); } catch (_) {}
     try { warnStreaks(); } catch (_) {}
+    setTimeout(() => { try { heartbeat(); } catch (_) {} }, 5000);
     setInterval(() => { try { warnStreaks(); } catch (_) {} }, 3600000);
 
     window.DoChessFriends = {

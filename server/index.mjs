@@ -43,6 +43,7 @@ import { sendJson, sendError, readJson, pathOf, query, cors, securityHeaders, he
 import { SECTION_MODES } from './lib/merge.mjs';
 import { createMatcher } from './lib/mm.mjs';
 import { createFriendStore } from './lib/friends.mjs';
+import { clerkSearch, mergeDirectory } from './lib/clerkdir.mjs';
 
 const STARTED = Date.now();
 const VERSION = 'api-1';
@@ -267,9 +268,22 @@ async function handleFriendAdd(req, res, userId) {
     sendJson(res, 200, { ok: true, ...r });
 }
 
-async function handleDirectory(req, res) {
+async function handleDirectory(req, res, userId) {
     const q = query(req);
-    sendJson(res, 200, { ok: true, players: FR.lookup(typeof q.q === 'string' ? q.q : '') });
+    const term = typeof q.q === 'string' ? q.q : '';
+    // Local directory: everyone who touched friends/rank/presence/sync.
+    const local = FR.lookup(term);
+    let players = local.map((p) => ({ ...p, friend: false }));
+    // Clerk directory: EVERY registered user, friend or not. Merged with
+    // local wins; strangers stay name+photo only (no emails, ever).
+    try {
+        const remote = await clerkSearch(term);
+        if (remote.length) {
+            const mine = new Set((FR.listEdges(userId) || []).map((f) => f.uid));
+            players = mergeDirectory(players, remote, [...mine]);
+        }
+    } catch (_) {}
+    sendJson(res, 200, { ok: true, players });
 }
 
 async function handleFriendRemove(req, res, userId) {
@@ -350,7 +364,7 @@ async function handleApi(req, res) {
     if (p === '/api/friends/add' && req.method === 'POST') { await handleFriendAdd(req, res, id.userId); return; }
     if (p === '/api/friends/remove' && req.method === 'POST') { await handleFriendRemove(req, res, id.userId); return; }
     if (p === '/api/friends/list' && req.method === 'GET') { sendJson(res, 200, { ok: true, friends: FR.listEdges(id.userId) }); return; }
-    if (p === '/api/directory' && req.method === 'GET') { await handleDirectory(req, res); return; }
+    if (p === '/api/directory' && req.method === 'GET') { await handleDirectory(req, res, id.userId); return; }
     if (p === '/api/presence' && req.method === 'POST') { await handlePresence(req, res, id.userId); return; }
     if (p === '/api/friends/status' && req.method === 'GET') { await handleFriendStatus(req, res); return; }
     if (p === '/api/notify' && req.method === 'POST') { await handleNotify(req, res, id.userId); return; }

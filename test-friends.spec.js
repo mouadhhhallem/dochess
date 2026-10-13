@@ -199,11 +199,12 @@ test('server directory finds strangers the device never met', async ({ browser }
         window.app._setUser('fr_u1');
     });
     await page.waitForTimeout(3600);
-    await page.route('https://api.stub/api/directory*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, players: [{ uid: 'srv_zed', name: 'Zelda', img: null }] }) }));
+    await page.route('https://api.stub/api/directory*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, players: [{ uid: 'srv_zed', name: 'Zelda', img: 'https://x.test/zelda.png' }] }) }));
     await page.evaluate(() => window.app.showFriends());
     await page.locator('#fr-search').fill('zelda');
     await expect(page.locator('#fr-results')).toContainText('Zelda');
     await expect(page.locator('#fr-results')).toContainText('DoChess');
+    await expect(page.locator('#fr-results img.fr-avaimg[src="https://x.test/zelda.png"]')).toBeVisible();
     await page.close();
 });
 
