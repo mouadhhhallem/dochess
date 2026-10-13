@@ -93,15 +93,22 @@
     async function api(path, body) {
         const base = apiBase();
         if (base === null) throw new Error('no-api');
+        const headers = body === undefined ? {} : { 'Content-Type': 'application/json' };
+        try {
+            const t = await sessionToken();
+            if (t) headers['Authorization'] = 'Bearer ' + t;
+        } catch (_) {}
         const ctrl = new AbortController();
         const to = setTimeout(() => ctrl.abort(), 7000);
         try {
             const res = await fetch(`${base}/api/${path}`, {
                 method: body === undefined ? 'GET' : 'POST',
-                headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+                headers,
+                credentials: 'same-origin',
                 body: body === undefined ? undefined : JSON.stringify(body),
                 signal: ctrl.signal,
             });
+            if (res.status === 401 || res.status === 403) authState = 'signed-out';
             if (!res.ok) throw new Error('http-' + res.status);
             return await res.json();
         } finally { clearTimeout(to); }
@@ -360,10 +367,24 @@
 
     /* ── presence ───────────────────────────────────────────── */
     let presenceCache = { at: 0, map: {} };
+    let tokenCache = { at: 0, token: null };
+    // 'signed-in' | 'signed-out' | 'unknown' — drives search UI states.
+    let authState = 'unknown';
+    async function sessionToken() {
+        try {
+            if (Date.now() - tokenCache.at < 30000 && tokenCache.token) return tokenCache.token;
+            const clerk = window.app && window.app._clerk;
+            const sess = clerk && clerk.session;
+            if (!sess || typeof sess.getToken !== 'function') { authState = (clerk && clerk.user) ? authState : 'signed-out'; return null; }
+            const t = await sess.getToken();
+            if (t) { tokenCache = { at: Date.now(), token: t }; authState = 'signed-in'; return t; }
+        } catch (_) {}
+        return null;
+    }
     async function heartbeat() {
         try {
             if (apiBase() === null || document.hidden || uidOf() === 'guest') return;
-            await api('presence', { name: meName() });
+            await api('presence', { name: meName(), img: myAvatar() });
         } catch (_) {}
     }
     setInterval(heartbeat, 45000);
@@ -666,9 +687,11 @@
                 const tag = p.pending ? 'requested' : (p.friend ? 'friend' : (p.fromServer ? 'DoChess' : 'met over the board'));
                 return '<div class="fr-card mini">' + avatarHTML(p.name, null, p.img) + '<div class="fr-id"><strong>' + esc(p.name) + '</strong>'
                 + '<span class="fr-sub">' + tag + (p.rating ? ' · ' + p.rating : '') + '</span></div>'
-                + ((p.friend || p.uid === uidOf()) ? '' : '<button class="btn-secondary sm" data-faction="add" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '" type="button">Add</button>') + '</div>';
+                + ((p.friend || p.uid === uidOf()) ? '' : '<button class="btn-secondary sm" data-faction="add" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '"' + (p.img ? ' data-img="' + esc(p.img) + '"' : '') + ' type="button">Add</button>') + '</div>';
             }).join('') + '</div>'
-                : '<p class="fr-empty">Nobody by that name — yet. Share your invite link instead.</p>';
+                : (authState === 'signed-out'
+                    ? '<div class="fr-empty">Sign in to search <strong>all</strong> DoChess players.<br><br><button class="btn-primary sm" data-action="profile-signin" type="button">Sign in / Join</button></div>'
+                    : '<p class="fr-empty">Nobody by that name — yet. Share your invite link instead.</p>');
         };
         const serverMerge = async (q) => {
             try {
@@ -812,7 +835,7 @@
         }
         if (a === 'add') {
             if (S.pendingIn.some((p) => p.uid === uid)) acceptFriend(uid);
-            else addFriend(uid, el.dataset.name, 'search');
+            else addFriend(uid, el.dataset.name, 'search', el.dataset.img || null);
             open(currentTab); return;
         }
         if (a === 'accept') { acceptFriend(uid); open(currentTab); return; }
@@ -864,7 +887,7 @@
         addFriend, acceptFriend, removeFriend, search, streakOf, versus,
         list: () => Object.values(S.friends),
         unread, inbox: () => S.inbox.slice(),
-        tierOf, rankBoard, hallList,
+        tierOf, rankBoard, hallList, authState: () => authState,
         apiBase, version: 1,
     };
 })();

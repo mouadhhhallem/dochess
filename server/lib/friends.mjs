@@ -103,11 +103,11 @@ export function createFriendStore() {
         }).sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    function heartbeat(uid, name) {
+    function heartbeat(uid, name, img) {
         uid = cleanUid(uid);
         if (!uid) return false;
         presence.set(uid, { name: cleanName(name), at: Date.now() });
-        register(uid, name, null);
+        register(uid, name, img);
         return true;
     }
 

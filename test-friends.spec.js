@@ -1,4 +1,81 @@
 import { test, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+
+// Full-stack proof (dev-auth API + file store, no mongo needed): two
+// strangers register via heartbeat; one finds the other by name with
+// photo, adds straight from results — no invite link, no prior contact.
+const E2E_PORT = 8898;
+const E2E_API = `http://127.0.0.1:${E2E_PORT}`;
+let apiProc = null;
+async function startDevApi() {
+    if (apiProc) return;
+    apiProc = spawn('node', ['server/index.mjs'], {
+        cwd: process.cwd(),
+        env: { ...process.env, PORT: String(E2E_PORT), DOCHESS_DEV_NO_AUTH: '1', DOCHESS_DEV_FILE_STORE: '1' },
+        stdio: 'ignore',
+    });
+    const deadline = Date.now() + 30000;
+    for (;;) {
+        try {
+            const h = await (await fetch(`${E2E_API}/api/health`)).json();
+            if (h && h.ok) break;
+        } catch (_) {}
+        if (Date.now() > deadline) throw new Error('dev api did not start');
+        await new Promise((r) => setTimeout(r, 400));
+    }
+}
+async function stopDevApi() {
+    if (apiProc) { try { apiProc.kill(); } catch (_) {} apiProc = null; }
+}
+
+test('global search end-to-end: stranger found by name with photo, added', async ({ browser }) => {
+    test.setTimeout(180000);
+    await startDevApi();
+    try {
+        const mk = async (uid, name, img) => {
+            const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+            await page.goto(`${E2E_API}/`);
+            await page.waitForFunction(() => !!window.app && !!window.DoChessFriends, null, { timeout: 20000 });
+            await page.evaluate(() => localStorage.clear());
+            await page.reload();
+            await page.waitForFunction(() => !!window.app && !!window.DoChessFriends, null, { timeout: 20000 });
+            await page.evaluate(([id, nm, photo]) => {
+                window.app._clerk = { user: { id, fullName: nm, imageUrl: photo || null }, openSignIn() {}, signOut() {}, addListener() {}, mountUserButton() {} };
+                window.app._setUser(id);
+            }, [uid, name, img || null]);
+            // Dev auth travels as a header (no Clerk session in tests).
+            await page.route('**/api/**', (r) => {
+                const headers = { ...r.request().headers(), 'x-dochess-user': uid };
+                r.continue({ headers });
+            });
+            return page;
+        };
+        const A = await mk('user_e2ealice01', 'Alice Wonder', null);
+        const B = await mk('user_e2ebob02', 'Bobby Tables', 'https://x.test/bob.png');
+        // Both register through the boot heartbeat (friends screen unopened).
+        // Gate on the server directory itself so the search below is stable.
+        const t0 = Date.now();
+        for (;;) {
+            const r = await fetch(`${E2E_API}/api/directory?q=bobby`, { headers: { 'x-dochess-user': 'user_e2ealice01' } }).then((x) => x.json()).catch(() => null);
+            if (r && r.players && r.players.some((p) => p.uid === 'user_e2ebob02')) break;
+            if (Date.now() - t0 > 60000) throw new Error('bob never registered');
+            await new Promise((x) => setTimeout(x, 1000));
+        }
+        await A.evaluate(() => window.app.showFriends());
+        await A.locator('#fr-search').fill('bobby');
+        await expect(A.locator('#fr-results')).toContainText('Bobby Tables', { timeout: 15000 });
+        await expect(A.locator('#fr-results img.fr-avaimg[src="https://x.test/bob.png"]')).toBeVisible();
+        // Strangers are addable straight from results — no link needed.
+        await A.click('#fr-results [data-faction="add"]');
+        await expect(A.locator('#fr-grid')).toContainText('Bobby Tables');
+        const f = await A.evaluate(() => window.DoChessFriends.list().find((x) => x.uid === 'user_e2ebob02'));
+        expect(f.img).toBe('https://x.test/bob.png');
+        await A.close();
+        await B.close();
+    } finally {
+        await stopDevApi();
+    }
+});
 
 // Friends graph, streaks, notifications, ranking, hall, chess.com lookup,
 // cloud-engine adapter — all local-first (file://, no backend).

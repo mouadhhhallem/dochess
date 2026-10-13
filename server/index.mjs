@@ -295,7 +295,7 @@ async function handleFriendRemove(req, res, userId) {
 async function handlePresence(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    FR.heartbeat(userId, body.name);
+    FR.heartbeat(userId, body.name, body.img);
     sendJson(res, 200, { ok: true });
 }
 
