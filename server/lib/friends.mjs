@@ -26,6 +26,11 @@ function cleanUid(v) {
     return null;
 }
 
+function cleanImg(v) {
+    if (typeof v === 'string' && /^https:/.test(v)) return v.slice(0, 2048);
+    return null;
+}
+
 function cleanName(v) {
     if (typeof v !== 'string') return 'Player';
     return v.replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 24) || 'Player';
@@ -47,6 +52,13 @@ export function createFriendStore() {
     const edges = new Map();
     // uid -> {name, at}
     const presence = new Map();
+    // Public directory: uid -> {name, img, at} (searchable, min 3 letters).
+    const directory = new Map();
+    function register(uid, name, img) {
+        uid = cleanUid(uid);
+        if (!uid) return;
+        directory.set(uid, { name: cleanName(name), img: cleanImg(img), at: Date.now() });
+    }
     // uid -> [{id, kind, title, body, from, at, read}]
     const inboxes = new Map();
     // `${uid}:${cat}` -> {uid, name, cat, rating, at}
@@ -65,10 +77,10 @@ export function createFriendStore() {
         uid = cleanUid(uid);
         const fuid = cleanUid(friend && friend.uid);
         if (!uid || !fuid || uid === fuid) return null;
-        const rec = { uid: fuid, name: cleanName(friend.name), since: Date.now() };
+        const rec = { uid: fuid, name: cleanName(friend.name), img: cleanImg(friend.img), since: Date.now() };
         const mine = of(uid);
         if (!mine.has(fuid)) mine.set(fuid, rec);
-        else mine.get(fuid).name = rec.name; // refresh display name
+        else { mine.get(fuid).name = rec.name; if (rec.img) mine.get(fuid).img = rec.img; } // refresh display
         const theirs = of(fuid);
         const confirmed = theirs.has(uid);
         return { friend: mine.get(fuid), confirmed };
@@ -95,6 +107,7 @@ export function createFriendStore() {
         uid = cleanUid(uid);
         if (!uid) return false;
         presence.set(uid, { name: cleanName(name), at: Date.now() });
+        register(uid, name, null);
         return true;
     }
 
@@ -157,6 +170,7 @@ export function createFriendStore() {
         const key = `${uid}:${cat}`;
         const prev = ranks.get(key);
         const rec = { uid, name: cleanName(name), cat, rating: prev ? Math.max(prev.rating, rating) : rating, at: Date.now() };
+        register(uid, name, null);
         ranks.set(key, rec);
         return rec;
     }
@@ -193,6 +207,17 @@ export function createFriendStore() {
         return hallRows.map((h, i) => ({ ...h, position: i + 1 }));
     }
 
+    function lookup(q) {
+        q = typeof q === 'string' ? q.trim().toLowerCase() : '';
+        if (q.length < 3) return [];
+        const out = [];
+        for (const [uid, d] of directory) {
+            if (d.name.toLowerCase().includes(q)) out.push({ uid, name: d.name, img: d.img });
+            if (out.length >= 20) break;
+        }
+        return out;
+    }
+
     function sweep(now = Date.now()) {
         let out = 0;
         for (const [uid, p] of presence) {
@@ -201,5 +226,5 @@ export function createFriendStore() {
         return { presence: out };
     }
 
-    return { addEdge, removeEdge, listEdges, heartbeat, status, notify, inbox, ack, publishRank, rank, hallJoin, hall, sweep };
+    return { addEdge, removeEdge, listEdges, heartbeat, status, notify, inbox, ack, publishRank, rank, hallJoin, hall, lookup, sweep };
 }

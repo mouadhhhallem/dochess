@@ -255,9 +255,14 @@ async function readBody(req) {
 async function handleFriendAdd(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    const r = FR.addEdge(userId, { uid: body.friendUid, name: body.friendName });
+    const r = FR.addEdge(userId, { uid: body.friendUid, name: body.friendName, img: body.friendImg });
     if (!r) { sendError(res, 400, 'bad-friend'); return; }
     sendJson(res, 200, { ok: true, ...r });
+}
+
+async function handleDirectory(req, res) {
+    const q = query(req);
+    sendJson(res, 200, { ok: true, players: FR.lookup(typeof q.q === 'string' ? q.q : '') });
 }
 
 async function handleFriendRemove(req, res, userId) {
@@ -338,6 +343,7 @@ async function handleApi(req, res) {
     if (p === '/api/friends/add' && req.method === 'POST') { await handleFriendAdd(req, res, id.userId); return; }
     if (p === '/api/friends/remove' && req.method === 'POST') { await handleFriendRemove(req, res, id.userId); return; }
     if (p === '/api/friends/list' && req.method === 'GET') { sendJson(res, 200, { ok: true, friends: FR.listEdges(id.userId) }); return; }
+    if (p === '/api/directory' && req.method === 'GET') { await handleDirectory(req, res); return; }
     if (p === '/api/presence' && req.method === 'POST') { await handlePresence(req, res, id.userId); return; }
     if (p === '/api/friends/status' && req.method === 'GET') { await handleFriendStatus(req, res); return; }
     if (p === '/api/notify' && req.method === 'POST') { await handleNotify(req, res, id.userId); return; }

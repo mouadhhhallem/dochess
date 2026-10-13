@@ -40,6 +40,11 @@
         return d === 1 ? 'yesterday' : `${d}d ago`;
     }
     const uidOf = () => { try { return (window.app && window.app.userId) || 'guest'; } catch (_) { return 'guest'; } };
+    const myAvatar = () => { try {
+        const u = window.app && window.app._clerk && window.app._clerk.user;
+        const img = u && (u.imageUrl || u.profileImageUrl || u.avatar);
+        if (typeof img === 'string' && /^https:/.test(img)) return img.slice(0, 2048);
+    } catch (_) {} return null; };
     const meName = () => {
         try {
             const u = window.app && window.app._clerk && window.app._clerk.user;
@@ -120,22 +125,27 @@
         return 'https://mouadhhhallem.github.io/dochess/index.html';
     }
 
+    function cleanImg(v) {
+        if (typeof v === 'string' && /^https:/.test(v)) return v.slice(0, 2048);
+        return null;
+    }
+
     /* ── friends ────────────────────────────────────────────── */
     function friends() { return S.friends; }
     function getF(uid) { return S.friends[uid] || null; }
-    function addFriend(uid, name, source) {
+    function addFriend(uid, name, source, img) {
         if (!uid || uid === uidOf()) return null;
         let f = S.friends[uid];
         if (!f) {
             f = S.friends[uid] = {
                 uid, name: String(name || 'Player').slice(0, 24),
-                since: Date.now(), confirmed: false, source: source || 'link',
+                since: Date.now(), confirmed: false, source: source || 'link', img: cleanImg(img),
                 days: {}, best: 0, lastSeen: 0,
             };
         } else if (name) f.name = String(name).slice(0, 24);
         if (!S.pendingOut.includes(uid) && !f.confirmed) S.pendingOut.push(uid);
         save(); renderBell();
-        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f.name }).catch(() => {}); } catch (_) {}
+        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f.name, friendImg: f.img || null }).catch(() => {}); } catch (_) {}
         return f;
     }
     function acceptFriend(uid) {
@@ -154,7 +164,7 @@
             if (po >= 0) S.pendingOut.splice(po, 1);
         }
         save(); renderBell();
-        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f ? f.name : '' }).catch(() => {}); } catch (_) {}
+        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f ? f.name : '', friendImg: (f && f.img) || null }).catch(() => {}); } catch (_) {}
         pullEdges();
         return f;
     }
@@ -170,8 +180,9 @@
         try { if (apiBase() !== null) api('friends/remove', { friendUid: uid }).catch(() => {}); } catch (_) {}
     }
     async function pullEdges() {
+        let changed = false;
         try {
-            if (apiBase() === null) return;
+            if (apiBase() === null) return false;
             const r = await api('friends/list');
             if (!r || !Array.isArray(r.friends)) return;
             for (const e of r.friends) {
@@ -182,21 +193,24 @@
                 } else if (e.confirmed && !f.confirmed) {
                     f.confirmed = true;
                     notifyLocal('friend-accept', `${f.name} is now your friend`, 'You can now grow a streak together — play a game today.');
+                    changed = true;
                 }
             }
             save(); renderBell();
-            if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
-        } catch (_) {}
+            return changed;
+        } catch (_) { return false; }
     }
     // Called on every PeerJS hello/profile: confirms pending friendships
     // and refreshes last-seen. Writes throttled to one per 5 minutes.
     const lastTouchWrite = {};
-    function metPeer(uid, name) {
+    function metPeer(uid, name, img) {
         if (!uid || uid === uidOf()) return;
+        img = cleanImg(img);
         const now = Date.now();
         const f = S.friends[uid];
         if (f) {
             if (name) f.name = String(name).slice(0, 24);
+            if (img) f.img = img;
             f.lastSeen = now;
             if (!f.confirmed) {
                 f.confirmed = true;
@@ -214,7 +228,7 @@
         if (po >= 0) {
             // They never used our link, but here they are live: adopt them.
             S.pendingOut.splice(po, 1);
-            const nf = addFriend(uid, name, 'met');
+            const nf = addFriend(uid, name, 'met', img);
             if (nf) nf.confirmed = true;
             notifyLocal('friend-accept', `${name || 'A player'} is now your friend`, 'Play a game together to start a streak.');
             save();
@@ -224,7 +238,7 @@
     /* ── directory + search (3-letter minimum) ──────────────── */
     function directory() {
         const map = new Map();
-        for (const [uid, f] of Object.entries(S.friends)) map.set(uid, { uid, name: f.name, friend: true, rating: null });
+        for (const [uid, f] of Object.entries(S.friends)) map.set(uid, { uid, name: f.name, friend: true, rating: null, img: f.img || null });
         for (const p of S.pendingIn) if (!map.has(p.uid)) map.set(p.uid, { uid: p.uid, name: p.name, friend: false, rating: null, pending: true });
         for (const uid of S.pendingOut) {
             const f = S.friends[uid];
@@ -325,9 +339,9 @@
     }
     async function pullInbox() {
         try {
-            if (apiBase() === null) return;
+            if (apiBase() === null) return false;
             const r = await api('notify');
-            if (!r || !Array.isArray(r.items)) return;
+            if (!r || !Array.isArray(r.items)) return false;
             const have = new Set(S.inbox.map((m) => m.id));
             let added = false;
             for (const m of r.items) {
@@ -336,9 +350,11 @@
                 added = true;
             }
             if (added) { S.inbox = S.inbox.slice(0, 50); save(); renderBell(); }
+            return added;
             const unreadIds = S.inbox.filter((m) => !m.read && !m.local).map((m) => m.id);
             if (unreadIds.length) api('notify/ack', { ids: unreadIds }).catch(() => {});
-        } catch (_) {}
+            return false;
+        } catch (_) { return false; }
     }
 
     /* ── presence ───────────────────────────────────────────── */
@@ -454,6 +470,46 @@
         } finally { clearTimeout(to); }
     }
 
+    /* ── daily hero (real learn activity: streak, XP, heat) ─────── */
+    function localDayKey(back) {
+        const d = new Date(Date.now() - (back || 0) * DAY_MS);
+        const p = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${d.getDate()}`;
+    }
+    function dailyStats() {
+        try {
+            const raw = localStorage.getItem('dochess:v1');
+            if (!raw) return null;
+            const st = JSON.parse(raw);
+            if (!st || st.version !== 1 || !st.streak || typeof st.streak.count !== 'number') return null;
+            return {
+                streak: st.streak.count,
+                xp: typeof st.xp === 'number' ? st.xp : 0,
+                level: typeof st.level === 'number' ? st.level : 1,
+                heat: (st.heatmap && typeof st.heatmap === 'object') ? st.heatmap : {},
+            };
+        } catch (_) { return null; }
+    }
+    function heroHTML() {
+        const d = dailyStats();
+        const st = d ? d.streak : 0;
+        const xp = d ? d.xp : 0;
+        const lvl = d ? d.level : 1;
+        const pct = Math.min(100, Math.round(((xp % 150) / 150) * 100));
+        const week = [];
+        for (let back = 6; back >= 0; back--) week.push(d && d.heat[localDayKey(back)] ? 1 : 0);
+        const me = myRating('blitz');
+        return '<section class="fr-hero">'
+            + '<div class="fr-hero-flame"><span class="fr-flame big">' + FLAME + '</span>'
+            + '<div><strong>' + st + '</strong><span>day streak</span></div>'
+            + '<span class="fr-week">' + week.map((x) => '<i class="' + (x ? 'on' : '') + '"></i>').join('') + '</span></div>'
+            + '<div class="fr-hero-xp"><div class="fr-xp-top"><strong>LVL ' + lvl + '</strong><span>' + xp + ' XP</span></div>'
+            + '<div class="fr-xpbar"><i style="width:' + pct + '%"></i></div>'
+            + '<span class="fr-sub">' + (150 - (xp % 150)) + ' XP to level ' + (lvl + 1) + '</span></div>'
+            + '<div class="fr-hero-rate"><strong>' + me + '</strong>' + tierChip(me) + '<span class="fr-sub">blitz · you</span></div>'
+            + '</section>';
+    }
+
     /* ── versus (head-to-head from real history) ────────────── */
     function historyAll() {
         try {
@@ -512,7 +568,11 @@
         'AFK. Blaming lag, most likely.',
         'Out. Studying openings, allegedly.',
     ];
-    const avatarHTML = (name, extra) => `<span class="fr-ava${extra ? ' ' + extra : ''}" aria-hidden="true">${esc((name || 'P')[0].toUpperCase())}</span>`;
+    const avatarHTML = (name, extra, img) => {
+        const src = cleanImg(img);
+        if (src) return '<img class="fr-avaimg" src="' + esc(src) + '" alt="" width="46" height="46" loading="lazy" draggable="false">';
+        return '<span class="fr-ava' + (extra ? ' ' + extra : '') + '" aria-hidden="true">' + esc((name || 'P')[0].toUpperCase()) + '</span>';
+    };
 
     function streakCard(f) {
         const st = streakOf(f);
@@ -536,7 +596,7 @@
         const gamesTxt = v.games ? `${v.w}W · ${v.l}L · ${v.d}D` : 'no games yet';
         return `<article class="fr-card${online ? '' : ' off'}${f.confirmed ? '' : ' pend'}">
             <div class="fr-top">
-                ${avatarHTML(f.name)}
+                ${avatarHTML(f.name, null, f.img)}
                 <div class="fr-id">
                     <strong>${esc(f.name)}${f.confirmed ? '' : ' <span class="fr-unconf" title="Not yet mutual">· new</span>'}</strong>
                     <span class="fr-sub"><i class="fr-dot ${dotCls}"></i>${esc(seenTxt)} · ${esc(gamesTxt)}</span>
@@ -558,6 +618,7 @@
         const rival = rivalOfWeek();
         const reqs = S.pendingIn;
         box.innerHTML = `
+            ${heroHTML()}
             <div class="fr-head">
                 <div>
                     <p class="fr-kicker">Friends</p>
@@ -589,21 +650,53 @@
                     pres = (r && r.status) || {};
                 }
             } catch (_) {}
-            grid.innerHTML = rows.length ? rows.map((f) => friendRow(f, pres)).join('') : `<p class="fr-empty">No friends yet — copy your invite link above or accept a request. Strangers you meet over the board show up in search once you have played them.</p>`;
+            grid.innerHTML = rows.length ? rows.map((f) => friendRow(f, pres)).join('') : `<div class="fr-onboard"><h3>Grow your first flame</h3><ol><li><strong>Copy your invite link</strong> — anyone, anywhere.</li><li><strong>Play one game together</strong> — any day, any control.</li><li><strong>+1 every day</strong> you both play. Miss a day and it resets.</li></ol><div class="fr-acts"><button class="btn-primary sm" data-faction="copy-link" type="button">Copy invite link</button><button class="btn-secondary sm" data-faction="goto-cc" type="button">Find on chess.com</button></div></div>`;
         };
         paint();
         const input = box.querySelector('#fr-search');
         const out = box.querySelector('#fr-results');
+        const renderFound = (found, extra) => {
+            const all = found.concat(extra || []);
+            out.innerHTML = all.length ? '<div class="fr-grid">' + all.map((p) => {
+                const tag = p.pending ? 'requested' : (p.friend ? 'friend' : (p.fromServer ? 'DoChess' : 'met over the board'));
+                return '<div class="fr-card mini">' + avatarHTML(p.name, null, p.img) + '<div class="fr-id"><strong>' + esc(p.name) + '</strong>'
+                + '<span class="fr-sub">' + tag + (p.rating ? ' · ' + p.rating : '') + '</span></div>'
+                + ((p.friend || p.uid === uidOf()) ? '' : '<button class="btn-secondary sm" data-faction="add" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '" type="button">Add</button>') + '</div>';
+            }).join('') + '</div>'
+                : '<p class="fr-empty">Nobody by that name — yet. Share your invite link instead.</p>';
+        };
+        const serverMerge = async (q) => {
+            try {
+                if (apiBase() === null || q.trim().length < 3) return;
+                const r = await api('directory?q=' + encodeURIComponent(q.trim()));
+                if (!r || !Array.isArray(r.players) || !r.players.length) return;
+                if (!document.body.contains(out) || input.value !== q) return;
+                const have = new Set(search(q).rows.map((x) => x.uid));
+                const extra = r.players.filter((p) => p && p.uid && !have.has(p.uid)).map((p) => ({ uid: p.uid, name: p.name, friend: !!S.friends[p.uid], rating: null, img: p.img || null, fromServer: true }));
+                if (extra.length) renderFound(search(q).rows, extra);
+            } catch (_) {}
+        };
         input.addEventListener('input', () => {
             const q = input.value;
-            if (q.trim().length < 3) { out.innerHTML = q.trim() ? `<p class="lobby-hint">Keep typing — search starts at 3 letters.</p>` : ''; return; }
-            const { rows: found } = search(q);
-            out.innerHTML = found.length ? `<div class="fr-grid">` + found.map((p) => `
-                <div class="fr-card mini">${avatarHTML(p.name)}<div class="fr-id"><strong>${esc(p.name)}</strong>
-                <span class="fr-sub">${p.friend ? 'friend' : (p.pending ? 'requested' : 'met over the board')}${p.rating ? ' · ' + p.rating : ''}</span></div>
-                ${p.friend || p.uid === uidOf() ? '' : `<button class="btn-secondary sm" data-faction="add" data-uid="${esc(p.uid)}" data-name="${esc(p.name)}" type="button">Add</button>`}</div>`).join('') + `</div>`
-                : `<p class="fr-empty">Nobody by that name — yet. Share your invite link instead.</p>`;
+            if (q.trim().length < 3) { out.innerHTML = q.trim() ? '<p class="lobby-hint">Keep typing — search starts at 3 letters.</p>' : ''; return; }
+            const found = search(q).rows;
+            renderFound(found, []);
+            serverMerge(q);
         });
+    }
+
+    function podiumHTML(data) {
+        const top = (data.board || []).slice(0, 3);
+        if (top.length < 3) return '';
+        const order = [[top[1], '2nd', 'p2'], [top[0], '1st', 'p1'], [top[2], '3rd', 'p3']];
+        return '<div class="fr-podium">' + order.map(([r, place, cls]) => {
+            const known = r.self || (r.uid && S.friends[r.uid]);
+            const nm = (known && r.name) ? r.name : 'a quiet rival';
+            const img = known ? (r.self ? myAvatar() : ((S.friends[r.uid] || {}).img || null)) : null;
+            return '<div class="fr-pstep ' + cls + '"><span class="fr-pplace">' + place + '</span>'
+                + avatarHTML(nm, null, img)
+                + '<strong>' + esc(nm) + '</strong>' + tierChip(r.rating) + '<span>' + (r.rating != null ? r.rating : '') + '</span></div>';
+        }).join('') + '</div>';
     }
 
     function tierChip(rating) {
@@ -624,11 +717,12 @@
                 <div><strong>${esc(meName())}</strong><p>${data.total} rated players · ${currentCat} · you hold <strong>${me}</strong></p></div>
                 ${tierChip(me)}
             </div>
+            ${podiumHTML(data)}
             ${data.server ? '' : `<p class="lobby-hint">Device board — connect the API for the global ladder.</p>`}
             <div class="fr-board">${data.board.slice(0, 50).map((r) => `
                 <div class="fr-brow${r.self ? ' me' : ''}">
                     <span class="fr-rank">${r.rank}</span>
-                    ${r.name ? avatarHTML(r.name) : `<span class="fr-ava ghost" aria-hidden="true">?</span>`}
+                    ${r.name ? avatarHTML(r.name, null, r.self ? myAvatar() : ((S.friends[r.uid] || {}).img || null)) : `<span class="fr-ava ghost" aria-hidden="true">?</span>`}
                     <span class="fr-bname">${r.name ? esc(r.name) : 'a quiet rival'}</span>
                     ${r.rating != null ? tierChip(r.rating) : ''}
                     <span class="fr-brating">${r.rating != null ? r.rating : '–'}</span>
@@ -642,7 +736,7 @@
         out.innerHTML = `
             ${data.server ? '' : `<p class="lobby-hint">Device hall — the global first-1000 needs the API.</p>`}
             <div class="fr-hall">${data.hall.slice(0, 100).map((h) => `
-                <div class="fr-hof">${avatarHTML(h.name)}<div class="fr-id"><strong>#${h.position} ${esc(h.name)}</strong><span class="fr-sub">${h.at ? new Date(h.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span></div></div>`).join('') || `<p class="fr-empty">Empty hall — be early.</p>`}</div>`;
+                <div class="fr-hof">${avatarHTML(h.name, null, (S.friends[h.uid] || {}).img || null)}<div class="fr-id"><strong>#${h.position} ${esc(h.name)}</strong><span class="fr-sub">${h.at ? new Date(h.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span></div></div>`).join('') || `<p class="fr-empty">Empty hall — be early.</p>`}</div>`;
     }
 
     function renderActivity(box) {
@@ -675,9 +769,11 @@
         else if (currentTab === 'ranking') renderRanking(body);
         else if (currentTab === 'hall') renderHall(body);
         else renderActivity(body);
-        pullEdges();
-        pullInbox().then(() => {
-            if (currentTab === 'activity' && document.getElementById('friends-screen')?.classList.contains('active')) open('activity');
+        pullEdges().then((ch) => {
+            if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
+        });
+        pullInbox().then((ch) => {
+            if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
         });
         try { if (apiBase() !== null) heartbeat(); } catch (_) {}
     }
@@ -741,6 +837,11 @@
                 if (apiBase() !== null && f) api('notify', { toUid: uid, kind: 'note', title: `${meName()} nudged you`, body: 'Your streak is on the line — one game today saves it.' }).catch(() => {});
             } catch (_) {}
             open(currentTab);
+            return;
+        }
+        if (a === 'goto-cc') {
+            const gi = document.getElementById('fr-ccname');
+            if (gi) { try { gi.scrollIntoView({ block: 'center' }); } catch (_) {} try { gi.focus({ preventScroll: true }); } catch (_) {} }
             return;
         }
         if (a === 'cc-lookup') {

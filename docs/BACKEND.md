@@ -29,6 +29,7 @@ One Node process serves **both** the static site and the API on `PORT`
 | `GET /api/friends/list` | Clerk session | my edges with confirmed flags |
 | `POST /api/presence` | Clerk session | heartbeat (90 s TTL) |
 | `GET /api/friends/status?uids=` | Clerk session | online/recent map |
+| `GET /api/directory?q=` | Clerk session | player directory search (3+ letters, max 20) |
 | `POST /api/notify` | Clerk session | queue an inbox event for a user |
 | `GET /api/notify` | Clerk session | inbox items + unread count |
 | `POST /api/notify/ack` | Clerk session | mark inbox read |

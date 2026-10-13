@@ -4428,3 +4428,63 @@ body[data-theme="day"] .ms-link.active, body[data-theme="day"] .ms-link.active:h
 @media (prefers-reduced-motion: reduce) {
     .fr-card, .fr-crown, .fr-card.off .fr-top, .fr-dot.on { animation: none; }
 }
+
+/* -- Friends hero: daily flame, XP progress, rating (trophy.so language) -- */
+.fr-hero {
+    display: grid; grid-template-columns: 1.2fr 1.4fr 1fr; gap: .9rem;
+    margin-bottom: 1.2rem;
+}
+.fr-hero > div {
+    background: linear-gradient(120deg, rgba(212, 164, 75, 0.14), rgba(212, 164, 75, 0.03)), var(--bg-card);
+    border: 1px solid rgba(212, 164, 75, 0.35); border-radius: 16px;
+    padding: 1rem 1.1rem; display: flex; align-items: center; gap: .8rem;
+}
+.fr-hero-flame .fr-flame svg { width: 52px; height: 52px; animation: frFlick 2.2s ease-in-out infinite; }
+@keyframes frFlick { 0%, 100% { transform: scale(1) rotate(-2deg); } 50% { transform: scale(1.08) rotate(2deg); } }
+.fr-hero-flame strong { display: block; font-size: 2rem; font-weight: 800; color: var(--text-main); line-height: 1; font-variant-numeric: tabular-nums; }
+.fr-hero-flame span span { font-size: .75rem; color: var(--text-muted); }
+.fr-hero-flame .fr-week { margin-left: auto; }
+.fr-hero-xp { flex-direction: column; align-items: stretch !important; justify-content: center; gap: .45rem !important; }
+.fr-xp-top { display: flex; justify-content: space-between; align-items: baseline; }
+.fr-xp-top strong { color: var(--accent-bright); font-size: 1rem; letter-spacing: .06em; }
+.fr-xp-top span { color: var(--text-main); font-weight: 800; font-variant-numeric: tabular-nums; }
+.fr-xpbar { height: 10px; border-radius: 99px; background: var(--glass-bg); border: 1px solid var(--glass-border); overflow: hidden; }
+.fr-xpbar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent-dim), var(--accent-bright)); transition: width 0.6s ease; }
+.fr-hero-rate { flex-direction: column; justify-content: center; gap: .2rem !important; text-align: center; }
+.fr-hero-rate strong { font-size: 2rem; color: var(--text-main); line-height: 1; font-variant-numeric: tabular-nums; }
+.fr-hero-rate .fr-tier { margin: 0; }
+@media (max-width: 860px) {
+    .fr-hero { grid-template-columns: 1fr 1fr; }
+    .fr-hero-rate { grid-column: 1 / -1; flex-direction: row !important; align-items: center !important; }
+}
+/* -- Onboarding: first flame in three steps -- */
+.fr-onboard {
+    background: linear-gradient(120deg, rgba(212, 164, 75, 0.14), rgba(212, 164, 75, 0.03)), var(--bg-card);
+    border: 1px solid rgba(212, 164, 75, 0.4); border-radius: 16px;
+    padding: 1.2rem 1.3rem; margin-bottom: 1rem;
+}
+.fr-onboard h3 { color: var(--text-main); font-size: 1.15rem; margin-bottom: .6rem; }
+.fr-onboard ol { margin: 0 0 .9rem; padding-left: 1.3rem; display: flex; flex-direction: column; gap: .35rem; color: var(--text-muted); font-size: .92rem; }
+.fr-onboard ol strong { color: var(--text-main); }
+.fr-onboard .fr-acts { display: flex; }
+/* -- Ranking podium (trophy.so Leaderboard Podium) -- */
+.fr-podium { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: .7rem; align-items: end; margin-bottom: 1rem; }
+.fr-pstep {
+    background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: 14px;
+    padding: 1rem .8rem; display: flex; flex-direction: column; align-items: center; gap: .3rem; text-align: center;
+}
+.fr-pstep .fr-ava, .fr-pstep .fr-avaimg { width: 54px; height: 54px; font-size: 1.3rem; }
+.fr-pstep strong { color: var(--text-main); font-size: .92rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-pstep span:last-child { color: var(--text-muted); font-weight: 800; font-variant-numeric: tabular-nums; }
+.fr-pstep.p1 { border-color: rgba(212, 164, 75, 0.6); box-shadow: 0 0 26px rgba(212, 164, 75, 0.18); padding-top: 1.4rem; }
+.fr-pplace { font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; color: var(--accent-bright); }
+.fr-pstep.p2 .fr-pplace { color: #aeb6c2; }
+.fr-pstep.p3 .fr-pplace { color: #c98d5e; }
+@media (max-width: 560px) {
+    .fr-podium { grid-template-columns: 1fr; align-items: stretch; }
+    .fr-pstep { flex-direction: row; text-align: left; }
+    .fr-pstep.p1 { padding-top: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .fr-hero-flame .fr-flame svg { animation: none; }
+}

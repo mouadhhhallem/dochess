@@ -78,6 +78,24 @@ test('rank: publish keeps best, strangers anonymous, friends named', () => {
     assert.equal(empty.myRank, null);
 });
 
+test('directory: heartbeat and rank publish register searchable players', () => {
+    const fr = createFriendStore();
+    assert.deepEqual(fr.lookup('al'), []);
+    assert.deepEqual(fr.lookup('Alp'), []);
+    fr.heartbeat('u1', 'Alpha');
+    fr.publishRank('u2', 'Beta', 'blitz', 900);
+    assert.deepEqual(fr.lookup('alp'), [{ uid: 'u1', name: 'Alpha', img: null }]);
+    assert.deepEqual(fr.lookup('bet'), [{ uid: 'u2', name: 'Beta', img: null }]);
+});
+
+test('edges carry photos through add and list', () => {
+    const fr = createFriendStore();
+    fr.addEdge('u1', { uid: 'u2', name: 'Beta', img: 'https://x.test/b.png' });
+    assert.equal(fr.listEdges('u1')[0].img, 'https://x.test/b.png');
+    fr.addEdge('u1', { uid: 'u3', name: 'Gamma', img: 'http://evil/x.png' });
+    assert.equal(fr.listEdges('u1').find((f) => f.uid === 'u3').img, null);
+});
+
 test('hall: first-1000 registry in join order', () => {
     const fr = createFriendStore();
     const a = fr.hallJoin('u1', 'Alpha');

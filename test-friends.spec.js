@@ -140,6 +140,61 @@ test('chess.com lookup adds real accounts; metPeer confirms', async ({ browser }
     await page.close();
 });
 
+test('hero shows daily flame, XP bar and tier even with zero friends', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1280, height: 800 });
+    await page.evaluate(() => {
+        const st = { version: 1, stars: {}, attempts: {}, accuracy: {}, leitner: {}, heatmap: {}, xp: 320, level: 3, badges: [], streak: { count: 4, lastDay: '2026-10-12' }, settings: { theme: 'night' }, legacy: {} };
+        const t = new Date();
+        const p = (n) => String(n).padStart(2, '0');
+        const today = `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+        st.heatmap[today] = 2;
+        localStorage.setItem('dochess:v1', JSON.stringify(st));
+        window.app.showFriends();
+    });
+    await expect(page.locator('.fr-hero-flame strong')).toHaveText('4');
+    await expect(page.locator('.fr-xp-top')).toContainText('320 XP');
+    await expect(page.locator('.fr-xp-top')).toContainText('LVL 3');
+    await expect(page.locator('.fr-hero')).toContainText('day streak');
+    // Onboarding renders with zero friends.
+    await expect(page.locator('.fr-onboard')).toContainText('Grow your first flame');
+    await page.close();
+});
+
+test('photos show on friend rows; http: rejected', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1440, height: 900 });
+    await page.evaluate(() => {
+        window.DoChessFriends.addFriend('ph1', 'Pam', 'link');
+        window.DoChessFriends.acceptFriend('ph1');
+        window.DoChessFriends.metPeer('ph1', 'Pam', 'https://x.test/pam.png');
+        window.app.showFriends();
+    });
+    await expect(page.locator('#fr-grid img.fr-avaimg[src="https://x.test/pam.png"]')).toBeVisible();
+    // http: photo rejected, letter fallback kept.
+    await page.evaluate(() => window.DoChessFriends.metPeer('ph1', 'Pam', 'http://evil/x.png'));
+    expect(await page.evaluate(() => window.DoChessFriends.list().find((x) => x.uid === 'ph1').img)).toBe('https://x.test/pam.png');
+    await page.close();
+});
+
+test('server directory finds strangers the device never met', async ({ browser }) => {
+    // Page loads locally (file://); only the API base points at the stub.
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await page.goto('index.html');
+    await page.waitForFunction(() => !!window.app && !!window.DoChessFriends, null, { timeout: 15000 });
+    await page.evaluate(() => {
+        localStorage.clear();
+        localStorage.setItem('cc_api_base', 'https://api.stub');
+        window.app._clerk = { user: { id: 'fr_u1', fullName: 'FriendOne' }, openSignIn() {}, signOut() {}, addListener() {}, mountUserButton() {} };
+        window.app._setUser('fr_u1');
+    });
+    await page.waitForTimeout(3600);
+    await page.route('https://api.stub/api/directory*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, players: [{ uid: 'srv_zed', name: 'Zelda', img: null }] }) }));
+    await page.evaluate(() => window.app.showFriends());
+    await page.locator('#fr-search').fill('zelda');
+    await expect(page.locator('#fr-results')).toContainText('Zelda');
+    await expect(page.locator('#fr-results')).toContainText('DoChess');
+    await page.close();
+});
+
 test('cloud engine dormant by default, answers when configured', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
     expect(await page.evaluate(() => window.DoChessCloud.configured())).toBe(false);

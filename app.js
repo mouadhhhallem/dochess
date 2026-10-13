@@ -285,7 +285,7 @@ class ChessCourseApp {
                 else if (a === 'online-draw-offer') this._onlineDrawOffer();
                 else if (a === 'movenav') this._onlineNavGo(action.dataset.where);
                 else if (a === 'next-lesson') this._nextLessonFromBoard();
-                else if (a === 'profile-signin') this._profileSignIn();
+                else if (a === 'profile-signin') this._profileSignIn(a);
                 else if (a === 'sn-auth') { if (this._clerk?.user) this.showProfile(); else this._authSignIn(); }
                 else if (a === 'friends-activity') this.showFriends('activity');
                 else if (a === 'friend-copy-link') this._copyFriendLink(a);
@@ -2803,7 +2803,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             s.conn = conn;
             s.opp = sanitizePeerUser(msg.user);
             this._notePeerVersion(msg);
-            try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name); } catch (_) {}
+            try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name, s.opp.img); } catch (_) {}
             if (s.resumed) {
                 // Rejoining joiner meets the restored session: same game,
                 // same colors, full snapshot. Epoch already bumped at re-host.
@@ -2840,7 +2840,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 s.opp = sanitizePeerUser(msg.user);
                 this._notePeerVersion(msg);
                 this._paintOppCard();
-                try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name); } catch (_) {}
+                try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name, s.opp.img); } catch (_) {}
                 // A post-game heartbeat carries the opponent's NEW rating
                 // after their own Elo write — re-note it so the device
                 // leaderboard refreshes instantly for both players.
@@ -2879,7 +2879,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             s.gameId = msg.game_id;
             s.opp = sanitizePeerUser(msg.user);
             this._notePeerVersion(msg);
-            try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name); } catch (_) {}
+            try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name, s.opp.img); } catch (_) {}
             this._startOnlineGame(msg.color === 'white' ? 'white' : 'black', s.opp, this._cleanControl(msg.control), true);
             this._applyOnlineState(msg.state);
             s.peerGone = false;
@@ -2918,7 +2918,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 s.opp = sanitizePeerUser(msg.user);
                 this._notePeerVersion(msg);
                 this._paintOppCard();
-                try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name); } catch (_) {}
+                try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name, s.opp.img); } catch (_) {}
                 // A post-game heartbeat carries the opponent's NEW rating
                 // after their own Elo write — re-note it so the device
                 // leaderboard refreshes instantly for both players.
@@ -4520,9 +4520,19 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         return `<span class="dc-sync ${kind}" data-sync-chip title="Cloud progress for this DoChess account"><span class="dc-sync-dot" aria-hidden="true"></span>${label}</span>`;
     }
 
-    _profileSignIn() {
+    async _profileSignIn(btn) {
+        // Phone entry point: Clerk loads lazily, so ENSURE it here — the old
+        // code only worked when Clerk was already loaded and otherwise wrote
+        // to the (invisible from here) lesson feedback strip: "nothing appears".
         if (this._clerk) { try { this._clerk.openSignIn({}); return; } catch (_) {} }
-        this._fb('Sign-in is unavailable right now.', 'error');
+        const prev = btn ? btn.textContent : '';
+        if (btn) { try { btn.disabled = true; btn.textContent = 'Loading…'; } catch (_) {} }
+        try {
+            const c = await this._ensureClerk();
+            if (c) { try { c.openSignIn({}); return; } finally { if (btn) { try { btn.disabled = false; btn.textContent = prev; } catch (_) {} } } }
+        } catch (_) {}
+        if (btn) { try { btn.disabled = false; btn.textContent = 'Retry sign in'; } catch (_) {} }
+        this._fb('Sign-in is unavailable right now — check your connection and retry.', 'error');
     }
 
     /* Earned distinctions only: course completion and the rating
