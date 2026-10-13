@@ -250,7 +250,7 @@ test('ranking always shows self, even with zero other players', async ({ browser
     await expect(page.locator('.fr-myrank')).toContainText('#1');
     // The board counts REGISTERED accounts (that is what the global ladder
     // lists), not just players who have finished a game.
-    await expect(page.locator('.fr-myrank')).toContainText(/1 registered player/);
+    await expect(page.locator('.fr-myrank')).toContainText(/1 player on this device/);
     await expect(page.locator('#fr-rankout')).toContainText('(you)');
     await expect(page.locator('#fr-rankout')).not.toContainText('No rated players yet');
     await page.close();

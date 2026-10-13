@@ -1609,7 +1609,7 @@ let needSnapshot = false;
             ${first ? `
             <div class="fr-myrank">
                 <span class="fr-bigrank">#${data.myRank != null ? data.myRank : '–'}</span>
-                <div><strong>${esc(meName())}</strong><p>${data.total} registered player${data.total === 1 ? '' : 's'} · ${currentCat} · you hold <strong>${me}</strong></p></div>
+                <div><strong>${esc(meName())}</strong><p>${data.total} ${data.server ? 'registered player' : 'player on this device'}${data.total === 1 ? '' : 's'} · ${currentCat} · you hold <strong>${me}</strong></p></div>
                 ${tierChip(me)}
             </div>
             ${podiumHTML(data)}` : `<p class="lobby-hint">Showing ranks ${offset + 1}–${offset + (data.board || []).length} of ${data.total}</p>`}

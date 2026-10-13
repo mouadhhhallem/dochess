@@ -29,6 +29,24 @@
 
     var META_KEY = 'dochess:sync:v1';
     var API = '/api';
+
+/**
+ * The API origin, or null when there is none. Mirrors the rule used by
+ * friends.js/app.js: an explicit override wins, then same-origin when a Node
+ * server is serving the page, and otherwise nothing (GitHub Pages, file://).
+ * Returns null rather than guessing so callers can skip the network instead
+ * of issuing requests that can only 404.
+ */
+function apiOrigin() {
+    try {
+        var ov = localStorage.getItem('cc_api_base');
+        if (ov) return String(ov).replace(/\/+$/, '');
+    } catch (_) { /* storage blocked */ }
+    try {
+        if (location.protocol.indexOf('http') === 0 && !/\.github\.io$/.test(location.hostname)) return '';
+    } catch (_) { /* no location */ }
+    return null;
+}
     var PUSH_DEBOUNCE_MS = 4000;
     var HEARTBEAT_MS = 30000;
 
@@ -227,17 +245,30 @@
      * ever receives the x-doChess-user header; a Clerk-mode server always
      * gets a verified session token instead. A missing API (static hosting)
      * simply keeps the app local-only.
+     *
+     * The probe is SKIPPED entirely when no API origin exists (static hosting
+     * such as GitHub Pages). Firing a same-origin `/api/health` there could
+     * only ever 404: it cost a wasted round-trip on every page load and put
+     * a red console error in front of every visitor, which looked like a
+     * broken deployment rather than an intentional design.
      */
     function ensureServerMode() {
         if (S.serverProbed) return Promise.resolve();
         S.serverProbed = true;
+        if (!apiOrigin()) {
+            // Static hosting with no backend configured: say so once and make
+            // no request at all.
+            S.serverMode = 'unavailable';
+            S.apiConfigured = false;
+            return Promise.resolve();
+        }
         return fetch(API + '/health', { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
             .then(function (res) { return res.ok ? res.json() : null; })
             .then(function (doc) {
-                if (doc && doc.auth && doc.auth.mode) S.serverMode = doc.auth.mode;
-                else S.serverMode = 'unknown';
+                if (doc && doc.auth && doc.auth.mode) { S.serverMode = doc.auth.mode; S.apiConfigured = true; }
+                else { S.serverMode = 'unknown'; S.apiConfigured = false; }
             })
-            .catch(function () { S.serverMode = 'unavailable'; });
+            .catch(function () { S.serverMode = 'unavailable'; S.apiConfigured = false; });
     }
 
     function api(method, path, body) {
@@ -743,6 +774,7 @@
         if (S.timer) { clearInterval(S.timer); S.timer = null; }
         S.serverProbed = false;
         S.serverMode = null;
+        S.apiConfigured = null;
         setStatus('disabled', 'stopped');
     }
 
