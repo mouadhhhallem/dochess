@@ -287,6 +287,8 @@ class ChessCourseApp {
                 else if (a === 'next-lesson') this._nextLessonFromBoard();
                 else if (a === 'profile-signin') this._profileSignIn();
                 else if (a === 'sn-auth') { if (this._clerk?.user) this.showProfile(); else this._authSignIn(); }
+                else if (a === 'friends-activity') this.showFriends('activity');
+                else if (a === 'friend-copy-link') this._copyFriendLink(a);
                 else if (a === 'manage-account') this.openUserProfile();
                 else if (a === 'logout') this.signOut();
                 else if (a === 'goto-online') this.showOnline();
@@ -2801,6 +2803,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             s.conn = conn;
             s.opp = sanitizePeerUser(msg.user);
             this._notePeerVersion(msg);
+            try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name); } catch (_) {}
             if (s.resumed) {
                 // Rejoining joiner meets the restored session: same game,
                 // same colors, full snapshot. Epoch already bumped at re-host.
@@ -2837,6 +2840,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 s.opp = sanitizePeerUser(msg.user);
                 this._notePeerVersion(msg);
                 this._paintOppCard();
+                try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name); } catch (_) {}
                 // A post-game heartbeat carries the opponent's NEW rating
                 // after their own Elo write — re-note it so the device
                 // leaderboard refreshes instantly for both players.
@@ -2875,6 +2879,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             s.gameId = msg.game_id;
             s.opp = sanitizePeerUser(msg.user);
             this._notePeerVersion(msg);
+            try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name); } catch (_) {}
             this._startOnlineGame(msg.color === 'white' ? 'white' : 'black', s.opp, this._cleanControl(msg.control), true);
             this._applyOnlineState(msg.state);
             s.peerGone = false;
@@ -2913,6 +2918,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 s.opp = sanitizePeerUser(msg.user);
                 this._notePeerVersion(msg);
                 this._paintOppCard();
+                try { if (window.DoChessFriends) window.DoChessFriends.metPeer(s.opp.id, s.opp.name); } catch (_) {}
                 // A post-game heartbeat carries the opponent's NEW rating
                 // after their own Elo write — re-note it so the device
                 // leaderboard refreshes instantly for both players.
@@ -3232,8 +3238,17 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             // 'guest' shelf; ratings above stay signed-in-only).
             OnlineRatings.pushHistory(this.userId || 'guest', {
                 gameId: s.gameId, control: { id: s.control.id, base: s.control.base, inc: s.control.inc }, opp: s.opp?.name || 'Opponent',
+                oppUid: (s.opp && s.opp.id) || null,
                 result, plies: s.engine.moveHistory.length, delta
             });
+            // Friends graph: streak stamps, head-to-head, rating publish.
+            try {
+                if (window.DoChessFriends) window.DoChessFriends.onGameEnd({
+                    oppUid: (s.opp && s.opp.id) || null, oppName: (s.opp && s.opp.name) || 'Opponent',
+                    result, cat: s.control.id,
+                    myRating: (typeof rating === 'number') ? rating : OnlineRatings.get(this.userId, s.control.id),
+                });
+            } catch (_) {}
             // Durable match record: mirror the finished game to the API
             // (Mongo, idempotent on gameId). Best-effort — a failed POST
             // never disturbs the game-over flow; both players post their own
@@ -3949,9 +3964,15 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     _onlineReview() {
         const s = this.online;
         if (!s || s.phase !== 'over') return;
+        // The Study board opens with THIS exact game: full engine analysis
+        // on the moves just played (importGame reads the durable session).
+        try {
+            if (window.DoChessStudy && s.gameId && window.DoChessStudy.importGame(s.gameId)) return;
+        } catch (_) {}
+        // Fallback: step through on the game board itself.
         s.viewPly = 0;
         this._drawOnline();
-        this._onlineStatus('Reviewing the game — step with ‹ ›, or jump back with Live.');
+        this._onlineStatus('Reviewing the game — step with …');
     }
     _onlineResign() {
         const s = this.online;
@@ -4062,6 +4083,58 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     showProfile()  { this._go('profile-screen');  this._renderProfile(); }
     showStudy()    { this._go('study-screen'); if (window.DoChessStudy) window.DoChessStudy.open(); }
     showPuzzles()  { this._go('puzzles-screen'); if (window.DoChessPuzzles) window.DoChessPuzzles.open(); }
+    showFriends(tab) {
+        this._go('friends-screen');
+        try { if (window.DoChessFriends) window.DoChessFriends.open(tab || 'friends'); } catch (_) {}
+        this._consumeFriendLink();
+    }
+
+    // Friend invite links (#friend-<uid>-<slug>): the opener lands here and
+    // can accept instantly — the slug carries the sender's display name.
+    _consumeFriendLink() {
+        let uid = null, name = null;
+        try {
+            const h = /^#friend-([\w-]{1,64})(?:-([^#]{1,30}))?$/i.exec(location.hash || '');
+            if (h) {
+                uid = h[1];
+                try { name = h[2] ? decodeURIComponent(h[2]) : null; } catch (_) { name = h[2] || null; }
+            }
+        } catch (_) {}
+        if (!uid || (this.userId && uid === this.userId)) return;
+        try {
+            const u = new URL(location.href);
+            u.hash = '';
+            history.replaceState(null, '', u.pathname + u.search + u.hash);
+        } catch (_) {}
+        try {
+            if (window.DoChessFriends) window.DoChessFriends.inboundLink(uid, name);
+        } catch (_) {}
+    }
+
+    _copyFriendLink(btn) {
+        const inp = document.getElementById('friend-link');
+        const prev = btn ? btn.textContent : '';
+        const done = () => {
+            if (!btn) return;
+            try { btn.textContent = 'Copied!'; } catch (_) {}
+            setTimeout(() => { try { btn.textContent = prev; } catch (_) {} }, 1500);
+        };
+        const show = (txt) => { if (inp) { inp.value = txt; } done(); };
+        try {
+            if (window.DoChessFriends) {
+                const link = window.DoChessFriends.profileLink();
+                if (!link) { this._fb('Sign in to get your friend link.', 'error'); return; }
+                if (inp) inp.value = link;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(link).then(done, () => { try { inp && inp.select(); } catch (_) {} done(); });
+                    return;
+                }
+                try { inp && inp.select(); } catch (_) {}
+                done();
+                return;
+            }
+        } catch (_) {}
+    }
 
     openUserProfile() {
         if (this._clerk && this._clerk.user) {
@@ -4412,6 +4485,8 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                         <span class="dc-sep" aria-hidden="true">·</span>${this._syncChipHTML()}
                     </p>
                     ${this._profileBadgesHTML()}
+                    <p class="dc-line" style="margin-top:.5rem">Friends play free, streaks grow daily:</p>
+                    <div class="join-row"><input id="friend-link" class="join-input" readonly placeholder="Your friend link…" autocomplete="off" spellcheck="false"><button class="btn-secondary sm" data-action="friend-copy-link" type="button">Copy link</button></div>
                 </div>
                 <div class="dc-id-side">${this._profileNextHTML()}</div>
             </section>`;
@@ -5116,7 +5191,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         // still be toggled here: navigating Learn -> Puzzles used to leave it
         // active, stacking two pages (and, now that screens height-lock,
         // doubling the scroll height).
-        ['home-screen','lessons-screen','lesson-screen','learn-screen','progress-screen','profile-screen','online-screen','study-screen','puzzles-screen']
+        ['home-screen','lessons-screen','lesson-screen','learn-screen','progress-screen','profile-screen','online-screen','study-screen','puzzles-screen','friends-screen']
             .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
         // A11y: move keyboard focus to the new screen so SR users land
         // on the heading instead of staying on a now-hidden control.
@@ -5125,7 +5200,8 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             if (scr) { scr.focus({ preventScroll: true }); }
         } catch (_) {}
         // Keep nav highlighted so users always know where they are
-        const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen': 'online', 'study-screen': 'study', 'puzzles-screen': 'puzzles' };
+        const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen':
+'online', 'study-screen': 'study', 'puzzles-screen': 'puzzles', 'friends-screen': 'friends' };
         const active = navFor[id];
         document.querySelectorAll('.nav-btn').forEach(b => {
             const key = b.dataset.nav || b.textContent.trim().toLowerCase();
@@ -5149,6 +5225,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 else if (key.startsWith('progress')) this.showProgress();
                 else if (key.startsWith('study')) this.showStudy();
                 else if (key.startsWith('puzzles')) this.showPuzzles();
+                else if (key.startsWith('friend')) this.showFriends();
                 this._closeMenu();
             });
         });

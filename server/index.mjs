@@ -13,6 +13,18 @@
  *   POST /api/mm/join             quick-match queue: join (pairs closest ELO, any gap)
  *   GET  /api/mm/poll?ticket=     quick-match queue: waiting position or match
  *   POST /api/mm/leave            quick-match queue: leave
+ *   POST /api/friends/add         friends: add edge (mutual edges = confirmed)
+ *   POST /api/friends/remove      friends: remove edge
+ *   GET  /api/friends/list        friends: my edges with confirmed flags
+ *   POST /api/presence            friends: heartbeat (90 s TTL)
+ *   GET  /api/friends/status?uids= friends: online/recent map
+ *   POST /api/notify              activity inbox: queue an event for a user
+ *   GET  /api/notify              activity inbox: items + unread count
+ *   POST /api/notify/ack          activity inbox: mark read
+ *   POST /api/rank/publish        ranking: publish best rating per category
+ *   GET  /api/rank?cat=&friends=  ranking: my rank + named friends, strangers anonymous
+ *   POST /api/hall/join           hall of fame: claim a first-1000 seat
+ *   GET  /api/hall                hall of fame: the registry
  *   *                             static files from the project root
  *
  * Identity is Clerk session JWTs (lib/auth.mjs). MongoDB is the permanent
@@ -30,6 +42,7 @@ import { redisStatus, rateLimit, get as rget, set as rset } from './lib/redis.mj
 import { sendJson, sendError, readJson, pathOf, query, cors, securityHeaders, header } from './lib/http.mjs';
 import { SECTION_MODES } from './lib/merge.mjs';
 import { createMatcher } from './lib/mm.mjs';
+import { createFriendStore } from './lib/friends.mjs';
 
 const STARTED = Date.now();
 const VERSION = 'api-1';
@@ -208,7 +221,8 @@ async function handleLeaderboard(req, res) {
    comes from the Clerk session (same identity as the rest of the API);
    the ticket is the only capability the poller needs. */
 const MM = createMatcher();
-setInterval(() => { try { MM.sweep(); } catch (_) {} }, 30000).unref?.();
+const FR = createFriendStore();
+setInterval(() => { try { MM.sweep(); FR.sweep(); } catch (_) {} }, 30000).unref?.();
 
 async function handleMmJoin(req, res, userId) {
     let body = {};
@@ -230,6 +244,73 @@ async function handleMmLeave(req, res) {
     let body = {};
     try { body = await readJson(req); } catch (_) { body = {}; }
     sendJson(res, 200, { ok: MM.leave(body.ticket) });
+}
+
+/* ── friends / presence / inbox / rank / hall ─────────────────── */
+async function readBody(req) {
+    try { return await readJson(req); }
+    catch (e) { return e && e.code === 'BAD_JSON' ? null : {}; }
+}
+
+async function handleFriendAdd(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    const r = FR.addEdge(userId, { uid: body.friendUid, name: body.friendName });
+    if (!r) { sendError(res, 400, 'bad-friend'); return; }
+    sendJson(res, 200, { ok: true, ...r });
+}
+
+async function handleFriendRemove(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    sendJson(res, 200, { ok: FR.removeEdge(userId, body.friendUid) });
+}
+
+async function handlePresence(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    FR.heartbeat(userId, body.name);
+    sendJson(res, 200, { ok: true });
+}
+
+async function handleFriendStatus(req, res) {
+    const q = query(req);
+    const uids = typeof q.uids === 'string' ? q.uids.split(',') : [];
+    sendJson(res, 200, { ok: true, status: FR.status(uids) });
+}
+
+async function handleNotify(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    const r = FR.notify(body.toUid, { kind: body.kind, title: body.title, body: body.body, from: userId });
+    if (!r) { sendError(res, 400, 'bad-notify'); return; }
+    sendJson(res, 200, { ok: true, id: r.id });
+}
+
+async function handleNotifyAck(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    sendJson(res, 200, { ok: true, acked: FR.ack(userId, body.ids) });
+}
+
+async function handleRankPublish(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    const r = FR.publishRank(userId, body.name, body.cat, body.rating);
+    if (!r) { sendError(res, 400, 'bad-rank'); return; }
+    sendJson(res, 200, { ok: true, ...r });
+}
+
+async function handleRank(req, res, userId) {
+    const q = query(req);
+    const friends = typeof q.friends === 'string' && q.friends ? q.friends.split(',') : [];
+    sendJson(res, 200, { ok: true, ...FR.rank(q.cat, userId, friends) });
+}
+
+async function handleHallJoin(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    sendJson(res, 200, { ok: true, ...FR.hallJoin(userId, body.name) });
 }
 
 async function handleApi(req, res) {
@@ -254,6 +335,18 @@ async function handleApi(req, res) {
     if (p === '/api/mm/join' && req.method === 'POST') { await handleMmJoin(req, res, id.userId); return; }
     if (p === '/api/mm/poll' && req.method === 'GET') { await handleMmPoll(req, res); return; }
     if (p === '/api/mm/leave' && req.method === 'POST') { await handleMmLeave(req, res); return; }
+    if (p === '/api/friends/add' && req.method === 'POST') { await handleFriendAdd(req, res, id.userId); return; }
+    if (p === '/api/friends/remove' && req.method === 'POST') { await handleFriendRemove(req, res, id.userId); return; }
+    if (p === '/api/friends/list' && req.method === 'GET') { sendJson(res, 200, { ok: true, friends: FR.listEdges(id.userId) }); return; }
+    if (p === '/api/presence' && req.method === 'POST') { await handlePresence(req, res, id.userId); return; }
+    if (p === '/api/friends/status' && req.method === 'GET') { await handleFriendStatus(req, res); return; }
+    if (p === '/api/notify' && req.method === 'POST') { await handleNotify(req, res, id.userId); return; }
+    if (p === '/api/notify' && req.method === 'GET') { sendJson(res, 200, { ok: true, ...FR.inbox(id.userId) }); return; }
+    if (p === '/api/notify/ack' && req.method === 'POST') { await handleNotifyAck(req, res, id.userId); return; }
+    if (p === '/api/rank/publish' && req.method === 'POST') { await handleRankPublish(req, res, id.userId); return; }
+    if (p === '/api/rank' && req.method === 'GET') { await handleRank(req, res, id.userId); return; }
+    if (p === '/api/hall/join' && req.method === 'POST') { await handleHallJoin(req, res, id.userId); return; }
+    if (p === '/api/hall' && req.method === 'GET') { sendJson(res, 200, { ok: true, hall: FR.hall() }); return; }
 
     sendError(res, 404, 'not-found');
 }

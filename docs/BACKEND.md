@@ -24,6 +24,18 @@ One Node process serves **both** the static site and the API on `PORT`
 | `POST /api/mm/join` | Clerk session | quick-match queue join (pairs closest ELO, any gap — testing mode) |
 | `GET /api/mm/poll?ticket=` | Clerk session | queue position or `{code, role, opp}` match |
 | `POST /api/mm/leave` | Clerk session | leave the quick-match queue |
+| `POST /api/friends/add` | Clerk session | add edge (mutual edges = confirmed) |
+| `POST /api/friends/remove` | Clerk session | remove edge |
+| `GET /api/friends/list` | Clerk session | my edges with confirmed flags |
+| `POST /api/presence` | Clerk session | heartbeat (90 s TTL) |
+| `GET /api/friends/status?uids=` | Clerk session | online/recent map |
+| `POST /api/notify` | Clerk session | queue an inbox event for a user |
+| `GET /api/notify` | Clerk session | inbox items + unread count |
+| `POST /api/notify/ack` | Clerk session | mark inbox read |
+| `POST /api/rank/publish` | Clerk session | publish best rating per category |
+| `GET /api/rank?cat=&friends=` | Clerk session | my rank + named friends, strangers anonymous |
+| `POST /api/hall/join` | Clerk session | claim a first-1000 seat |
+| `GET /api/hall` | Clerk session | the hall-of-fame registry |
 | `*` | none | static files from the project root |
 
 `server/`, `node_modules/`, `.git`, `skills/` and the screenshot folders are

@@ -3034,6 +3034,28 @@ async function bootLearn() {
         $('hint-text').textContent = msg;
         feedback('info', msg);
     });
+    // Deep hint: optional cloud-engine assist (chess-api shapes). The button
+    // only exists when an endpoint is configured; otherwise the local hint
+    // above is the whole story and nothing ever touches the network.
+    try {
+        if (window.DoChessCloud && window.DoChessCloud.configured()) {
+            const dh = $('deep-hint-btn');
+            if (dh) {
+                dh.hidden = false;
+                dh.addEventListener('click', async () => {
+                    if (!sess) return;
+                    feedback('info', 'Asking the cloud engine…');
+                    const fen = (sess.state && sess.state.fen) || null;
+                    const mv = await window.DoChessCloud.hint(fen, []);
+                    if (!mv) { feedback('error', 'Cloud engine unreachable — the local Hint still works.'); return; }
+                    const msg = `Cloud suggests ${mv.slice(0, 2)}-${mv.slice(2, 4)}${mv[4] ? '=' + mv[4].toUpperCase() : ''}.`;
+                    $('hint-text').textContent = msg;
+                    say(msg);
+                    feedback('info', msg);
+                });
+            }
+        }
+    } catch (_) {}
     bind('solve-btn', () => {
         if (!sess) return;
         const r = sess.solution();
