@@ -245,23 +245,59 @@ requests, and a stranger's row carries no identifier.
 
 ## 9. Production deployment
 
-### Frontend — deployed
+### Frontend — deployed and verified
 
-- Commit pushed to `origin/master`: **`d64e6c1`**
-- Live URL: `https://mouadhhhallem.github.io/dochess/`
-- Pages builds from `master` (legacy branch build); asset keys bumped
-  (`friends.js?v=5`, `app.js?v=52`).
-
-See section 11 for the live verification performed after the push.
+| | |
+| --- | --- |
+| Live URL | `https://mouadhhhallem.github.io/dochess/` |
+| Commits pushed | `d64e6c1` → `6aa617f` → `5fcf95d` → **`0145388`** |
+| Pages build | `status: built` at commit `0145388a88379896214eab3a3650aaf29413ba85` (39.5 s) |
+| Deployed commit hash | `0145388a88379896214eab3a3650aaf29413ba85` |
+| Branch | `master` (Pages builds from `master` root) |
 
 ### Backend — NOT deployed (blocker, not an omission)
 
 No hosting credential exists on this machine and no host was provisioned.
-`docs/DEPLOY.md` has the full manual procedure.
+`docs/DEPLOY.md` has the full manual procedure; section 10 below lists the
+exact steps.
 
 ---
 
-## 10. Exact manual actions required
+## 10. Live verification actually performed (real browser, production URL)
+
+Run against `https://mouadhhhallem.github.io/dochess/index.html` after the
+Pages build at `0145388` completed:
+
+| Check | Result |
+| --- | --- |
+| `window.DoChessFriends.version` | **4** → the new build is live, not a cached old bundle |
+| `apiBase()` | **null** → correctly in device-local mode |
+| Ranking header text | `#2 Self Player 2 players on this device · blitz · you hold 800 BRONZE` — pluralisation correct, and it says *players on this device*, not *registered players* |
+| Claims "Global ladder"? | **false** — a device board is never presented as global |
+| Says "Device board" + explains why | **true** — *"This browser is not connected to the ranking service, so only players this device has met are listed."* |
+| `/api/*` requests attempted | **0** — the sync health probe no longer fires pointlessly on static hosting |
+| **Console errors** | **0** |
+| **Failed network requests** | **0** |
+| Deployed `index.html` encoding | no BOM, **0 mojibake sequences**, `<title>` contains U+2014 (em dash) correctly |
+| Deployed assets contain the new code | `tc-overlay`, `pickTimeControl`, `invites/respond`, `friends/snapshot`, `pullSnapshot`, `adoptGuestShelf` all present in the served `friends.js` |
+
+Three defects were found **only** by this live check and then fixed and
+re-deployed:
+
+1. `js/sync.js` fired a same-origin `/api/health` probe on every page load
+   even with no backend → 404 + a red console error for every visitor.
+2. The ranking header said "registered players" on a device board.
+3. My own fix for (2) produced "2 player on this devices" — caught live,
+   fixed, and now covered by a regression assertion.
+
+**Not verified live** (needs a backend that does not exist):
+two-browser multiplayer against production, and a global leaderboard of real
+registered accounts against production Atlas. Those are proven locally
+against a real API process and are explicitly blocked in production.
+
+---
+
+## 11. Exact manual actions required
 
 To make the platform genuinely global, in order:
 
@@ -294,13 +330,6 @@ To make the platform genuinely global, in order:
 
 ---
 
-## 11. Live verification after deploy
-
-Performed against `https://mouadhhhallem.github.io/dochess/` after pushing
-`d64e6c1`; results are recorded verbatim in section 12.
-
----
-
 ## 12. Remaining blockers and unresolved items
 
 **Blockers (environmental, not code):**
@@ -327,3 +356,16 @@ Performed against `https://mouadhhhallem.github.io/dochess/` after pushing
   bug fix, so I removed the leak rather than inventing a registry.
 - **`dream-canvas-player/`** is an unrelated untracked sub-project that was
   already in the working tree. It was deliberately **not** committed.
+
+---
+
+## 13. Commits
+
+| Commit | Contents |
+| --- | --- |
+| `d64e6c1` | The audit fixes (server social graph, ladder, invitations, client reconcile, tests, docs) |
+| `6aa617f` | `docs/PRODUCTION_FIX_REPORT.md` |
+| `5fcf95d` | Live-check fixes: sync health probe, device-board copy |
+| `0145388` | Pluralisation fix (caught live, not by the unit suite) |
+
+Deployed: `0145388`.
