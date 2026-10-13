@@ -4092,12 +4092,27 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     // Friend invite links (#friend-<uid>-<slug>): the opener lands here and
     // can accept instantly — the slug carries the sender's display name.
     _consumeFriendLink() {
-        let uid = null, name = null;
+        let uid = null, name = null, img = null;
         try {
-            const h = /^#friend-([\w-]{1,64})(?:-([^#]{1,30}))?$/i.exec(location.hash || '');
-            if (h) {
-                uid = h[1];
-                try { name = h[2] ? decodeURIComponent(h[2]) : null; } catch (_) { name = h[2] || null; }
+            const m = /^#friend-([^#]{1,400})$/i.exec(location.hash || '');
+            if (m) {
+                const parts = m[1].split('-');
+                // Trailing photo segment: the longest suffix that decodes to an https URL.
+                for (let i = parts.length - 1; i >= 2 && !img; i--) {
+                    const cand = parts.slice(i).join('-');
+                    if (/^[A-Za-z0-9\-_]{20,400}$/.test(cand)) {
+                        try {
+                            let b = cand.replace(/-/g, '+').replace(/_/g, '/');
+                            while (b.length % 4) b += '=';
+                            const dec = decodeURIComponent(escape(atob(b)));
+                            if (/^https:\/\//.test(dec)) { img = dec.slice(0, 2048); parts.splice(i); }
+                        } catch (_) {}
+                    }
+                }
+                if (/^[\w-]{1,64}$/.test(parts[0] || '')) {
+                    uid = parts[0];
+                    try { name = parts.length > 1 ? decodeURIComponent(parts.slice(1).join('-')) : null; } catch (_) { name = parts.slice(1).join('-') || null; }
+                }
             }
         } catch (_) {}
         if (!uid || (this.userId && uid === this.userId)) return;
@@ -4107,7 +4122,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             history.replaceState(null, '', u.pathname + u.search + u.hash);
         } catch (_) {}
         try {
-            if (window.DoChessFriends) window.DoChessFriends.inboundLink(uid, name);
+            if (window.DoChessFriends) window.DoChessFriends.inboundLink(uid, name, img);
         } catch (_) {}
     }
 

@@ -116,27 +116,39 @@ test('ranking names friends, anonymizes strangers; hall lists join order', async
     await page.close();
 });
 
-test('chess.com lookup adds real accounts; metPeer confirms', async ({ browser }) => {
+test('friend links carry photos; metPeer confirms and stores them', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
-    await page.route('**/api.chess.com/**', (r) => {
-        const url = r.request().url();
-        if (url.endsWith('/stats')) r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ chess_blitz: { last: { rating: 2912 } } }) });
-        else r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ username: 'magnus', name: 'Magnus Carlsen', avatar: null, joined: 1200000000 }) });
+    // Sender side: profile link embeds the avatar (fake Clerk photo here).
+    await page.evaluate(() => {
+        window.app._clerk.user.imageUrl = 'https://x.test/me.png';
     });
+    const raw = await page.evaluate(() => window.DoChessFriends.profileLink());
+    expect(raw).toMatch(/#friend-fr_u1-FriendOne-/);
+    // Receiver side (a different account): parse + accept, photo on card.
+    await page.evaluate((l) => {
+        const link = l.replace('fr_u1', 'sender99');
+        const m = /#friend-([^-]+)-([^-]+)-(.+)$/.exec(link);
+        let img = null;
+        try {
+            let b = m[3].replace(/-/g, '+').replace(/_/g, '/');
+            while (b.length % 4) b += '=';
+            img = decodeURIComponent(escape(atob(b)));
+        } catch (_) {}
+        window.DoChessFriends.inboundLink(m[1], decodeURIComponent(m[2]), img);
+    }, raw);
     await page.evaluate(() => window.app.showFriends());
-    await page.locator('#fr-ccname').fill('magnus');
-    await page.click('[data-faction="cc-lookup"]');
-    await expect(page.locator('#fr-ccout')).toContainText('Magnus Carlsen');
-    await expect(page.locator('#fr-ccout')).toContainText('2912');
-    await page.click('[data-faction="cc-add"]');
-    await expect(page.locator('#fr-grid')).toContainText('Magnus Carlsen');
-    // P2P meeting confirms a pending outbound edge.
+    await expect(page.locator('.fr-req img.fr-avaimg[src="https://x.test/me.png"]')).toBeVisible();
+    await page.click('[data-faction="accept"]');
+    const acc = await page.evaluate(() => window.DoChessFriends.list().find((x) => x.uid === 'sender99'));
+    expect(acc.img).toBe('https://x.test/me.png');
+    // P2P meeting confirms a pending outbound edge + stores the photo.
     await page.evaluate(() => {
         window.DoChessFriends.addFriend('live9', 'Liva', 'search');
-        window.DoChessFriends.metPeer('live9', 'Liva');
+        window.DoChessFriends.metPeer('live9', 'Liva', 'https://x.test/liva.png');
     });
-    const conf = await page.evaluate(() => window.DoChessFriends.list().find((x) => x.uid === 'live9').confirmed);
-    expect(conf).toBe(true);
+    const lv = await page.evaluate(() => window.DoChessFriends.list().find((x) => x.uid === 'live9'));
+    expect(lv.confirmed).toBe(true);
+    expect(lv.img).toBe('https://x.test/liva.png');
     await page.close();
 });
 

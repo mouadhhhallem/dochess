@@ -256,6 +256,7 @@ async function handleFriendAdd(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
     const r = FR.addEdge(userId, { uid: body.friendUid, name: body.friendName, img: body.friendImg });
+    try { FR.heartbeat(userId, body.myName); } catch (_) {}
     if (!r) { sendError(res, 400, 'bad-friend'); return; }
     sendJson(res, 200, { ok: true, ...r });
 }

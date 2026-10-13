@@ -143,9 +143,10 @@
                 days: {}, best: 0, lastSeen: 0,
             };
         } else if (name) f.name = String(name).slice(0, 24);
+        if (img) { const ci = cleanImg(img); if (ci) f.img = ci; }
         if (!S.pendingOut.includes(uid) && !f.confirmed) S.pendingOut.push(uid);
         save(); renderBell();
-        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f.name, friendImg: f.img || null }).catch(() => {}); } catch (_) {}
+        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f.name, friendImg: f.img || null, myName: meName() }).catch(() => {}); } catch (_) {}
         return f;
     }
     function acceptFriend(uid) {
@@ -155,7 +156,7 @@
         // Never clobber a known name with the fallback: only an inbound
         // request carries a (possibly newer) display name.
         let f = S.friends[uid] || null;
-        if (req) f = addFriend(uid, req.name, 'link');
+        if (req) f = addFriend(uid, req.name, 'link', req.img || null);
         else if (!f) f = addFriend(uid, 'Player', 'link');
         if (f) {
             // Confirmed flips true only through mutual edges (server list
@@ -164,7 +165,7 @@
             if (po >= 0) S.pendingOut.splice(po, 1);
         }
         save(); renderBell();
-        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f ? f.name : '', friendImg: (f && f.img) || null }).catch(() => {}); } catch (_) {}
+        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f ? f.name : '', friendImg: (f && f.img) || null, myName: meName() }).catch(() => {}); } catch (_) {}
         pullEdges();
         return f;
     }
@@ -432,43 +433,52 @@
         return { server: false, hall: rows };
     }
 
+    /* base64url (link-safe, no padding) for embedding photos in links */
+    function b64urlEncode(str) {
+        try {
+            const b = btoa(unescape(encodeURIComponent(str)));
+            return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        } catch (_) { return ''; }
+    }
+    function b64urlDecode(str) {
+        try {
+            let b = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+            while (b.length % 4) b += '=';
+            return decodeURIComponent(escape(atob(b)));
+        } catch (_) { return ''; }
+    }
+
     /* ── profile links ──────────────────────────────────────── */
     function profileLink() {
         const me = uidOf();
         if (!me || me === 'guest') return null;
         const slug = encodeURIComponent(meName()).slice(0, 30);
-        return `${siteBase()}#friend-${me}-${slug}`;
+        let link = `${siteBase()}#friend-${me}-${slug}`;
+        const photo = myAvatar();
+        if (photo) {
+            const enc = b64urlEncode(photo);
+            if (enc && enc.length <= 400) link += '-' + enc;
+        }
+        return link;
     }
-    function inboundLink(uid, name) {
+    function inboundLink(uid, name, img) {
         if (!uid || uid === uidOf()) return;
         if (S.friends[uid]) { open('friends'); return; } // already friends
+        img = cleanImg(img);
+        const shown = String(name || 'Player').slice(0, 24);
         if (!S.pendingIn.some((p) => p.uid === uid)) {
-            S.pendingIn.unshift({ uid, name: String(name || 'Player').slice(0, 24), at: Date.now() });
+            S.pendingIn.unshift({ uid, name: shown, img: img, at: Date.now() });
             save();
+        } else if (img) {
+            const rec = S.pendingIn.find((p) => p.uid === uid);
+            if (rec && !rec.img) { rec.img = img; save(); }
         }
-        notifyLocal('friend-request', `Friend request from ${String(name || 'Player').slice(0, 24)}`, 'Accept to start growing a streak together.', uid);
+        notifyLocal('friend-request', `Friend request from ${shown}`, 'Accept to start growing a streak together.', uid);
         open('friends');
     }
 
     /* ── chess.com lookup (public data, no key) ─────────────── */
-    async function chesscomLookup(username) {
-        const u = String(username || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-        if (!u) throw new Error('empty');
-        const ctrl = new AbortController();
-        const to = setTimeout(() => ctrl.abort(), 8000);
-        try {
-            const res = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(u)}`, { signal: ctrl.signal });
-            if (res.status === 404) return null;
-            if (!res.ok) throw new Error('http-' + res.status);
-            const p = await res.json();
-            let blitz = null;
-            try {
-                const st = await (await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(u)}/stats`, { signal: ctrl.signal })).json();
-                blitz = st && st.chess_blitz && st.chess_blitz.last && st.chess_blitz.last.rating;
-            } catch (_) {}
-            return { username: p.username || u, name: p.name || p.username || u, avatar: p.avatar || null, joined: p.joined || 0, blitz };
-        } finally { clearTimeout(to); }
-    }
+    
 
     /* ── daily hero (real learn activity: streak, XP, heat) ─────── */
     function localDayKey(back) {
@@ -632,15 +642,10 @@
             <div id="fr-results"></div>
             ${rival ? `<div class="fr-rival"><span class="fr-crown" aria-hidden="true">♛</span><div><strong>Rival of the week</strong><p>${esc(rival.name)} · ${rival.games} games together</p></div></div>` : ''}
             ${reqs.length ? `<div class="fr-reqs"><h3>Requests</h3>${reqs.map((p) => `
-                <div class="fr-req">${avatarHTML(p.name)}<div class="fr-id"><strong>${esc(p.name)}</strong><span class="fr-sub">wants to be friends</span></div>
+                <div class="fr-req">${avatarHTML(p.name, null, p.img)}<div class="fr-id"><strong>${esc(p.name)}</strong><span class="fr-sub">wants to be friends</span></div>
                 <span class="fr-reqacts"><button class="btn-primary sm" data-faction="accept" data-uid="${esc(p.uid)}" type="button">Accept</button><button class="btn-secondary sm" data-faction="decline" data-uid="${esc(p.uid)}" type="button">Decline</button></span></div>`).join('')}</div>` : ''}
             <div class="fr-grid" id="fr-grid"></div>
-            <div class="fr-cc">
-                <h3>From chess.com</h3>
-                <p class="lobby-hint">Look up any public chess.com account and add them straight from their rating card.</p>
-                <div class="join-row"><input id="fr-ccname" class="join-input" placeholder="chess.com username" autocomplete="off" spellcheck="false" maxlength="32"><button class="btn-secondary" data-faction="cc-lookup" type="button">Look up</button></div>
-                <div id="fr-ccout"></div>
-            </div>`;
+`;
         const grid = box.querySelector('#fr-grid');
         const paint = async () => {
             let pres = {};
@@ -650,7 +655,7 @@
                     pres = (r && r.status) || {};
                 }
             } catch (_) {}
-            grid.innerHTML = rows.length ? rows.map((f) => friendRow(f, pres)).join('') : `<div class="fr-onboard"><h3>Grow your first flame</h3><ol><li><strong>Copy your invite link</strong> — anyone, anywhere.</li><li><strong>Play one game together</strong> — any day, any control.</li><li><strong>+1 every day</strong> you both play. Miss a day and it resets.</li></ol><div class="fr-acts"><button class="btn-primary sm" data-faction="copy-link" type="button">Copy invite link</button><button class="btn-secondary sm" data-faction="goto-cc" type="button">Find on chess.com</button></div></div>`;
+            grid.innerHTML = rows.length ? rows.map((f) => friendRow(f, pres)).join('') : `<div class="fr-onboard"><h3>Grow your first flame</h3><ol><li><strong>Copy your invite link</strong> — anyone, anywhere.</li><li><strong>Play one game together</strong> — any day, any control.</li><li><strong>+1 every day</strong> you both play. Miss a day and it resets.</li></ol><div class="fr-acts"><button class="btn-primary sm" data-faction="copy-link" type="button">Copy invite link</button><button class="btn-secondary sm" data-faction="goto-search" type="button">Search DoChess players</button></div></div>`;
         };
         paint();
         const input = box.querySelector('#fr-search');
@@ -839,31 +844,12 @@
             open(currentTab);
             return;
         }
-        if (a === 'goto-cc') {
-            const gi = document.getElementById('fr-ccname');
-            if (gi) { try { gi.scrollIntoView({ block: 'center' }); } catch (_) {} try { gi.focus({ preventScroll: true }); } catch (_) {} }
+        if (a === 'goto-search') {
+            const si = document.getElementById('fr-search');
+            if (si) { try { si.scrollIntoView({ block: 'center' }); } catch (_) {} try { si.focus({ preventScroll: true }); } catch (_) {} }
             return;
         }
-        if (a === 'cc-lookup') {
-            const inp = document.getElementById('fr-ccname');
-            const out = document.getElementById('fr-ccout');
-            const name = inp ? inp.value : '';
-            if (out) out.innerHTML = `<p class="lobby-hint">Looking up ${esc(name)}…</p>`;
-            try {
-                const p = await chesscomLookup(name);
-                if (!p) { if (out) out.innerHTML = `<p class="fr-empty">No chess.com account by that name.</p>`; return; }
-                if (out) out.innerHTML = `<div class="fr-card mini">${p.avatar ? `<img class="fr-avaimg" src="${esc(p.avatar)}" alt="" width="40" height="40" loading="lazy">` : avatarHTML(p.name)}<div class="fr-id"><strong>${esc(p.name)}</strong><span class="fr-sub">@${esc(p.username)}${p.blitz ? ' · blitz ' + p.blitz : ''}</span></div><button class="btn-secondary sm" data-faction="cc-add" data-uid="${esc('cc:' + p.username)}" data-name="${esc(p.name)}" data-rating="${p.blitz || ''}" type="button">Add</button></div>`;
-            } catch (_) {
-                if (out) out.innerHTML = `<p class="fr-empty">Lookup failed — check the name and your connection.</p>`;
-            }
-            return;
-        }
-        if (a === 'cc-add') {
-            const f = addFriend(uid, el.dataset.name, 'chesscom');
-            if (f && el.dataset.rating) f.chesscomRating = parseInt(el.dataset.rating, 10) || null;
-            save(); open(currentTab);
-            return;
-        }
+
     }
     document.addEventListener('click', (e) => { try { onFaction(e); } catch (_) {} });
 
@@ -877,7 +863,7 @@
         addFriend, acceptFriend, removeFriend, search, streakOf, versus,
         list: () => Object.values(S.friends),
         unread, inbox: () => S.inbox.slice(),
-        tierOf, rankBoard, hallList, chesscomLookup,
+        tierOf, rankBoard, hallList,
         apiBase, version: 1,
     };
 })();
