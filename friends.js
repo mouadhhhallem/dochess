@@ -1604,12 +1604,17 @@ let needSnapshot = false;
         const selfRow = (data.board || []).find((b) => b.self);
         const me = (selfRow && typeof selfRow.rating === 'number') ? selfRow.rating
             : (typeof data.myRating === 'number' ? data.myRating : myRating(currentCat));
+        // Count the noun phrase as a whole so pluralisation is never wrong
+        // ("1 player on this device" / "2 players on this device").
+        const noun = data.server
+            ? `registered player${data.total === 1 ? '' : 's'}`
+            : `player${data.total === 1 ? '' : 's'} on this device`;
         const first = offset === 0;
         out.innerHTML = `
             ${first ? `
             <div class="fr-myrank">
                 <span class="fr-bigrank">#${data.myRank != null ? data.myRank : '–'}</span>
-                <div><strong>${esc(meName())}</strong><p>${data.total} ${data.server ? 'registered player' : 'player on this device'}${data.total === 1 ? '' : 's'} · ${currentCat} · you hold <strong>${me}</strong></p></div>
+                <div><strong>${esc(meName())}</strong><p>${data.total} ${noun} · ${currentCat} · you hold <strong>${me}</strong></p></div>
                 ${tierChip(me)}
             </div>
             ${podiumHTML(data)}` : `<p class="lobby-hint">Showing ranks ${offset + 1}–${offset + (data.board || []).length} of ${data.total}</p>`}
