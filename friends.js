@@ -446,9 +446,19 @@
             }
         } catch (_) {}
         // Device board: everyone this device has met, friends named.
+        // You are ALWAYS on your own board (800 START counts) so ranking
+        // is never an empty page: rank #N of M is real from day one.
         try {
             if (typeof OnlineRatings !== 'undefined' && OnlineRatings.board) {
                 const rows = OnlineRatings.board(cat);
+                if (!rows.some((p) => p && p.uid === uidOf())) {
+                    rows.push({ uid: uidOf(), name: meName(), rating: myRating(cat), seen: Date.now() });
+                    rows.sort((a, b) => {
+                        const ra = (a && typeof a.rating === 'number') ? a.rating : -1;
+                        const rb = (b && typeof b.rating === 'number') ? b.rating : -1;
+                        return rb - ra;
+                    });
+                }
                 const board = rows.map((p, i) => {
                     const isMe = p.uid === uidOf();
                     const isFriend = !!S.friends[p.uid];
@@ -769,7 +779,7 @@
         out.innerHTML = `
             <div class="fr-myrank">
                 <span class="fr-bigrank">#${data.myRank != null ? data.myRank : '–'}</span>
-                <div><strong>${esc(meName())}</strong><p>${data.total} rated players · ${currentCat} · you hold <strong>${me}</strong></p></div>
+                <div><strong>${esc(meName())}</strong><p>${data.total} rated player${data.total === 1 ? '' : 's'} · ${currentCat} · you hold <strong>${me}</strong></p></div>
                 ${tierChip(me)}
             </div>
             ${podiumHTML(data)}

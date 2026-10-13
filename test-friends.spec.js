@@ -229,6 +229,16 @@ test('friend links carry photos; metPeer confirms and stores them', async ({ bro
     await page.close();
 });
 
+test('ranking always shows self, even with zero other players', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1280, height: 800 });
+    await page.evaluate(() => window.app.showFriends('ranking'));
+    await expect(page.locator('.fr-myrank')).toContainText('#1');
+    await expect(page.locator('.fr-myrank')).toContainText('1 rated player');
+    await expect(page.locator('#fr-rankout')).toContainText('(you)');
+    await expect(page.locator('#fr-rankout')).not.toContainText('No rated players yet');
+    await page.close();
+});
+
 test('hero shows daily flame, XP bar and tier even with zero friends', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
     await page.evaluate(() => {
