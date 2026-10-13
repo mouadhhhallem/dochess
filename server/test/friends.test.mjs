@@ -78,6 +78,14 @@ test('rank: publish keeps best, strangers anonymous, friends named', () => {
     assert.equal(empty.myRank, null);
 });
 
+test('directory: every touchpoint registers searchable players', () => {
+    const fr = createFriendStore();
+    fr.register('u1', 'Alpha', 'https://x.test/a.png');
+    fr.register('junk!!!', 'Nope');
+    assert.deepEqual(fr.lookup('alp'), [{ uid: 'u1', name: 'Alpha', img: 'https://x.test/a.png' }]);
+    assert.deepEqual(fr.lookup('al'), []); // min 3 letters, no enumeration
+});
+
 test('directory: heartbeat and rank publish register searchable players', () => {
     const fr = createFriendStore();
     assert.deepEqual(fr.lookup('al'), []);

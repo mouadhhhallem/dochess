@@ -226,5 +226,5 @@ export function createFriendStore() {
         return { presence: out };
     }
 
-    return { addEdge, removeEdge, listEdges, heartbeat, status, notify, inbox, ack, publishRank, rank, hallJoin, hall, lookup, sweep };
+    return { addEdge, removeEdge, listEdges, heartbeat, status, notify, inbox, ack, publishRank, rank, hallJoin, hall, lookup, register, sweep };
 }

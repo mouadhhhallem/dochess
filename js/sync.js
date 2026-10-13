@@ -34,6 +34,18 @@
 
     /* ── section table ─────────────────────────────────────────────── */
 
+    function profile() {
+        try {
+            var u = window.app && window.app._clerk && window.app._clerk.user;
+            if (!u) return null;
+            var p = {};
+            var nm = u.fullName || u.username || '';
+            if (nm) p.name = String(nm).slice(0, 64);
+            var im = u.imageUrl || u.profileImageUrl || u.avatar || '';
+            if (/^https:/.test(im)) p.image = String(im).slice(0, 2048);
+            return Object.keys(p).length ? p : null;
+        } catch (_) { return null; }
+    }
     function anon() {
         try { return (window.app && window.app.userId) || 'anon'; } catch (_) { return 'anon'; }
     }
@@ -520,7 +532,9 @@
         }
         if (!sent.length) return Promise.resolve(null);
         setStatus('syncing');
-        return api('PUT', '/state', { sections: sections }).then(function (doc) {
+        var prof = profile();
+        var body = prof ? { sections: sections, profile: prof } : { sections: sections };
+        return api('PUT', '/state', body).then(function (doc) {
             S.lastSyncAt = Date.now();
             S.lastConflict = null; // replaced below if this very push loses a race
             // Adopt the server's timestamps so the next collect is clean.

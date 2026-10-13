@@ -142,6 +142,12 @@ async function handlePutState(req, res, userId) {
         if (!(id in SECTION_MODES)) delete incoming[id]; // unknown sections are dropped, not stored
     }
     const doc = await db().updateUser(userId, incoming, body.profile);
+    // Every syncing user becomes searchable: name + photo feed the
+    // directory (no enumeration — lookup needs 3+ letters, max 20).
+    try {
+        const prof = body.profile || {};
+        if (prof.name || prof.image) FR.register(userId, prof.name, prof.image);
+    } catch (_) {}
     sendJson(res, 200, {
         ok: true,
         userId,
