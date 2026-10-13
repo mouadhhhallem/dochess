@@ -16,6 +16,7 @@
  *   POST /api/friends/add         friends: add edge (mutual edges = confirmed)
  *   POST /api/friends/remove      friends: remove edge
  *   GET  /api/friends/list        friends: my edges with confirmed flags
+ *   GET  /api/friends/requests    friends: inbound requests (they list me, I don't list them)
  *   POST /api/presence            friends: heartbeat (90 s TTL)
  *   GET  /api/friends/status?uids= friends: online/recent map
  *   POST /api/notify              activity inbox: queue an event for a user
@@ -38,7 +39,7 @@ import { join, normalize, extname, resolve, sep } from 'node:path';
 import { config, missingConfig, isProductionReady, ROOT } from './lib/env.mjs';
 import { initDb, db, dbStatus, sanitizeGameRecord, extractCatRating } from './lib/db.mjs';
 import { identify, authStatus, authMode } from './lib/auth.mjs';
-import { redisStatus, rateLimit, get as rget, set as rset } from './lib/redis.mjs';
+import { redisStatus, rateLimit, get as rget, set as rset, del as rdel } from './lib/redis.mjs';
 import { sendJson, sendError, readJson, pathOf, query, cors, securityHeaders, header } from './lib/http.mjs';
 import { SECTION_MODES } from './lib/merge.mjs';
 import { createMatcher } from './lib/mm.mjs';
@@ -150,6 +151,20 @@ async function handlePutState(req, res, userId) {
         const prof = body.profile || {};
         if (prof.name || prof.image) FR.register(userId, prof.name, prof.image);
     } catch (_) {}
+    // Ratings drive the leaderboard: a fresh ratings section must not wait
+    // up to 30 s behind the cache. Bust every category key for this store.
+    try {
+        if (incoming && incoming.ratings) {
+            let kind = 'none';
+            try { kind = db().kind || 'none'; } catch (_) {}
+            for (const c of LEADER_CATS) {
+                try { await rdel('lb:' + config.mongoDb + ':' + kind + ':' + c); } catch (_) {}
+                // Legacy key shape (pre-kind suffix): clear too so a stale
+                // cross-env entry can never resurface after the upgrade.
+                try { await rdel('lb:' + config.mongoDb + ':' + c); } catch (_) {}
+            }
+        }
+    } catch (_) {}
     sendJson(res, 200, {
         ok: true,
         userId,
@@ -180,15 +195,20 @@ const LEADER_CATS = new Set(['bullet', 'blitz', 'rapid', 'classical', 'correspon
 
 async function handleLeaderboard(req, res) {
     const cat = (query(req).cat || 'blitz').slice(0, 24);
-    // Cache key is per database: several environments (dev, e2e, prod) may
-    // share one Upstash instance, and a shared key would serve one env's
-    // board to another.
-    const key = 'lb:' + config.mongoDb + ':' + cat;
+    // Validate BEFORE touching the cache: a cached payload must never
+    // satisfy a bad-category request, and a bad cat must never poison it.
+    if (!LEADER_CATS.has(cat)) { sendError(res, 400, 'bad-category'); return; }
+    // Cache key isolates both the database NAME and the live store KIND.
+    // Several environments (dev file-store, e2e, prod mongo) share one
+    // Upstash instance with the same DB name ("dochess"): without the kind
+    // suffix one env's board was served to another (stale devsmoke rows).
+    let kind = 'none';
+    try { kind = db().kind || 'none'; } catch (_) {}
+    const key = 'lb:' + config.mongoDb + ':' + kind + ':' + cat;
     const cached = await rget(key);
     if (cached) {
         try { sendJson(res, 200, JSON.parse(cached)); return; } catch (_) { /* refetch */ }
     }
-    if (!LEADER_CATS.has(cat)) { sendError(res, 400, 'bad-category'); return; }
 
     // Top-N per category. The ratings section stores the live ratings object
     // {rating, best, games, ...} per category (bare numbers on legacy dev
@@ -266,7 +286,9 @@ async function handleFriendAdd(req, res, userId) {
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
     const r = FR.addEdge(userId, { uid: body.friendUid, name: body.friendName, img: body.friendImg });
     if (!r) { sendError(res, 400, 'bad-friend'); return; }
-    try { FR.heartbeat(userId, body.myName); } catch (_) {}
+    // Heartbeat carries the requester's own photo so directory search and
+    // inbound-request rows render avatars without a second lookup.
+    try { FR.heartbeat(userId, body.myName, body.myImg || null); } catch (_) {}
     try { EV.publish(body.friendUid, { kind: 'friends' }); } catch (_) {}
     sendJson(res, 200, { ok: true, ...r });
 }
@@ -315,7 +337,18 @@ async function handleNotify(req, res, userId) {
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
     const r = FR.notify(body.toUid, { kind: body.kind, title: body.title, body: body.body, from: userId, data: body.data });
     if (!r) { sendError(res, 400, 'bad-notify'); return; }
+    // Generic inbox ping (poll fallback pulls the full item) PLUS a typed
+    // game-invite ping so recipients can prioritize the actionable popup
+    // without waiting for the inbox round-trip. Both are best-effort: the
+    // 5 s poller covers missed/lost streams, restarts, and multi-instance.
     try { EV.publish(body.toUid, { kind: 'notify', id: r.id }); } catch (_) {}
+    try {
+        if (r.kind === 'game-invite' && r.data && r.data.code) {
+            EV.publish(body.toUid, { kind: 'game-invite', id: r.id, code: r.data.code });
+        } else if (r.kind === 'friend-request' || r.kind === 'friend-accept' || r.kind === 'friend-decline') {
+            EV.publish(body.toUid, { kind: 'friends', id: r.id });
+        }
+    } catch (_) {}
     sendJson(res, 200, { ok: true, id: r.id });
 }
 
@@ -389,6 +422,7 @@ async function handleApi(req, res) {
     if (p === '/api/friends/add' && req.method === 'POST') { await handleFriendAdd(req, res, id.userId); return; }
     if (p === '/api/friends/remove' && req.method === 'POST') { await handleFriendRemove(req, res, id.userId); return; }
     if (p === '/api/friends/list' && req.method === 'GET') { sendJson(res, 200, { ok: true, friends: FR.listEdges(id.userId) }); return; }
+    if (p === '/api/friends/requests' && req.method === 'GET') { sendJson(res, 200, { ok: true, requests: FR.inboundRequests(id.userId) }); return; }
     if (p === '/api/directory' && req.method === 'GET') { await handleDirectory(req, res, id.userId); return; }
     if (p === '/api/presence' && req.method === 'POST') { await handlePresence(req, res, id.userId); return; }
     if (p === '/api/friends/status' && req.method === 'GET') { await handleFriendStatus(req, res); return; }

@@ -58,24 +58,39 @@ test('notify: inbox caps, unread counts, ack', () => {
     assert.ok(fr.inbox('u2').items.length <= 50);
 });
 
-test('rank: publish keeps best, strangers anonymous, friends named', () => {
+test('rank: publish keeps best, global board, strangers first-name only', () => {
     const fr = createFriendStore();
     fr.publishRank('u1', 'Alpha', 'blitz', 900);
     fr.publishRank('u1', 'Alpha', 'blitz', 800); // best kept
     fr.publishRank('u2', 'Beta', 'blitz', 1200);
-    fr.publishRank('u3', 'Gamma', 'blitz', 500);
+    fr.publishRank('u3', 'Gamma Wilkinson', 'blitz', 500);
     const r = fr.rank('blitz', 'u1', ['u2']);
     assert.equal(r.total, 3);
     assert.equal(r.myRank, 2);
-    assert.equal(r.board[0].name, 'Beta'); // friend named
+    assert.equal(r.board[0].name, 'Beta'); // friend fully named
     assert.equal(r.board[0].rank, 1);
     assert.equal(r.board[1].name, 'Alpha'); // self named
     assert.equal(r.board[1].self, true);
-    assert.equal(r.board[2].name, null); // stranger anonymous
-    assert.equal(r.board[2].uid, null);
+    assert.equal(r.board[2].name, 'Gamma'); // stranger: first name only
+    assert.equal(r.board[2].uid, null); // no uid, no photo
     assert.equal(r.board[2].rating, 500);
-    const empty = fr.rank('blitz', 'nobody', []);
-    assert.equal(empty.myRank, null);
+    // Brand-new account auto-joins at the 800 floor — never an empty page.
+    // (800 outranks Gamma's 500, so the newcomer lands #3 of 4.)
+    const fresh = fr.rank('blitz', 'nobody', []);
+    assert.equal(fresh.total, 4);
+    assert.equal(fresh.myRank, 3);
+    assert.equal(fresh.board[2].self, true);
+    assert.equal(fresh.board[2].rating, 800);
+});
+
+test('rank: directory-only accounts stand on the ladder at 800', () => {
+    const fr = createFriendStore();
+    fr.heartbeat('u9', 'Nina Petrova');
+    const r = fr.rank('blitz', 'u9', []);
+    assert.equal(r.total, 1);
+    assert.equal(r.myRank, 1);
+    assert.equal(r.board[0].name, 'Nina Petrova');
+    assert.equal(r.board[0].rating, 800);
 });
 
 test('directory: every touchpoint registers searchable players', () => {

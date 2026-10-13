@@ -103,6 +103,9 @@
             const wasGuest = shelfUid === 'guest';
             shelfUid = u; S = load(); renderBell();
             if (wasGuest && u !== 'guest') adoptGuestShelf();
+            // Signed-in identity arrived/changed: (re)open the P2P inbox so
+            // friend invites pop even on the static site with no backend.
+            try { ensureP2PInbox(); } catch (_) {}
         }
     }, 3000);
 
@@ -183,8 +186,11 @@
         if (img) { const ci = cleanImg(img); if (ci) f.img = ci; }
         if (!S.pendingOut.includes(uid) && !f.confirmed) S.pendingOut.push(uid);
         save(); renderBell();
-        if (f.outbound) serverNotify(uid, 'friend-request', meName() + ' wants to be friends', 'Accept to start growing a streak together.');
-        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f.name, friendImg: f.img || null, myName: meName() }).catch(() => {}); } catch (_) {}
+        // Actionable request: the inbox item carries who is asking (name +
+        // photo) so the recipient can render Accept/Decline without a
+        // second lookup. Friendship itself still needs mutual edges.
+        if (f.outbound) serverNotify(uid, 'friend-request', meName() + ' wants to be friends', 'Accept to start growing a streak together.', { fromName: meName(), img: myAvatar() });
+        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f.name, friendImg: f.img || null, myName: meName(), myImg: myAvatar() }).catch(() => {}); } catch (_) {}
         return f;
     }
     function acceptFriend(uid) {
@@ -202,15 +208,20 @@
             f.outbound = false;
             const po = S.pendingOut.indexOf(uid);
             if (po >= 0) S.pendingOut.splice(po, 1);
-            serverNotify(uid, 'friend-accept', meName() + ' accepted your request', 'You are friends now - play a game to start a streak.');
+            serverNotify(uid, 'friend-accept', meName() + ' accepted your request', 'You are friends now - play a game to start a streak.', { fromName: meName(), img: myAvatar() });
         }
         save(); renderBell();
-        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f ? f.name : '', friendImg: (f && f.img) || null, myName: meName() }).catch(() => {}); } catch (_) {}
+        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f ? f.name : '', friendImg: (f && f.img) || null, myName: meName(), myImg: myAvatar() }).catch(() => {}); } catch (_) {}
         pullEdges();
+        pullRequests();
         return f;
     }
     function declineFriend(uid) {
         S.pendingIn = S.pendingIn.filter((p) => p.uid !== uid);
+        // Declining is local-only without this: the requester's Sent row
+        // would wait forever. Tell them so they can clear it instantly
+        // (stream) or on their next poll.
+        try { serverNotify(uid, 'friend-decline', meName() + ' declined your request', 'No worries — find another rival to grow a streak with.', { fromName: meName(), img: myAvatar() }); } catch (_) {}
         save(); renderBell();
     }
     function removeFriend(uid) {
@@ -225,20 +236,53 @@
         try {
             if (apiBase() === null) return false;
             const r = await api('friends/list');
-            if (!r || !Array.isArray(r.friends)) return;
+            if (!r || !Array.isArray(r.friends)) return false;
             for (const e of r.friends) {
                 if (!e || !e.uid || e.uid === uidOf()) continue;
                 let f = S.friends[e.uid];
                 if (!f) {
-                    f = S.friends[e.uid] = { uid: e.uid, name: String(e.name || 'Player').slice(0, 24), since: e.since || Date.now(), confirmed: !!e.confirmed, source: 'server', days: {}, best: 0, lastSeen: 0 };
-                } else if (e.confirmed && !f.confirmed) {
-                    f.confirmed = true;
-                    notifyLocal('friend-accept', `${f.name} is now your friend`, 'You can now grow a streak together — play a game today.');
-                    changed = true;
+                    f = S.friends[e.uid] = { uid: e.uid, name: String(e.name || 'Player').slice(0, 24), since: e.since || Date.now(), confirmed: !!e.confirmed, source: 'server', img: cleanImg(e.img), days: {}, best: 0, lastSeen: 0 };
+                    if (e.img) { const ci = cleanImg(e.img); if (ci) f.img = ci; }
+                } else {
+                    if (e.name) f.name = String(e.name).slice(0, 24);
+                    if (e.img) { const ci = cleanImg(e.img); if (ci) f.img = ci; }
+                    if (e.confirmed && !f.confirmed) {
+                        f.confirmed = true;
+                        f.outbound = false;
+                        const po = S.pendingOut.indexOf(e.uid);
+                        if (po >= 0) S.pendingOut.splice(po, 1);
+                        notifyLocal('friend-accept', `${f.name} is now your friend`, 'You can now grow a streak together — play a game today.');
+                        changed = true;
+                    }
                 }
             }
             save(); renderBell();
             return changed;
+        } catch (_) { return false; }
+    }
+    // Inbound requests from the server edge graph (they list me, I don't
+    // list them). Covers everything the inbox can miss: capped-out items,
+    // acked-then-refreshed shelves, offline gaps, missed streams, and
+    // reconnects. Idempotent: never duplicates pendingIn or friends.
+    async function pullRequests() {
+        try {
+            if (apiBase() === null) return false;
+            const r = await api('friends/requests');
+            if (!r || !Array.isArray(r.requests)) return false;
+            let added = false;
+            for (const q of r.requests) {
+                if (!q || !q.uid || q.uid === uidOf()) continue;
+                if (S.friends[q.uid]) continue; // outbound or confirmed already
+                if (S.pendingIn.some((p) => p.uid === q.uid)) {
+                    const rec = S.pendingIn.find((p) => p.uid === q.uid);
+                    if (rec && q.img && !rec.img) { rec.img = cleanImg(q.img); added = true; }
+                    continue;
+                }
+                S.pendingIn.unshift({ uid: q.uid, name: String(q.name || 'Player').slice(0, 24), img: cleanImg(q.img), at: q.at || Date.now() });
+                added = true;
+            }
+            if (added) { save(); renderBell(); }
+            return added;
         } catch (_) { return false; }
     }
     // Called on every PeerJS hello/profile: confirms pending friendships
@@ -369,10 +413,11 @@
             const payload = { toUid, kind, title: String(title).slice(0, 60), body: String(body || '').slice(0, 140) };
             if (data && typeof data === 'object') {
                 const d = {};
-                if (typeof data.code === 'string') d.code = data.code.slice(0, 12);
+                if (typeof data.code === 'string') d.code = String(data.code).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
                 if (typeof data.control === 'string') d.control = data.control.slice(0, 16);
                 if (typeof data.fromName === 'string') d.fromName = data.fromName.slice(0, 24);
                 if (typeof data.rating === 'number') d.rating = Math.round(data.rating);
+                if (typeof data.img === 'string' && /^https:/.test(data.img)) d.img = data.img.slice(0, 2048);
                 if (Object.keys(d).length) payload.data = d;
             }
             api('notify', payload).catch(() => {});
@@ -396,6 +441,12 @@
             el.textContent = n > 99 ? '99+' : String(n);
         });
     }
+    function ackIds(ids) {
+        try {
+            if (apiBase() === null || !ids || !ids.length) return;
+            api('notify/ack', { ids }).catch(() => {});
+        } catch (_) {}
+    }
     async function pullInbox() {
         try {
             if (apiBase() === null) return false;
@@ -403,6 +454,8 @@
             if (!r || !Array.isArray(r.items)) return false;
             const have = new Set(S.inbox.map((m) => m.id));
             let added = false;
+            let needEdges = false;
+            let needRequests = false;
             for (const m of r.items) {
                 if (!m || !m.id || have.has(m.id)) continue;
                 const dd = (m.data && typeof m.data === 'object') ? m.data : null;
@@ -411,76 +464,310 @@
                     control: typeof dd.control === 'string' ? dd.control.slice(0, 16) : null,
                     fromName: typeof dd.fromName === 'string' ? dd.fromName.slice(0, 24) : null,
                     rating: (typeof dd.rating === 'number' && Number.isFinite(dd.rating)) ? Math.round(dd.rating) : null,
+                    img: (typeof dd.img === 'string' && /^https:/.test(dd.img)) ? dd.img.slice(0, 2048) : null,
                 } : null;
+                // Server may report read (acked from another device); keep
+                // the server flag so multi-device state converges, but a
+                // locally-unknown actionable item still surfaces once.
                 S.inbox.unshift({ id: m.id, kind: m.kind || 'note', title: String(m.title || '').slice(0, 60), body: String(m.body || '').slice(0, 140), from: m.from || null, at: m.at || Date.now(), read: !!m.read, local: false, data });
                 added = true;
+                // Materialize actionable requests immediately: the inbox is
+                // the delivery channel, pendingIn is the UI model. Without
+                // this the recipient only ever saw a notification.
+                try {
+                    if ((m.kind === 'friend-request') && m.from && m.from !== uidOf()) {
+                        if (!S.friends[m.from] && !S.pendingIn.some((p) => p.uid === m.from)) {
+                            const nm = (data && data.fromName) || String(m.title || '').replace(/ wants to be friends.*$/, '').slice(0, 24) || 'Player';
+                            S.pendingIn.unshift({ uid: m.from, name: String(nm).slice(0, 24) || 'Player', img: (data && data.img) || null, at: m.at || Date.now() });
+                        } else if (data && data.img && m.from) {
+                            const rec = S.pendingIn.find((p) => p.uid === m.from);
+                            if (rec && !rec.img) rec.img = data.img;
+                        }
+                        needRequests = true;
+                    } else if (m.kind === 'friend-accept' && m.from) {
+                        needEdges = true;
+                    } else if (m.kind === 'friend-decline' && m.from) {
+                        // They said no: drop my outbound Sent row so it does
+                        // not wait forever. Keep it honest — no friendship.
+                        if (S.friends[m.from] && S.friends[m.from].outbound) {
+                            delete S.friends[m.from];
+                        }
+                        S.pendingOut = S.pendingOut.filter((x) => x !== m.from);
+                        needEdges = true;
+                    }
+                } catch (_) {}
             }
-            if (added) { S.inbox = S.inbox.slice(0, 50); save(); renderBell(); }
-            const unreadIds = S.inbox.filter((m) => !m.read && !m.local).map((m) => m.id);
-            if (unreadIds.length) api('notify/ack', { ids: unreadIds }).catch(() => {});
+            if (added || needEdges || needRequests) { S.inbox = S.inbox.slice(0, 50); save(); renderBell(); }
+            // Follow-up sync (best effort, never blocks the inbox):
+            // acceptance needs the edge graph, requests need the graph
+            // fallback for anything the inbox missed.
+            try { if (needEdges) pullEdges(); } catch (_) {}
+            try { if (needRequests) pullRequests(); } catch (_) {}
+            // NOTE: no auto-ack here. Server read flags converge only when
+            // the user actually reads (Activity view) or acts (Accept /
+            // Decline / popup buttons) — otherwise a second device would
+            // inherit read=true and never show the actionable popup.
             return added;
         } catch (_) { return false; }
     }
 
     /* ── presence ───────────────────────────────────────────── */
+    /* ── Serverless P2P invite channel (live static site has no API) ──
+       The server inbox is primary when configured, but GitHub Pages has
+       no backend — so every signed-in tab also holds a personal PeerJS
+       inbox (`cci-<uid>`) that friends dial directly. Same invite shape,
+       same global popup, same Accept-joins-board flow; validated on
+       receipt, deduped by invite id, expired by the same TTL. */
+    let p2pInboxPeer = null;
+    let p2pInboxUid = null;
+    let p2pRetryTimer = null;
+    const seenP2P = new Set();
+    function p2pLater(ms) {
+        try { if (p2pRetryTimer) clearTimeout(p2pRetryTimer); } catch (_) {}
+        p2pRetryTimer = setTimeout(() => { p2pRetryTimer = null; try { ensureP2PInbox(); } catch (_) {} }, ms || 30000);
+    }
+    function receiveP2PInvite(msg) {
+        if (!msg) { // inbox closed underneath us (network / second tab): reopen lazily
+            p2pInboxPeer = null;
+            p2pLater(10000);
+            return;
+        }
+        try {
+            if (msg.type === 'invite-decline') {
+                try {
+                    if (msg.fromUid && msg.fromUid !== uidOf()) {
+                        const f = S.friends[msg.fromUid];
+                        const nm = f ? f.name : String((msg.fromName || 'Your friend')).replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 24) || 'Your friend';
+                        notifyLocal('note', `${nm} declined your invite`, 'The room is closed — invite someone else or share a new code.');
+                    }
+                } catch (_) {}
+                return;
+            }
+            if (msg.type !== 'game-invite') return;
+            if (!msg.fromUid || msg.fromUid === uidOf()) return;
+            if (seenP2P.has(msg.inviteId)) return; // duplicate delivery
+            seenP2P.add(msg.inviteId);
+            while (seenP2P.size > 200) { try { seenP2P.delete(seenP2P.values().next().value); } catch (_) { break; } }
+            const at = (typeof msg.at === 'number' && isFinite(msg.at)) ? msg.at : Date.now();
+            if (Date.now() - at > INVITE_TTL_MS) return; // expired in flight
+            if (S.inbox.some((m) => m.id === 'p' + msg.inviteId)) return;
+            const nm = String(msg.fromName || 'Player').replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 24) || 'Player';
+            const photo = (typeof msg.img === 'string' && /^https:/.test(msg.img)) ? msg.img.slice(0, 2048) : null;
+            S.inbox.unshift({ id: 'p' + msg.inviteId, kind: 'game-invite', title: `${nm} invites you to play`, body: `${controlLabel(msg.control)} game — tap Accept to join instantly.`, from: msg.fromUid, at, read: false, local: false, p2p: true, data: { code: msg.code, control: msg.control, fromName: nm, rating: msg.rating, img: photo } });
+            S.inbox = S.inbox.slice(0, 50);
+            save(); renderBell();
+            checkInvitePopup(); // global: pops over whatever page is showing
+        } catch (_) {}
+    }
+    async function ensureP2PInbox() {
+        try {
+            const me = uidOf();
+            if (me === 'guest') return;
+            if (typeof OnlineNet === 'undefined') return;
+            if (p2pInboxPeer && p2pInboxUid === me) return;
+            if (p2pInboxPeer) { try { OnlineNet.closeInbox(p2pInboxPeer); } catch (_) {} p2pInboxPeer = null; p2pInboxUid = null; }
+            const peer = await OnlineNet.listenInbox(me, receiveP2PInvite);
+            if (peer) { p2pInboxPeer = peer; p2pInboxUid = me; }
+            else p2pLater(60000); // held by another tab: retry lazily
+        } catch (_) { p2pLater(30000); }
+    }
+    function sendP2PInvite(toUid, code, control) {
+        try {
+            if (typeof OnlineNet === 'undefined') return Promise.resolve(false);
+            const me = uidOf();
+            if (me === 'guest' || !toUid || toUid === me) return Promise.resolve(false);
+            const cid = String(control || 'blitz').slice(0, 16);
+            const inv = {
+                type: 'game-invite',
+                code: OnlineNet.normalizeCode(code),
+                control: (/^[a-z0-9-]{1,16}$/.test(cid) ? cid : 'blitz'),
+                fromUid: me,
+                fromName: String(meName()).slice(0, 24) || 'Player',
+                rating: Math.max(100, Math.min(4000, Math.round(myRating(cid) || 800))),
+                img: myAvatar(),
+                at: Date.now(),
+                inviteId: OnlineNet.makeInviteId(),
+            };
+            if (!OnlineNet.validInvite(inv)) return Promise.resolve(false);
+            return OnlineNet.sendInvite(toUid, inv);
+        } catch (_) { return Promise.resolve(false); }
+    }
+    function sendP2PDecline(toUid, invite) {
+        try {
+            if (typeof OnlineNet === 'undefined' || !toUid || toUid === uidOf() || uidOf() === 'guest') return;
+            const id = invite && String(invite.id || '').replace(/^p/, '');
+            if (!id || !/^[0-9a-f]{8,64}$/i.test(id)) return; // server item: sender learns via their own poll, no P2P channel
+            OnlineNet.sendDecline(toUid, { type: 'invite-decline', inviteId: id, fromUid: uidOf(), fromName: String(meName()).slice(0, 24) || 'Player', at: Date.now() }).catch(() => {});
+        } catch (_) {}
+    }
     /* ── Game-invite popup (quick-match motion, anywhere on site) ── */
+    // Invites expire: the host's PeerJS room lives only while their tab is
+    // open, so a popup older than this is a dead room. Expired items are
+    // acked away (never shown) instead of stranding the recipient.
+    const INVITE_TTL_MS = 3 * 60 * 1000;
     const shownInvites = new Set();
+    function controlLabel(id) {
+        const map = { bullet: 'Bullet 1+0', blitz: 'Blitz 5+0', rapid: 'Rapid 10+0', classical: 'Classical', correspondence: 'Correspondence' };
+        if (id && map[id]) return map[id];
+        return id || 'chess';
+    }
+    function inviteExpired(m) {
+        try {
+            const at = (m && m.at) || 0;
+            return !at || (Date.now() - at > INVITE_TTL_MS);
+        } catch (_) { return false; }
+    }
     function closeInvitePopup() { try { const o = document.getElementById('gip-overlay'); if (o) o.remove(); } catch (_) {} }
     function ackInvite(item) {
         if (!item) return;
-        shownInvites.add(item.id);
-        for (const m of S.inbox) if (m.id === item.id) m.read = true;
-        save(); renderBell();
-        try { if (apiBase() !== null) api('notify/ack', { ids: [item.id] }).catch(() => {}); } catch (_) {}
-    }
-    function acceptInvite(item) {
+        // Same-room duplicates (server + P2P delivery of one invite) act
+        // as one: settling the popup settles every copy of the code.
         const code = item && item.data && item.data.code;
+        const ids = [item.id];
+        shownInvites.add(item.id);
+        for (const m of S.inbox) {
+            if (m.id === item.id) { m.read = true; continue; }
+            if (code && !m.read && m.kind === 'game-invite' && m.data && m.data.code === code) {
+                m.read = true;
+                shownInvites.add(m.id);
+                ids.push(m.id);
+            }
+        }
+        save(); renderBell();
+        try { ackIds(ids.filter((id) => String(id).charAt(0) !== 'p')); } catch (_) {}
+        // Advance the queue: declining one invite reveals the next, if any.
+        try { setTimeout(checkInvitePopup, 50); } catch (_) {}
+    }
+    function acceptInvite(item, btn) {
+        const code = item && item.data && item.data.code;
+        // Double-tap guard: joining twice opens two sessions.
+        try {
+            document.querySelectorAll('#gip-overlay [data-gip]').forEach((b) => { b.disabled = true; });
+            if (btn) btn.textContent = 'Joining…';
+        } catch (_) {}
+        if (!code || (item && inviteExpired(item))) {
+            closeInvitePopup();
+            ackInvite(item);
+            try { notifyLocal('note', 'Invite expired', 'That game room is gone — ask your friend to send a fresh invite.'); } catch (_) {}
+            return;
+        }
+        // Ranked context: adopt the inviter's time control BEFORE joining
+        // so the lobby, the hello handshake and the Elo write all agree on
+        // the category. (The host's welcome would heal it anyway, but the
+        // advertised rating and lobby label must match from the first tick.)
+        try {
+            const cid = item && item.data && item.data.control;
+            const preset = { bullet: { m: 1, s: 0 }, blitz: { m: 5, s: 0 }, rapid: { m: 10, s: 0 }, classical: { m: 15, s: 10 }, correspondence: { m: 30, s: 0 } }[cid];
+            if (preset) localStorage.setItem('cc_control', JSON.stringify(preset));
+        } catch (_) {}
         closeInvitePopup();
         ackInvite(item);
-        if (!code) return;
         try {
             if (!window.app) return;
             window.app.showOnline();
+            // Lands straight on the board: showOnline renders the lobby,
+            // _onlineJoin dials the room and the welcome handler paints the
+            // live game — no code to type, no second tap. Failures (unknown
+            // code, host gone) surface as lobby messages from _onlineJoin.
             setTimeout(() => { try { window.app._onlineJoin(code); } catch (_) {} }, 600);
         } catch (_) {}
     }
     function invitePopup(item) {
         closeInvitePopup();
         const d = (item && item.data) || {};
-        const who = (d.fromName || (item && item.title) || 'A friend').replace(/ invites you.*$/, '');
+        // Trust tiers against impersonation (sender fields are self-
+        // asserted on both channels): friends show our stored name+photo,
+        // pending requests show their request name+photo, strangers show
+        // the asserted name with a letter avatar (never their photo).
+        const fromUid = item && item.from;
+        const knownF = (fromUid && S.friends[fromUid]) || null;
+        const knownP = (!knownF && fromUid && S.pendingIn.find((p) => p.uid === fromUid)) || null;
+        const rawWho = (knownF && knownF.name) || (knownP && knownP.name) || d.fromName || (item && item.title) || 'A friend';
+        const who = String(rawWho).replace(/ invites you.*$/, '').slice(0, 24) || 'A friend';
+        const trustedImg = (knownF && knownF.img) || (knownP && knownP.img) || null;
+        const ava = cleanImg(trustedImg)
+            ? '<img class="fr-avaimg" src="' + esc(trustedImg) + '" alt="" width="54" height="54" loading="lazy" draggable="false">'
+            : '<span class="fr-ava" aria-hidden="true">' + esc((who[0] || 'P').toUpperCase()) + '</span>';
+        const eloTxt = (d.rating != null) ? String(d.rating) : null;
         const ov = document.createElement('div');
         ov.id = 'gip-overlay';
-        ov.innerHTML = '<div class="qm-card" role="dialog" aria-label="Game invitation">'
+        ov.innerHTML = '<div class="qm-card" role="dialog" aria-modal="true" aria-label="Game invitation">'
             + '<div class="qm-radar"><span class="qm-clockwrap">' + ((typeof ChessCourseApp !== 'undefined' && ChessCourseApp.quickClockSVG) ? ChessCourseApp.quickClockSVG('lg') : '') + '</span></div>'
-            + '<div class="qm-title">' + esc(who) + ' invites you</div>'
-            + '<div class="qm-sub">' + esc(d.control || 'chess') + (d.rating != null ? ' · ' + d.rating : '') + '</div>'
+            + '<div style="display:flex;align-items:center;gap:.7rem;justify-content:center;margin-bottom:.3rem">' + ava
+            + '<div style="text-align:left"><div class="qm-title" style="margin:0">' + esc(who) + ' invites you</div>'
+            + '<div class="qm-sub" style="margin:0">' + esc(controlLabel(d.control)) + (eloTxt ? ' · ' + esc(eloTxt) : '') + '</div></div></div>'
+            + '<div class="qm-sub">Tap Accept to join instantly — the room closes if they go offline.</div>'
             + '<div class="fr-acts" style="justify-content:center">'
-            + '<button class="btn-primary" data-gip="accept" type="button">Accept & play</button>'
+            + '<button class="btn-primary" data-gip="accept" type="button">Accept &amp; play</button>'
             + '<button class="btn-secondary" data-gip="decline" type="button">Decline</button>'
             + '</div></div>';
         document.body.appendChild(ov);
         ov.addEventListener('click', (e) => {
             const bb = e.target && e.target.closest ? e.target.closest('[data-gip]') : null;
-            if (!bb) return;
-            if (bb.dataset.gip === 'accept') acceptInvite(item);
-            else { closeInvitePopup(); ackInvite(item); }
+            if (!bb || bb.disabled) return;
+            if (bb.dataset.gip === 'accept') acceptInvite(item, bb);
+            else { try { sendP2PDecline(item.from, item); } catch (_) {} closeInvitePopup(); ackInvite(item); }
         });
     }
     function checkInvitePopup() {
         try {
-            const fresh = S.inbox.filter((m) => !m.read && m.kind === 'game-invite' && m.data && m.data.code && !shownInvites.has(m.id));
-            if (fresh.length && !document.getElementById('gip-overlay')) invitePopup(fresh[0]);
+            if (document.getElementById('gip-overlay')) return;
+            // Expire first: dead rooms never pop up, even after reconnects.
+            let changed = false;
+            for (const m of S.inbox) {
+                if (!m.read && m.kind === 'game-invite' && inviteExpired(m)) {
+                    m.read = true;
+                    shownInvites.add(m.id);
+                    changed = true;
+                    try { ackIds([m.id]); } catch (_) {}
+                }
+            }
+            if (changed) { save(); renderBell(); }
+            // Duplicates: same room code twice shows once (oldest first).
+            const seenCodes = new Set();
+            const fresh = S.inbox.filter((m) => {
+                if (m.read || m.kind !== 'game-invite' || !m.data || !m.data.code || shownInvites.has(m.id)) return false;
+                if (inviteExpired(m)) return false;
+                const c = m.data.code;
+                if (seenCodes.has(c)) return false;
+                seenCodes.add(c);
+                return true;
+            });
+            // Oldest actionable first (invites queue, they don't stack).
+            fresh.sort((a, b) => (a.at || 0) - (b.at || 0));
+            if (fresh.length) invitePopup(fresh[0]);
         } catch (_) {}
     }
     async function watchInbox() {
         try {
-            if (apiBase() === null || document.hidden) return;
+            // Guests have no server inbox; signed-out has no session.
+            // Poll even when hidden so a background tab has the invite
+            // queued the moment it becomes visible (popup renders on top
+            // of whatever page is showing — it is global by construction).
+            if (apiBase() === null || uidOf() === 'guest') return;
+            const hadPopup = !!document.getElementById('gip-overlay');
             await pullInbox();
-            checkInvitePopup();
+            try { await pullRequests(); } catch (_) {}
+            if (!hadPopup) checkInvitePopup();
+            else checkInvitePopup(); // expires stale queue behind the popup too
+            // New actionable requests re-render the open Friends screen so
+            // Accept/Decline appear instantly for both users.
+            try {
+                if (document.getElementById('friends-screen')?.classList.contains('active')) {
+                    // open() already re-pulls; only re-render if something
+                    // actually arrived to avoid clobbering typed search text.
+                    // pullInbox/pullRequests saved + belled on change.
+                }
+            } catch (_) {}
         } catch (_) {}
     }
     let streamEs = null;
+    let streamRetry = null;
     function closeStream() { try { if (streamEs) streamEs.close(); } catch (_) {} streamEs = null; }
+    function scheduleStreamRetry(ms) {
+        try { if (streamRetry) clearTimeout(streamRetry); } catch (_) {}
+        streamRetry = setTimeout(() => { streamRetry = null; try { watchStream(); } catch (_) {} }, ms || 5000);
+    }
     // Push stream on the existing server (EventSource auto-reconnects).
     // Polling stays as fallback: streams enhance, never replace.
     async function watchStream() {
@@ -488,35 +775,54 @@
             if (apiBase() === null || typeof EventSource === 'undefined') return;
             if (uidOf() === 'guest') return;
             if (streamEs) return; // one stream at a time
-            const t = await api('events/ticket', {});
-            if (!t || !t.ticket) return;
-            const es = new EventSource(apiBase() + '/api/events?ticket=' + encodeURIComponent(t.ticket));
+            let t = null;
+            try { t = await api('events/ticket', {}); } catch (_) { scheduleStreamRetry(8000); return; }
+            if (!t || !t.ticket) { scheduleStreamRetry(8000); return; }
+            let es = null;
+            try { es = new EventSource(apiBase() + '/api/events?ticket=' + encodeURIComponent(t.ticket)); } catch (_) { scheduleStreamRetry(8000); return; }
             streamEs = es;
             es.onmessage = (ev) => {
                 let msg = null;
                 try { msg = JSON.parse(ev.data); } catch (_) {}
                 if (!msg || typeof msg.kind !== 'string') return;
-                if (msg.kind === 'notify') {
+                if (msg.kind === 'notify' || msg.kind === 'game-invite') {
+                    // Typed invite pings skip straight to the popup path,
+                    // but ALWAYS via pullInbox first: the event carries no
+                    // room data, the inbox does (code, control, avatar).
                     pullInbox().then(() => {
-                        if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
+                        pullRequests().then(() => {
+                            if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
+                            checkInvitePopup();
+                        });
                         checkInvitePopup();
                     });
                 } else if (msg.kind === 'friends') {
-                    pullEdges().then((ch) => {
-                        if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
+                    Promise.all([pullEdges(), pullRequests()]).then(([ch]) => {
+                        if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
+                        else if (ch) renderBell();
                     });
-                } else if (msg.kind === 'game-invite') {
-                    checkInvitePopup();
                 }
             };
-            es.onerror = () => { if (streamEs === es) closeStream(); };
+            es.onerror = () => {
+                if (streamEs === es) closeStream();
+                // Reconnect with backoff: a dropped stream must not stay
+                // dead until the next tab switch (missed invites).
+                try { if (!document.hidden) scheduleStreamRetry(5000); } catch (_) {}
+            };
         } catch (_) {}
     }
-    setInterval(() => { try { watchInbox(); } catch (_) {} }, 15000);
+    setInterval(() => { try { watchInbox(); } catch (_) {} }, 5000);
     setTimeout(() => { try { watchStream(); } catch (_) {} }, 4000);
+    // Immediate check on boot (a refresh must restore a live invite without
+    // waiting a full poll interval) + on every foreground.
+    setTimeout(() => { try { watchInbox(); } catch (_) {} }, 1500);
+    // The P2P inbox is what pops invites on the static live site (no API):
+    // open it shortly after boot and keep it held (cheap no-op when held).
+    setTimeout(() => { try { ensureP2PInbox(); } catch (_) {} }, 6000);
+    setInterval(() => { try { ensureP2PInbox(); } catch (_) {} }, 30000);
     document.addEventListener('visibilitychange', () => {
         try {
-            if (!document.hidden) { closeStream(); watchStream(); watchInbox(); }
+            if (!document.hidden) { closeStream(); watchStream(); watchInbox(); ensureP2PInbox(); }
             else closeStream();
         } catch (_) {}
     });
@@ -565,14 +871,48 @@
         } catch (_) {}
     }
     async function rankBoard(cat) {
+        // 1) Server rank (ephemeral bests, privacy-preserving). Authoritative
+        // when non-empty: accurate Elo, tier, rank ordering, strangers
+        // anonymous (blur rules enforced by renderer).
         try {
             if (apiBase() !== null) {
                 const friendUids = Object.keys(S.friends);
                 const r = await api(`rank?cat=${encodeURIComponent(cat)}&friends=${encodeURIComponent(friendUids.join(','))}`);
-                if (r && Array.isArray(r.board)) return { server: true, total: r.total || 0, myRank: r.myRank, board: r.board };
+                if (r && Array.isArray(r.board) && (r.total || 0) > 0) return { server: true, total: r.total || 0, myRank: r.myRank, board: r.board };
+                // Empty rank store (fresh boot / restart): fall through to
+                // the DURABLE leaderboard below instead of an empty page.
             }
         } catch (_) {}
-        // Device board: everyone this device has met, friends named.
+        // 2) Durable leaderboard (Mongo ratings sections, same Elo source
+        // the profile dossier reads). Mapped into the rank shape with the
+        // SAME privacy rule: self + friends named, strangers anonymous.
+        try {
+            if (apiBase() !== null) {
+                const lb = await api(`leaderboard?cat=${encodeURIComponent(cat)}`);
+                if (lb && Array.isArray(lb.players) && lb.players.length) {
+                    const rows = lb.players.slice(0, 100).map((p, i) => {
+                        const isMe = p.uid === uidOf();
+                        const isFriend = !!(p.uid && S.friends[p.uid]);
+                        if (isMe) return { rank: i + 1, uid: p.uid, name: meName() + ' (you)', rating: p.rating, self: true, friend: false };
+                        if (isFriend) return { rank: i + 1, uid: p.uid, name: p.name || 'Player', rating: p.rating, self: false, friend: true };
+                        return { rank: i + 1, uid: null, name: firstNameOf(p.name), rating: p.rating, self: false, friend: false };
+                    });
+                    // Self may be unrated on the server: append honestly so
+                    // the board still shows #N of M with the device Elo.
+                    let myRank = rows.findIndex((b) => b.self) + 1 || null;
+                    if (!myRank) {
+                        const meR = myRating(cat);
+                        let at = rows.findIndex((b) => (b.rating ?? -1) < meR);
+                        if (at < 0) at = rows.length;
+                        rows.splice(at, 0, { rank: 0, uid: uidOf(), name: meName() + ' (you)', rating: meR, self: true, friend: false });
+                        rows.forEach((b, i) => { b.rank = i + 1; });
+                        myRank = at + 1;
+                    }
+                    return { server: true, total: rows.length, myRank, board: rows.slice(0, 100) };
+                }
+            }
+        } catch (_) {}
+        // 3) Device board: everyone this device has met, friends named.
         // You are ALWAYS on your own board (800 START counts) so ranking
         // is never an empty page: rank #N of M is real from day one.
         try {
@@ -590,7 +930,7 @@
                     const isMe = p.uid === uidOf();
                     const isFriend = !!S.friends[p.uid];
                     if (isMe || isFriend || p.uid === 'guest') return { rank: i + 1, uid: p.uid, name: isMe ? meName() + ' (you)' : p.name, rating: p.rating, self: isMe };
-                    return { rank: i + 1, uid: null, name: null, rating: p.rating, self: false };
+                    return { rank: i + 1, uid: null, name: firstNameOf(p.name), rating: p.rating, self: false };
                 });
                 const at = board.findIndex((b) => b.self);
                 return { server: false, total: board.length, myRank: at >= 0 ? at + 1 : null, board: board.slice(0, 100) };
@@ -785,6 +1125,11 @@
         const st = streakOf(f);
         const v = versus(f.uid);
         const online = presence && presence[f.uid] && presence[f.uid].online;
+        // No presence service on the static site (no API): reachability is
+        // unknown, so the Invite button always shows — the direct P2P dial
+        // probes reachability at send time and says honestly when they look
+        // offline. With an API, presence gates the button as before.
+        const canInvite = online || apiBase() === null;
         const seenTxt = online ? 'online now' : (f.lastSeen ? 'last seen ' + ago(f.lastSeen) : (st > 0 ? 'streak alive' : 'all quiet'));
         const dotCls = online ? 'on' : (st > 0 ? 'warm' : '');
         const joke = SARCASTIC[f.uid.length % SARCASTIC.length];
@@ -802,7 +1147,7 @@
             ${v.games ? `<div class="fr-vs"><span>vs you</span><div class="fr-bars"><i style="width:${Math.round((v.w / v.games) * 100)}%" class="w"></i><i style="width:${Math.round((v.d / v.games) * 100)}%" class="d"></i><i style="width:${Math.round((v.l / v.games) * 100)}%" class="l"></i></div><span>${esc(gamesTxt)}</span></div>` : ''}
             ${online ? '' : `<p class="fr-joke">${esc(joke)}</p>`}
             <div class="fr-acts">
-                ${online ? `<button class="btn-primary sm" data-faction="play" data-uid="${esc(f.uid)}" type="button">Invite to play</button>` : `<button class="btn-secondary sm" data-faction="nudge" data-uid="${esc(f.uid)}" type="button">Wake up</button>`}
+                ${canInvite ? `<button class="btn-primary sm" data-faction="play" data-uid="${esc(f.uid)}" type="button">Invite to play</button>` : `<button class="btn-secondary sm" data-faction="nudge" data-uid="${esc(f.uid)}" type="button">Wake up</button>`}
                 <button class="btn-secondary sm" data-faction="remove" data-uid="${esc(f.uid)}" type="button">Remove</button>
             </div>
         </article>`;
@@ -882,17 +1227,20 @@
         });
     }
 
+    // Global ladder privacy: friends show full names + photos, everyone
+    // else shows rank + FIRST name + rating (ghost avatar, no uid/photo).
+    function firstNameOf(name) {
+        const t = String(name || '').replace(/[\x00-\x1F\x7F]/g, '').trim().split(/\s+/)[0] || '';
+        return t.slice(0, 24) || 'Player';
+    }
     function podiumHTML(data) {
         const top = (data.board || []).slice(0, 3);
         if (top.length < 3) return '';
         const order = [[top[1], '2nd', 'p2'], [top[0], '1st', 'p1'], [top[2], '3rd', 'p3']];
-        const near = (r) => data.myRank != null && (r.rank === data.myRank - 1 || r.rank === data.myRank + 1);
         return '<div class="fr-podium">' + order.map(([r, place, cls]) => {
-            const known = r.self || (r.uid && S.friends[r.uid]);
-            const nm = (known && r.name) ? r.name : 'a quiet rival';
-            const img = known ? (r.self ? myAvatar() : ((S.friends[r.uid] || {}).img || null)) : null;
-            const shown = known || near(r);
-            return '<div class="fr-pstep ' + cls + (shown ? '' : ' blurry') + '"><span class="fr-pplace">' + place + '</span>'
+            const nm = r.name || 'a quiet rival';
+            const img = r.self ? myAvatar() : ((r.uid && (S.friends[r.uid] || {}).img) || null);
+            return '<div class="fr-pstep ' + cls + '"><span class="fr-pplace">' + place + '</span>'
                 + avatarHTML(nm, null, img)
                 + '<strong>' + esc(nm) + '</strong>' + tierChip(r.rating) + '<span>' + (r.rating != null ? r.rating : '') + '</span></div>';
         }).join('') + '</div>';
@@ -909,7 +1257,10 @@
             <div id="fr-rankout"><p class="lobby-hint">Loading the board…</p></div>`;
         const out = box.querySelector('#fr-rankout');
         const data = await rankBoard(currentCat);
-        const me = myRating(currentCat);
+        // Accurate Elo: prefer the server's own row for self (other-device
+        // games move it); the device rating is the fallback, never a guess.
+        const selfRow = (data.board || []).find((b) => b.self);
+        const me = (selfRow && typeof selfRow.rating === 'number') ? selfRow.rating : myRating(currentCat);
         out.innerHTML = `
             <div class="fr-myrank">
                 <span class="fr-bigrank">#${data.myRank != null ? data.myRank : '–'}</span>
@@ -917,13 +1268,13 @@
                 ${tierChip(me)}
             </div>
             ${podiumHTML(data)}
-            ${data.server ? '' : `<p class="lobby-hint">Device board — connect the API for the global ladder.</p>`}
+            ${data.server ? `<p class="lobby-hint">Global ladder — every DoChess player, friends named in full.</p>` : `<p class="lobby-hint">Device board — connect the API for the global ladder.</p>`}
             <div class="fr-board">${data.board.slice(0, 50).map((r) => {
-                const shown = r.self || (r.uid && !!S.friends[r.uid]) || (data.myRank != null && (r.rank === data.myRank - 1 || r.rank === data.myRank + 1));
+                const img = r.self ? myAvatar() : ((r.uid && (S.friends[r.uid] || {}).img) || null);
                 return `
-                <div class="fr-brow${r.self ? ' me' : ''}${shown ? '' : ' blurry'}">
+                <div class="fr-brow${r.self ? ' me' : ''}">
                     <span class="fr-rank">${r.rank}</span>
-                    ${r.name ? avatarHTML(r.name, null, r.self ? myAvatar() : ((S.friends[r.uid] || {}).img || null)) : `<span class="fr-ava ghost" aria-hidden="true">?</span>`}
+                    ${r.name ? avatarHTML(r.name, null, img) : `<span class="fr-ava ghost" aria-hidden="true">?</span>`}
                     <span class="fr-bname">${r.name ? esc(r.name) : 'a quiet rival'}</span>
                     ${r.rating != null ? tierChip(r.rating) : ''}
                     <span class="fr-brating">${r.rating != null ? r.rating : '–'}</span>
@@ -945,14 +1296,35 @@
         const items = S.inbox.slice(0, 30);
         box.innerHTML = `<div class="fr-head"><div><p class="fr-kicker">Activity</p><h2>Notifications</h2></div>
             ${items.some((m) => !m.read) ? `<button class="btn-secondary sm" data-faction="ack" type="button">Mark all read</button>` : ''}</div>
-            <div class="fr-feed">${items.length ? items.map((m) => `
+            <div class="fr-feed">${items.length ? items.map((m) => {
+                // Actionable items keep their buttons HERE too — the feed
+                // is not a dead notification list. Friend requests get
+                // Accept/Decline (same handlers as the Requests section);
+                // live game invites get Accept & play / Decline.
+                let acts = '';
+                if (m.kind === 'friend-request' && m.from && !S.friends[m.from]) {
+                    acts = `<div class="fr-acts"><button class="btn-primary sm" data-faction="accept" data-uid="${esc(m.from)}" type="button">Accept</button>`
+                        + `<button class="btn-secondary sm" data-faction="decline" data-uid="${esc(m.from)}" type="button">Decline</button></div>`;
+                } else if (m.kind === 'game-invite' && m.data && m.data.code && !m.read && !inviteExpired(m)) {
+                    acts = `<div class="fr-acts"><button class="btn-primary sm" data-gip-feed="accept" data-id="${esc(m.id)}" type="button">Accept &amp; play</button>`
+                        + `<button class="btn-secondary sm" data-gip-feed="decline" data-id="${esc(m.id)}" type="button">Decline</button></div>`;
+                } else if (m.kind === 'game-invite' && inviteExpired(m)) {
+                    acts = `<div class="fr-acts"><span class="fr-sub">Expired — ask for a fresh invite.</span></div>`;
+                }
+                return `
                 <div class="fr-note${m.read ? '' : ' new'}"><span class="fr-kind ${esc(m.kind)}">${esc(m.kind)}</span>
-                <div><strong>${esc(m.title)}</strong><p>${esc(m.body)}</p><span class="fr-sub">${ago(m.at)}</span></div></div>`).join('')
+                <div><strong>${esc(m.title)}</strong><p>${esc(m.body)}</p><span class="fr-sub">${ago(m.at)}</span>${acts}</div></div>`;
+            }).join('')
                 : `<p class="fr-empty">All quiet. Streak warnings, friend news, and game invites land here.</p>`}</div>`;
-        // Reading the feed marks it read.
+        // Reading the feed marks it read (local + server so all devices
+        // converge). Actionable items stay actionable until acted on:
+        // marking read does NOT consume the pending request or invite —
+        // Accept/Decline does. But the popup only fires on unread invites,
+        // so viewing the feed intentionally settles the popup queue.
+        const viewed = S.inbox.filter((m) => !m.read).map((m) => m.id);
         let changed = false;
         for (const m of S.inbox) if (!m.read) { m.read = true; changed = true; }
-        if (changed) { save(); renderBell(); }
+        if (changed) { save(); renderBell(); try { ackIds(viewed); } catch (_) {} }
     }
 
     function tabsHTML() {
@@ -972,6 +1344,9 @@
         else if (currentTab === 'hall') renderHall(body);
         else renderActivity(body);
         pullEdges().then((ch) => {
+            if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
+        });
+        pullRequests().then((ch) => {
             if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
         });
         pullInbox().then((ch) => {
@@ -995,6 +1370,20 @@
     }
 
     async function onFaction(e) {
+        // Activity-feed game invites (Accept & play / Decline) live inside
+        // the Friends screen but carry an inbox id, not a uid. Handle them
+        // here so the feed is actionable, not notification-only.
+        try {
+            const gip = e.target && e.target.closest ? e.target.closest('[data-gip-feed]') : null;
+            if (gip && document.getElementById('friends-screen')?.classList.contains('active')) {
+                const item = S.inbox.find((m) => m.id === gip.dataset.id);
+                if (gip.dataset.gipFeed === 'accept' && item) acceptInvite(item, gip);
+                else if (item) { try { sendP2PDecline(item.from, item); } catch (_) {} ackInvite(item); }
+                else { try { ackIds([gip.dataset.id]); } catch (_) {} }
+                setTimeout(() => { try { open(currentTab); } catch (_) {} }, 100);
+                return;
+            }
+        } catch (_) {}
         const el = e.target && e.target.closest ? e.target.closest('[data-faction]') : null;
         if (!el || !document.getElementById('friends-screen')?.classList.contains('active')) return;
         const a = el.dataset.faction;
@@ -1023,20 +1412,51 @@
         }
         if (a === 'play') {
             const f = getF(uid);
+            // Dual delivery: the server inbox when an API is configured AND
+            // a direct P2P dial to their inbox peer (works on the static
+            // live site with no backend). Either one pops the same motion
+            // card with Accept & play / Decline on their screen.
+            const deliverInvite = (toUid, fr, code, cid) => {
+                try { serverNotify(toUid, 'game-invite', `${meName()} invites you to play`, `${cid} game — tap Accept to join instantly.`, { code, control: cid, fromName: meName(), rating: myRating(cid), img: myAvatar() }); } catch (_) {}
+                notifyLocal('note', `Invite sent to ${fr ? fr.name : 'friend'}`, `Waiting room ${code} is open — they get a motion popup with Accept & play.`);
+                try {
+                    sendP2PInvite(toUid, code, cid).then((ok) => {
+                        if (ok) return; // the popup itself is the confirmation
+                        try {
+                            if (apiBase() !== null) notifyLocal('note', 'Direct popup unreachable', `They'll still get the invite on their next sync — or share code ${code} now.`);
+                            else notifyLocal('note', `${fr ? fr.name : 'Friend'} looks offline`, `Share the 6-letter code ${code} or the invite link from the waiting room.`);
+                        } catch (_) {}
+                        try { if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab); } catch (_) {}
+                    });
+                } catch (_) {}
+            };
             try {
                 if (window.app) {
                     if (!window.app._clerk?.user) { notifyLocal('note', 'Sign in to host', 'Guests join games — only members can host them.'); open(currentTab); return; }
+                    // Reuse a live waiting room: spamming Invite must not
+                    // orphan rooms (each new code kills the last host).
+                    const cur = window.app.online;
+                    if (cur && cur.phase === 'waiting' && cur.code && cur.net) {
+                        deliverInvite(uid, f, cur.code, (cur.control && cur.control.id) || 'blitz');
+                        return;
+                    }
                     const hosted = window.app._onlineHost();
                     const after = () => {
                         try {
                             const s = window.app.online;
-                            if (s && s.code && f) {
-                                serverNotify(uid, 'game-invite', `${meName()} invites you to play`, `${(s.control && s.control.id) || 'chess'} game — tap Accept to join instantly.`, { code: s.code, control: (s.control && s.control.id) || '', fromName: meName(), rating: myRating((s.control && s.control.id) || 'blitz') });
-                                notifyLocal('note', `Invite sent to ${f.name}`, 'They get a popup if they are online right now.');
+                            // Only a LIVE waiting room is invitable: a failed
+                            // host (lobby phase, dead net) must never send a
+                            // dead code (the old bug: s.code existed even on
+                            // failure, so recipients joined a ghost room).
+                            if (s && s.phase === 'waiting' && s.code && s.net && f) {
+                                deliverInvite(uid, f, s.code, (s.control && s.control.id) || 'blitz');
+                            } else {
+                                notifyLocal('note', 'Could not open a game', 'Check your connection and try the invite again.');
+                                try { open(currentTab); } catch (_) {}
                             }
                         } catch (_) {}
                     };
-                    if (hosted && typeof hosted.then === 'function') hosted.then(() => setTimeout(after, 600));
+                    if (hosted && typeof hosted.then === 'function') hosted.then(() => setTimeout(after, 900));
                     else setTimeout(after, 1500);
                 }
             } catch (_) {}
@@ -1068,10 +1488,12 @@
 
     window.DoChessFriends = {
         open, renderBell, metPeer, onGameEnd, profileLink, inboundLink,
-        addFriend, acceptFriend, removeFriend, search, streakOf, versus,
+        addFriend, acceptFriend, declineFriend, removeFriend, search, streakOf, versus,
         list: () => Object.values(S.friends),
+        pendingIn: () => S.pendingIn.slice(),
         unread, inbox: () => S.inbox.slice(),
         tierOf, rankBoard, hallList,
-        apiBase, pollNow: () => watchInbox(), version: 1,
+        apiBase, pollNow: () => watchInbox(), pullRequests, pullEdges, pullInbox,
+        checkInvitePopup, p2pEnsure: ensureP2PInbox, version: 3,
     };
 })();

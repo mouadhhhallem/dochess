@@ -57,6 +57,159 @@ class OnlineNet {
     static normalizeCode(s) { return (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); }
     static hostIdFor(code) { return 'ccg-' + code; }
 
+    /* ── Serverless invite inbox (static hosting has no push server) ──
+       Every signed-in tab holds a personal rendezvous peer `cci-<uid>`
+       that friends dial directly to deliver game invites. No backend, no
+       account enumeration: ids are unguessable Clerk user ids, payloads
+       are validated, and nothing auto-joins — the popup still needs the
+       recipient's Accept tap. The server inbox (friends.js serverNotify)
+       stays the primary channel when an API is configured; this is the
+       channel that makes invites pop on the live static site. */
+    static inboxIdFor(uid) {
+        if (typeof uid !== 'string' || !/^[\w-]{1,64}$/.test(uid)) return null;
+        return 'cci-' + uid;
+    }
+
+    // Wire shape of a dial-in invite. Mirrors the server data envelope
+    // (code/control/fromName/rating/img) plus sender uid, timestamp and a
+    // unique invite id for dedupe. Anything else is dropped on receipt.
+    static validInvite(inv) {
+        if (!inv || typeof inv !== 'object') return false;
+        if (inv.type !== 'game-invite') return false;
+        if (typeof inv.code !== 'string' || !/^[A-Z0-9]{6}$/.test(inv.code)) return false;
+        if (typeof inv.control !== 'string' || !/^[a-z0-9-]{1,16}$/.test(inv.control)) return false;
+        if (typeof inv.fromUid !== 'string' || !/^[\w-]{1,64}$/.test(inv.fromUid)) return false;
+        if (typeof inv.fromName !== 'string' || !inv.fromName.replace(/[\x00-\x1F\x7F]/g, '').trim() || inv.fromName.length > 24) return false;
+        if (!Number.isInteger(inv.rating) || inv.rating < 100 || inv.rating > 4000) return false;
+        if (inv.img !== undefined && inv.img !== null && !(typeof inv.img === 'string' && /^https:/.test(inv.img) && inv.img.length <= 2048)) return false;
+        if (typeof inv.at !== 'number' || !isFinite(inv.at) || inv.at <= 0) return false;
+        if (typeof inv.inviteId !== 'string' || !/^[0-9a-f]{8,64}$/i.test(inv.inviteId)) return false;
+        return true;
+    }
+
+    static makeInviteId() {
+        try {
+            const r = new Uint32Array(4);
+            (window.crypto || {}).getRandomValues ? crypto.getRandomValues(r) : r.map(() => Math.floor(Math.random() * 4294967296));
+            return [...r].map((x) => x.toString(16).padStart(8, '0')).join('');
+        } catch (_) {
+            return Date.now().toString(16) + Math.floor(Math.random() * 0xffffffff).toString(16);
+        }
+    }
+
+    // Open my inbox. Resolves the peer, or null when another tab already
+    // holds it ('unavailable-id') — the first tab keeps receiving, the
+    // second tab can still send. Reconnects are the caller's job.
+    static listenInbox(uid, onData) {
+        const id = OnlineNet.inboxIdFor(uid);
+        if (!id) return Promise.resolve(null);
+        return OnlineNet.ensure().then(() => new Promise((resolve) => {
+            let peer = null;
+            let done = false;
+            const finish = (v) => { if (!done) { done = true; resolve(v); } };
+            try { peer = new window.Peer(id); }
+            catch (_) { finish(null); return; }
+            const timer = setTimeout(() => finish(peer), 15000);
+            peer.on('open', () => { clearTimeout(timer); finish(peer); });
+            peer.on('connection', (conn) => {
+                try {
+                    conn.on('data', (msg) => {
+                        if (!OnlineNet.validInvite(msg) && !OnlineNet.validDecline(msg)) return;
+                        try { onData(msg, conn); } catch (_) {}
+                    });
+                } catch (_) {}
+            });
+            peer.on('error', (e) => {
+                if (e && e.type === 'unavailable-id') { clearTimeout(timer); try { peer.destroy(); } catch (_) {} finish(null); }
+            });
+            peer.on('close', () => { try { if (typeof onData === 'function') onData(null, null); } catch (_) {} });
+        }));
+    }
+
+    static closeInbox(peer) {
+        try { if (peer) peer.destroy(); } catch (_) {}
+    }
+
+    // A decline receipt: tiny, best-effort, never rendered as a popup.
+    static validDecline(msg) {
+        if (!msg || typeof msg !== 'object') return false;
+        if (msg.type !== 'invite-decline') return false;
+        if (typeof msg.fromUid !== 'string' || !/^[\w-]{1,64}$/.test(msg.fromUid)) return false;
+        if (typeof msg.inviteId !== 'string' || !/^[0-9a-f]{8,64}$/i.test(msg.inviteId)) return false;
+        return true;
+    }
+
+    static sendDecline(toUid, payload) {
+        const target = OnlineNet.inboxIdFor(toUid);
+        if (!target || !OnlineNet.validDecline(payload)) return Promise.resolve(false);
+        return OnlineNet.ensure().then(() => new Promise((resolve) => {
+            let peer = null;
+            let done = false;
+            const finish = (v) => {
+                if (done) return; done = true;
+                try { if (peer) peer.destroy(); } catch (_) {}
+                resolve(v);
+            };
+            try { peer = new window.Peer('cci-s-' + Math.random().toString(36).slice(2, 10)); }
+            catch (_) { finish(false); return; }
+            const timer = setTimeout(() => finish(false), 8000);
+            peer.on('open', () => {
+                let conn = null;
+                try { conn = peer.connect(target, { reliable: true }); }
+                catch (_) { clearTimeout(timer); finish(false); return; }
+                try {
+                    conn.on('open', () => {
+                        try { conn.send(payload); } catch (_) { clearTimeout(timer); finish(false); return; }
+                        clearTimeout(timer);
+                        setTimeout(() => finish(true), 400);
+                    });
+                } catch (_) { clearTimeout(timer); finish(false); }
+            });
+            peer.on('error', (e) => {
+                if (e && (e.type === 'peer-unreachable' || e.type === 'network' || e.type === 'server-error')) {
+                    clearTimeout(timer); finish(false);
+                }
+            });
+        })).catch(() => false);
+    }
+
+    // Dial a friend's inbox and deliver one invite. Resolves true when the
+    // data channel opened and the payload was sent, false when they look
+    // offline (unreachable/timeout) or the payload is invalid.
+    static sendInvite(toUid, invite) {
+        const target = OnlineNet.inboxIdFor(toUid);
+        if (!target || !OnlineNet.validInvite(invite)) return Promise.resolve(false);
+        return OnlineNet.ensure().then(() => new Promise((resolve) => {
+            let peer = null;
+            let done = false;
+            const finish = (v) => {
+                if (done) return; done = true;
+                try { if (peer) peer.destroy(); } catch (_) {}
+                resolve(v);
+            };
+            try { peer = new window.Peer('cci-s-' + Math.random().toString(36).slice(2, 10)); }
+            catch (_) { finish(false); return; }
+            const timer = setTimeout(() => finish(false), 8000);
+            peer.on('open', () => {
+                let conn = null;
+                try { conn = peer.connect(target, { reliable: true }); }
+                catch (_) { clearTimeout(timer); finish(false); return; }
+                try {
+                    conn.on('open', () => {
+                        try { conn.send(invite); } catch (_) { clearTimeout(timer); finish(false); return; }
+                        clearTimeout(timer);
+                        setTimeout(() => finish(true), 400);
+                    });
+                } catch (_) { clearTimeout(timer); finish(false); }
+            });
+            peer.on('error', (e) => {
+                if (e && (e.type === 'peer-unreachable' || e.type === 'network' || e.type === 'server-error')) {
+                    clearTimeout(timer); finish(false);
+                }
+            });
+        })).catch(() => false);
+    }
+
     async host(code) {
         await OnlineNet.ensure();
         return new Promise((resolve, reject) => {

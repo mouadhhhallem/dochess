@@ -27,6 +27,7 @@ One Node process serves **both** the static site and the API on `PORT`
 | `POST /api/friends/add` | Clerk session | add edge (mutual edges = confirmed) |
 | `POST /api/friends/remove` | Clerk session | remove edge |
 | `GET /api/friends/list` | Clerk session | my edges with confirmed flags |
+| `GET /api/friends/requests` | Clerk session | inbound requests (they list me, I don't list them back) |
 | `POST /api/presence` | Clerk session | heartbeat (90 s TTL) |
 | `GET /api/friends/status?uids=` | Clerk session | online/recent map |
 | `GET /api/directory?q=` | Clerk session | player directory search: local touchpoints + every registered Clerk user (3+ letters, max 20, names+photos only) |
@@ -34,7 +35,7 @@ One Node process serves **both** the static site and the API on `PORT`
 | `GET /api/notify` | Clerk session | inbox items + unread count |
 | `POST /api/notify/ack` | Clerk session | mark inbox read |
 | `POST /api/rank/publish` | Clerk session | publish best rating per category |
-| `GET /api/rank?cat=&friends=` | Clerk session | my rank + named friends, strangers anonymous |
+| `GET /api/rank?cat=&friends=` | Clerk session | global ladder: every registered account (unrated at 800), self + friends fully named, strangers first-name only |
 | `POST /api/hall/join` | Clerk session | claim a first-1000 seat |
 | `GET /api/hall` | Clerk session | the hall-of-fame registry |
 | `POST /api/events/ticket` | Clerk session | one-time ticket for the push stream (60 s) |

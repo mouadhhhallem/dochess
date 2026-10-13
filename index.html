@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="styles.css?v=57">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com https://chess.mauriulloa.com https://api.chess.com http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; worker-src 'self' blob:; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com https://chess.mauriulloa.com https://api.chess.com https://*.up.railway.app https://*.onrender.com http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; worker-src 'self' blob:; upgrade-insecure-requests">
     <style>
     /* ══ Learn screen ══════════════════════════════════════════════════════
        Deliberately the SAME anatomy as the Lessons screen (#lesson-screen):
@@ -957,7 +957,7 @@
     <!-- Puzzles: tactic trainer backed by chess-puzzle-api (classic script) -->
     <script defer src="puzzles.js?v=3"></script>
     <!-- Friends: friend graph, streaks, notifications, ranking, hall of fame (classic script) -->
-    <script defer src="friends.js?v=2"></script>
+    <script defer src="friends.js?v=4"></script>
     <!-- Cloud chess engine assist (chess-api shapes) + chess.com data client (classic script) -->
     <script defer src="js/cloud-engine.js?v=1"></script>
 

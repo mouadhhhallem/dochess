@@ -175,21 +175,23 @@ test('streaks grow per day, warnings fire, versus counts real games', async ({ b
     await page.close();
 });
 
-test('ranking names friends, anonymizes strangers; hall lists join order', async ({ browser }) => {
+test('ranking is global: friends full names, strangers first names; hall lists join order', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
     await page.evaluate(() => {
         localStorage.setItem('ccr_board', JSON.stringify({
             fr_u1: { name: 'FriendOne', cats: { blitz: 900 }, seen: Date.now() },
             u2: { name: 'Bobby', cats: { blitz: 1200 }, seen: Date.now() },
-            ux: { name: 'Xenia', cats: { blitz: 1500 }, seen: Date.now() },
+            ux: { name: 'Xenia Wilkinson', cats: { blitz: 1500 }, seen: Date.now() },
         }));
         window.DoChessFriends.addFriend('u2', 'Bobby', 'link');
         window.DoChessFriends.acceptFriend('u2');
     });
     await page.evaluate(() => window.app.showFriends('ranking'));
     await expect(page.locator('#fr-rankout')).toContainText('Bobby');
-    await expect(page.locator('#fr-rankout')).toContainText('a quiet rival');
-    await expect(page.locator('#fr-rankout')).not.toContainText('Xenia');
+    // Strangers stand on the ladder by first name only (no blur, no photo).
+    await expect(page.locator('#fr-rankout')).toContainText('Xenia');
+    await expect(page.locator('#fr-rankout')).not.toContainText('Wilkinson');
+    await expect(page.locator('#fr-rankout .fr-brow.blurry')).toHaveCount(0);
     await expect(page.locator('.fr-myrank')).toContainText(/#3/);
     await page.evaluate(() => window.app.showFriends('hall'));
     await expect(page.locator('#fr-hallout')).toContainText('Bobby');
@@ -314,32 +316,37 @@ test('outbound requests wait in Sent, never pose as friends', async ({ browser }
     await page.close();
 });
 
-test('ranking privacy: neighbors and friends clear, strangers blurred', async ({ browser }) => {
+test('ranking privacy: everyone visible, friends full names, strangers first names', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
     await page.evaluate(() => {
         localStorage.setItem('ccr_board', JSON.stringify({
             fr_u1: { name: 'FriendOne', cats: { blitz: 1000 }, seen: Date.now() },
-            a: { name: 'Amy', cats: { blitz: 1600 }, seen: Date.now() },
+            a: { name: 'Amy Anderson', cats: { blitz: 1600 }, seen: Date.now() },
             b: { name: 'Ben', cats: { blitz: 1100 }, seen: Date.now() },
             c: { name: 'Cat', cats: { blitz: 900 }, seen: Date.now() },
-            d: { name: 'Dan', cats: { blitz: 500 }, seen: Date.now() },
+            d: { name: 'Dan Doe', cats: { blitz: 500 }, seen: Date.now() },
         }));
         window.DoChessFriends.addFriend('b', 'Ben', 'link');
         window.DoChessFriends.acceptFriend('b');
         window.app.showFriends('ranking');
     });
-    // Self #3: #2 Ben (friend) and #4 Cat (below) clear; #1 Amy and #5 Dan blurred.
-    const cls = await page.evaluate(() => [...document.querySelectorAll('.fr-brow')].map((el) => ({
+    // Global ladder: self #3 of 5, every row visible (no blur), friends in
+    // full, strangers by first name only (family names never leak).
+    const rows = await page.evaluate(() => [...document.querySelectorAll('.fr-brow')].map((el) => ({
         rank: el.querySelector('.fr-rank').textContent,
+        name: el.querySelector('.fr-bname').textContent,
         blurry: el.classList.contains('blurry'),
     })));
-    expect(cls).toEqual([
-        { rank: '1', blurry: true },
-        { rank: '2', blurry: false },
-        { rank: '3', blurry: false },
-        { rank: '4', blurry: false },
-        { rank: '5', blurry: true },
+    expect(rows).toEqual([
+        { rank: '1', name: 'Amy', blurry: false },
+        { rank: '2', name: 'Ben', blurry: false },
+        { rank: '3', name: expect.any(String), blurry: false },
+        { rank: '4', name: 'Cat', blurry: false },
+        { rank: '5', name: 'Dan', blurry: false },
     ]);
+    await expect(page.locator('#fr-rankout')).not.toContainText('Anderson');
+    await expect(page.locator('#fr-rankout')).not.toContainText('Doe');
+    await expect(page.locator('#fr-rankout')).toContainText('Ben');
     await page.close();
 });
 
