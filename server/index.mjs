@@ -44,6 +44,7 @@ import { SECTION_MODES } from './lib/merge.mjs';
 import { createMatcher } from './lib/mm.mjs';
 import { createFriendStore } from './lib/friends.mjs';
 import { clerkSearch, mergeDirectory } from './lib/clerkdir.mjs';
+import { createBus } from './lib/events.mjs';
 
 const STARTED = Date.now();
 const VERSION = 'api-1';
@@ -229,7 +230,8 @@ async function handleLeaderboard(req, res) {
    the ticket is the only capability the poller needs. */
 const MM = createMatcher();
 const FR = createFriendStore();
-setInterval(() => { try { MM.sweep(); FR.sweep(); } catch (_) {} }, 30000).unref?.();
+const EV = createBus();
+setInterval(() => { try { MM.sweep(); FR.sweep(); EV.sweep(); } catch (_) {} }, 30000).unref?.();
 
 async function handleMmJoin(req, res, userId) {
     let body = {};
@@ -263,8 +265,9 @@ async function handleFriendAdd(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
     const r = FR.addEdge(userId, { uid: body.friendUid, name: body.friendName, img: body.friendImg });
-    try { FR.heartbeat(userId, body.myName); } catch (_) {}
     if (!r) { sendError(res, 400, 'bad-friend'); return; }
+    try { FR.heartbeat(userId, body.myName); } catch (_) {}
+    try { EV.publish(body.friendUid, { kind: 'friends' }); } catch (_) {}
     sendJson(res, 200, { ok: true, ...r });
 }
 
@@ -289,7 +292,9 @@ async function handleDirectory(req, res, userId) {
 async function handleFriendRemove(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    sendJson(res, 200, { ok: FR.removeEdge(userId, body.friendUid) });
+    const ok = FR.removeEdge(userId, body.friendUid);
+    try { if (body.friendUid) EV.publish(body.friendUid, { kind: 'friends' }); } catch (_) {}
+    sendJson(res, 200, { ok });
 }
 
 async function handlePresence(req, res, userId) {
@@ -308,8 +313,9 @@ async function handleFriendStatus(req, res) {
 async function handleNotify(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    const r = FR.notify(body.toUid, { kind: body.kind, title: body.title, body: body.body, from: userId });
+    const r = FR.notify(body.toUid, { kind: body.kind, title: body.title, body: body.body, from: userId, data: body.data });
     if (!r) { sendError(res, 400, 'bad-notify'); return; }
+    try { EV.publish(body.toUid, { kind: 'notify', id: r.id }); } catch (_) {}
     sendJson(res, 200, { ok: true, id: r.id });
 }
 
@@ -339,12 +345,31 @@ async function handleHallJoin(req, res, userId) {
     sendJson(res, 200, { ok: true, ...FR.hallJoin(userId, body.name) });
 }
 
+/* ── push stream (server/lib/events.mjs) ──────────────────────── */
+async function handleEvents(req, res) {
+    const q = query(req);
+    const uid = EV.claimTicket(q.ticket);
+    if (!uid) { sendError(res, 401, 'bad-ticket'); return; }
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+    try { res.write(': connected\n\n'); } catch (_) {}
+    EV.subscribe(uid, res);
+}
+
 async function handleApi(req, res) {
     const p = pathOf(req);
 
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
     if (p === '/api/health' && req.method === 'GET') { await handleHealth(req, res); return; }
+
+    // Push stream authenticates by one-time ticket (EventSource cannot set
+    // headers), so it lives outside the session-authenticated section.
+    if (p === '/api/events' && req.method === 'GET') { await handleEvents(req, res); return; }
 
     // Everything below is per-user → authenticate first.
     const id = await identify(req);
@@ -374,6 +399,7 @@ async function handleApi(req, res) {
     if (p === '/api/rank' && req.method === 'GET') { await handleRank(req, res, id.userId); return; }
     if (p === '/api/hall/join' && req.method === 'POST') { await handleHallJoin(req, res, id.userId); return; }
     if (p === '/api/hall' && req.method === 'GET') { sendJson(res, 200, { ok: true, hall: FR.hall() }); return; }
+    if (p === '/api/events/ticket' && req.method === 'POST') { sendJson(res, 200, { ok: true, ticket: EV.mintTicket(id.userId) }); return; }
 
     sendError(res, 404, 'not-found');
 }

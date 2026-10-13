@@ -37,6 +37,8 @@ One Node process serves **both** the static site and the API on `PORT`
 | `GET /api/rank?cat=&friends=` | Clerk session | my rank + named friends, strangers anonymous |
 | `POST /api/hall/join` | Clerk session | claim a first-1000 seat |
 | `GET /api/hall` | Clerk session | the hall-of-fame registry |
+| `POST /api/events/ticket` | Clerk session | one-time ticket for the push stream (60 s) |
+| `GET /api/events?ticket=` | ticket (no session header; EventSource cannot set headers) | Server-Sent Events fan-out: notify / friends / game-invite, auto-reconnect |
 | `*` | none | static files from the project root |
 
 `server/`, `node_modules/`, `.git`, `skills/` and the screenshot folders are

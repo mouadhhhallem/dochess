@@ -135,7 +135,7 @@ export function createFriendStore() {
     function notify(toUid, n = {}) {
         toUid = cleanUid(toUid);
         if (!toUid) return null;
-        const kind = ['friend-request', 'friend-accept', 'game-invite', 'note', 'streak', 'rank'].includes(n.kind) ? n.kind : 'note';
+        const kind = ['friend-request', 'friend-accept', 'friend-decline', 'game-invite', 'note', 'streak', 'rank'].includes(n.kind) ? n.kind : 'note';
         const rec = {
             id: randomBytes(8).toString('hex'),
             kind,

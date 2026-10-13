@@ -466,15 +466,60 @@
             else { closeInvitePopup(); ackInvite(item); }
         });
     }
-    async function watchInbox() {
+    function checkInvitePopup() {
         try {
-            if (apiBase() === null || document.hidden) return;
-            await pullInbox();
             const fresh = S.inbox.filter((m) => !m.read && m.kind === 'game-invite' && m.data && m.data.code && !shownInvites.has(m.id));
             if (fresh.length && !document.getElementById('gip-overlay')) invitePopup(fresh[0]);
         } catch (_) {}
     }
+    async function watchInbox() {
+        try {
+            if (apiBase() === null || document.hidden) return;
+            await pullInbox();
+            checkInvitePopup();
+        } catch (_) {}
+    }
+    let streamEs = null;
+    function closeStream() { try { if (streamEs) streamEs.close(); } catch (_) {} streamEs = null; }
+    // Push stream on the existing server (EventSource auto-reconnects).
+    // Polling stays as fallback: streams enhance, never replace.
+    async function watchStream() {
+        try {
+            if (apiBase() === null || typeof EventSource === 'undefined') return;
+            if (uidOf() === 'guest') return;
+            if (streamEs) return; // one stream at a time
+            const t = await api('events/ticket', {});
+            if (!t || !t.ticket) return;
+            const es = new EventSource(apiBase() + '/api/events?ticket=' + encodeURIComponent(t.ticket));
+            streamEs = es;
+            es.onmessage = (ev) => {
+                let msg = null;
+                try { msg = JSON.parse(ev.data); } catch (_) {}
+                if (!msg || typeof msg.kind !== 'string') return;
+                if (msg.kind === 'notify') {
+                    pullInbox().then(() => {
+                        if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
+                        checkInvitePopup();
+                    });
+                } else if (msg.kind === 'friends') {
+                    pullEdges().then((ch) => {
+                        if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
+                    });
+                } else if (msg.kind === 'game-invite') {
+                    checkInvitePopup();
+                }
+            };
+            es.onerror = () => { if (streamEs === es) closeStream(); };
+        } catch (_) {}
+    }
     setInterval(() => { try { watchInbox(); } catch (_) {} }, 15000);
+    setTimeout(() => { try { watchStream(); } catch (_) {} }, 4000);
+    document.addEventListener('visibilitychange', () => {
+        try {
+            if (!document.hidden) { closeStream(); watchStream(); watchInbox(); }
+            else closeStream();
+        } catch (_) {}
+    });
     let presenceCache = { at: 0, map: {} };
     let tokenCache = { at: 0, token: null };
     // 'signed-in' | 'signed-out' | 'unknown' — drives search UI states.

@@ -389,6 +389,25 @@ test('game invite pops up anywhere and accepts into the room', async ({ browser 
     await page.close();
 });
 
+test('push stream delivers inbox events live (no polling wait)', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1280, height: 800 });
+    await page.route('https://api.stub/api/events/ticket', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, ticket: 'STUBTICKET' }) }));
+    await page.route('https://api.stub/api/notify', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        ok: true,
+        items: [{ id: 'stream1', kind: 'game-invite', title: 'Zed invites you', body: 'blitz', from: 'uz', at: Date.now(), read: false, data: { code: 'STREAM', control: 'blitz', fromName: 'Zed', rating: 1000 } }],
+        unread: 1,
+    }) }));
+    await page.route('https://api.stub/api/notify/ack', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, acked: 1 }) }));
+    await page.route('https://api.stub/api/events*', (r) => r.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\ndata: {"kind":"notify"}\n\n' }));
+    await page.evaluate(() => {
+        localStorage.setItem('cc_api_base', 'https://api.stub');
+        window.app.showHome();
+    });
+    // Stream path (not the 15 s poller): popup lands on any screen.
+    await expect(page.locator('#gip-overlay')).toContainText('Zed invites you', { timeout: 20000 });
+    await page.close();
+});
+
 test('cloud engine dormant by default, answers when configured', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
     expect(await page.evaluate(() => window.DoChessCloud.configured())).toBe(false);
