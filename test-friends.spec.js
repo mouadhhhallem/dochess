@@ -65,9 +65,12 @@ test('global search end-to-end: stranger found by name with photo, added', async
         await A.locator('#fr-search').fill('bobby');
         await expect(A.locator('#fr-results')).toContainText('Bobby Tables', { timeout: 15000 });
         await expect(A.locator('#fr-results img.fr-avaimg[src="https://x.test/bob.png"]')).toBeVisible();
-        // Strangers are addable straight from results — no link needed.
+        // Strangers are addable straight from results — they land in Sent
+        // (never posed as friends) until they accept.
         await A.click('#fr-results [data-faction="add"]');
-        await expect(A.locator('#fr-grid')).toContainText('Bobby Tables');
+        await expect(A.locator('.fr-reqs')).toContainText('Bobby Tables');
+        await expect(A.locator('.fr-reqs')).toContainText('waiting for answer');
+        await expect(A.locator('#fr-grid')).not.toContainText('Bobby Tables');
         const f = await A.evaluate(() => window.DoChessFriends.list().find((x) => x.uid === 'user_e2ebob02'));
         expect(f.img).toBe('https://x.test/bob.png');
         await A.close();
@@ -292,6 +295,97 @@ test('server directory finds strangers the device never met', async ({ browser }
     await expect(page.locator('#fr-results')).toContainText('Zelda');
     await expect(page.locator('#fr-results')).toContainText('DoChess');
     await expect(page.locator('#fr-results img.fr-avaimg[src="https://x.test/zelda.png"]')).toBeVisible();
+    await page.close();
+});
+
+test('outbound requests wait in Sent, never pose as friends', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1280, height: 800 });
+    await page.evaluate(() => {
+        window.DoChessFriends.addFriend('out1', 'Olivia', 'search');
+        window.app.showFriends();
+    });
+    // Not in the friends grid…
+    await expect(page.locator('#fr-grid')).not.toContainText('Olivia');
+    // …but in Sent with a cancel action.
+    await expect(page.locator('.fr-reqs')).toContainText('waiting for answer');
+    await page.click('[data-faction="remove"]');
+    await expect(page.locator('.fr-reqs')).toBeHidden();
+    expect(await page.evaluate(() => window.DoChessFriends.list().length)).toBe(0);
+    await page.close();
+});
+
+test('ranking privacy: neighbors and friends clear, strangers blurred', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1280, height: 800 });
+    await page.evaluate(() => {
+        localStorage.setItem('ccr_board', JSON.stringify({
+            fr_u1: { name: 'FriendOne', cats: { blitz: 1000 }, seen: Date.now() },
+            a: { name: 'Amy', cats: { blitz: 1600 }, seen: Date.now() },
+            b: { name: 'Ben', cats: { blitz: 1100 }, seen: Date.now() },
+            c: { name: 'Cat', cats: { blitz: 900 }, seen: Date.now() },
+            d: { name: 'Dan', cats: { blitz: 500 }, seen: Date.now() },
+        }));
+        window.DoChessFriends.addFriend('b', 'Ben', 'link');
+        window.DoChessFriends.acceptFriend('b');
+        window.app.showFriends('ranking');
+    });
+    // Self #3: #2 Ben (friend) and #4 Cat (below) clear; #1 Amy and #5 Dan blurred.
+    const cls = await page.evaluate(() => [...document.querySelectorAll('.fr-brow')].map((el) => ({
+        rank: el.querySelector('.fr-rank').textContent,
+        blurry: el.classList.contains('blurry'),
+    })));
+    expect(cls).toEqual([
+        { rank: '1', blurry: true },
+        { rank: '2', blurry: false },
+        { rank: '3', blurry: false },
+        { rank: '4', blurry: false },
+        { rank: '5', blurry: true },
+    ]);
+    await page.close();
+});
+
+test('request + accept notify both sides through the server inbox', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1280, height: 800 });
+    const posts = [];
+    await page.route('https://api.stub/api/**', (r) => {
+        const url = r.request().url();
+        if (url.includes('/notify') && r.request().method() === 'POST' && !url.includes('ack')) {
+            posts.push(JSON.parse(r.request().postData() || '{}'));
+        }
+        r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [], unread: 0, friends: [] }) });
+    });
+    await page.evaluate(() => {
+        localStorage.setItem('cc_api_base', 'https://api.stub');
+        window.app.showFriends();
+        window.DoChessFriends.addFriend('nbx', 'Nina', 'search');
+    });
+    await page.waitForTimeout(500);
+    expect(posts.some((p) => p.toUid === 'nbx' && p.kind === 'friend-request')).toBe(true);
+    await page.evaluate(() => window.DoChessFriends.acceptFriend('nbx'));
+    await page.waitForTimeout(500);
+    expect(posts.some((p) => p.toUid === 'nbx' && p.kind === 'friend-accept')).toBe(true);
+    await page.close();
+});
+
+test('game invite pops up anywhere and accepts into the room', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1280, height: 800 });
+    await page.route('https://api.stub/api/notify', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        ok: true,
+        items: [{ id: 'gip1', kind: 'game-invite', title: 'Rival invites you', body: 'blitz game', from: 'u9', at: Date.now(), read: false, data: { code: 'INVITE', control: 'blitz', fromName: 'Rival', rating: 1100 } }],
+        unread: 1,
+    }) }));
+    await page.route('https://api.stub/api/notify/ack', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, acked: 1 }) }));
+    await page.evaluate(() => {
+        localStorage.setItem('cc_api_base', 'https://api.stub');
+        window.app.showHome();
+    });
+    await page.waitForTimeout(500);
+    // Poll now (the 15 s interval would do it on its own).
+    await page.evaluate(() => window.DoChessFriends.pollNow());
+    await expect(page.locator('#gip-overlay')).toContainText('Rival invites you', { timeout: 15000 });
+    await expect(page.locator('#gip-overlay .qm-clock')).toBeVisible();
+    await page.click('#gip-overlay [data-gip="accept"]');
+    await page.waitForFunction(() => window.app.online?.code === 'INVITE', null, { timeout: 30000 });
+    expect(await page.evaluate(() => document.getElementById('gip-overlay'))).toBe(null);
     await page.close();
 });
 

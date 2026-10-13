@@ -114,3 +114,24 @@ test('hall: first-1000 registry in join order', () => {
     assert.deepEqual(h.map((x) => x.uid), ['u1', 'u2']);
     assert.deepEqual(h.map((x) => x.position), [1, 2]);
 });
+
+test('notify: game-invite data envelope validated and returned', () => {
+    const fr = createFriendStore();
+    const n = fr.notify('u2', { kind: 'game-invite', title: 'X invites you', body: 'play?', from: 'u1', data: { code: 'ABCDEF', control: 'blitz', fromName: 'X', rating: 900, evil: 'drop' } });
+    assert.deepEqual(n.data, { code: 'ABCDEF', control: 'blitz', fromName: 'X', rating: 900 });
+    const bad = fr.notify('u2', { kind: 'game-invite', title: 'x', data: { code: 'toolongcode!!', control: 'blitz' } });
+    assert.deepEqual(bad.data, { control: 'blitz' }); // bad code dropped, good control kept
+    const empty = fr.notify('u2', { kind: 'note', title: 'x', data: { evil: 1 } });
+    assert.equal(empty.data, null);
+    const box = fr.inbox('u2');
+    assert.equal(box.items.find((m) => m.id === n.id).data.code, 'ABCDEF');
+});
+
+test('rank: board rows flag friends', () => {
+    const fr = createFriendStore();
+    fr.publishRank('u1', 'Alpha', 'blitz', 900);
+    fr.publishRank('u2', 'Beta', 'blitz', 1200);
+    const r = fr.rank('blitz', 'u1', ['u2']);
+    assert.equal(r.board[0].friend, true);
+    assert.equal(r.board[1].friend, false);
+});

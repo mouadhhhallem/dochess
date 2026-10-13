@@ -174,12 +174,16 @@
             f = S.friends[uid] = {
                 uid, name: String(name || 'Player').slice(0, 24),
                 since: Date.now(), confirmed: false, source: source || 'link', img: cleanImg(img),
+                // Outbound = I asked, they haven't answered. Never shown
+                // as a friend (separate Sent section) until mutual/P2P.
+                outbound: source === 'search',
                 days: {}, best: 0, lastSeen: 0,
             };
         } else if (name) f.name = String(name).slice(0, 24);
         if (img) { const ci = cleanImg(img); if (ci) f.img = ci; }
         if (!S.pendingOut.includes(uid) && !f.confirmed) S.pendingOut.push(uid);
         save(); renderBell();
+        if (f.outbound) serverNotify(uid, 'friend-request', meName() + ' wants to be friends', 'Accept to start growing a streak together.');
         try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f.name, friendImg: f.img || null, myName: meName() }).catch(() => {}); } catch (_) {}
         return f;
     }
@@ -195,8 +199,10 @@
         if (f) {
             // Confirmed flips true only through mutual edges (server list
             // or a P2P meeting) — accepting never un-confirms anyone.
+            f.outbound = false;
             const po = S.pendingOut.indexOf(uid);
             if (po >= 0) S.pendingOut.splice(po, 1);
+            serverNotify(uid, 'friend-accept', meName() + ' accepted your request', 'You are friends now - play a game to start a streak.');
         }
         save(); renderBell();
         try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f ? f.name : '', friendImg: (f && f.img) || null, myName: meName() }).catch(() => {}); } catch (_) {}
@@ -249,6 +255,7 @@
             f.lastSeen = now;
             if (!f.confirmed) {
                 f.confirmed = true;
+                f.outbound = false;
                 const po = S.pendingOut.indexOf(uid);
                 if (po >= 0) S.pendingOut.splice(po, 1);
                 notifyLocal('friend-accept', `${f.name} is now your friend`, 'Play a game together to start a streak.');
@@ -264,7 +271,7 @@
             // They never used our link, but here they are live: adopt them.
             S.pendingOut.splice(po, 1);
             const nf = addFriend(uid, name, 'met', img);
-            if (nf) nf.confirmed = true;
+            if (nf) { nf.confirmed = true; nf.outbound = false; }
             notifyLocal('friend-accept', `${name || 'A player'} is now your friend`, 'Play a game together to start a streak.');
             save();
         }
@@ -274,7 +281,7 @@
     function directory() {
         const map = new Map();
         for (const [uid, f] of Object.entries(S.friends)) map.set(uid, { uid, name: f.name, friend: true, rating: null, img: f.img || null });
-        for (const p of S.pendingIn) if (!map.has(p.uid)) map.set(p.uid, { uid: p.uid, name: p.name, friend: false, rating: null, pending: true });
+        for (const p of S.pendingIn) if (!map.has(p.uid)) map.set(p.uid, { uid: p.uid, name: p.name, friend: false, rating: null, pending: true, img: p.img || null });
         for (const uid of S.pendingOut) {
             const f = S.friends[uid];
             if (!map.has(uid)) map.set(uid, { uid, name: (f && f.name) || 'Player', friend: !!f, rating: null, pending: true });
@@ -355,6 +362,23 @@
         }
     }
 
+    /* Relay one event to another player's server inbox (best effort). */
+    function serverNotify(toUid, kind, title, body, data) {
+        try {
+            if (apiBase() === null || !toUid || toUid === uidOf()) return;
+            const payload = { toUid, kind, title: String(title).slice(0, 60), body: String(body || '').slice(0, 140) };
+            if (data && typeof data === 'object') {
+                const d = {};
+                if (typeof data.code === 'string') d.code = data.code.slice(0, 12);
+                if (typeof data.control === 'string') d.control = data.control.slice(0, 16);
+                if (typeof data.fromName === 'string') d.fromName = data.fromName.slice(0, 24);
+                if (typeof data.rating === 'number') d.rating = Math.round(data.rating);
+                if (Object.keys(d).length) payload.data = d;
+            }
+            api('notify', payload).catch(() => {});
+        } catch (_) {}
+    }
+
     /* ── inbox ──────────────────────────────────────────────── */
     function notifyLocal(kind, title, body, from) {
         S.inbox.unshift({ id: 'l' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), kind, title: String(title).slice(0, 60), body: String(body || '').slice(0, 140), from: from || null, at: Date.now(), read: false, local: true });
@@ -381,18 +405,76 @@
             let added = false;
             for (const m of r.items) {
                 if (!m || !m.id || have.has(m.id)) continue;
-                S.inbox.unshift({ id: m.id, kind: m.kind || 'note', title: String(m.title || '').slice(0, 60), body: String(m.body || '').slice(0, 140), from: m.from || null, at: m.at || Date.now(), read: !!m.read, local: false });
+                const dd = (m.data && typeof m.data === 'object') ? m.data : null;
+                const data = dd ? {
+                    code: (typeof dd.code === 'string' && /^[A-Z0-9]{6}$/.test(dd.code)) ? dd.code : null,
+                    control: typeof dd.control === 'string' ? dd.control.slice(0, 16) : null,
+                    fromName: typeof dd.fromName === 'string' ? dd.fromName.slice(0, 24) : null,
+                    rating: (typeof dd.rating === 'number' && Number.isFinite(dd.rating)) ? Math.round(dd.rating) : null,
+                } : null;
+                S.inbox.unshift({ id: m.id, kind: m.kind || 'note', title: String(m.title || '').slice(0, 60), body: String(m.body || '').slice(0, 140), from: m.from || null, at: m.at || Date.now(), read: !!m.read, local: false, data });
                 added = true;
             }
             if (added) { S.inbox = S.inbox.slice(0, 50); save(); renderBell(); }
-            return added;
             const unreadIds = S.inbox.filter((m) => !m.read && !m.local).map((m) => m.id);
             if (unreadIds.length) api('notify/ack', { ids: unreadIds }).catch(() => {});
-            return false;
+            return added;
         } catch (_) { return false; }
     }
 
     /* ── presence ───────────────────────────────────────────── */
+    /* ── Game-invite popup (quick-match motion, anywhere on site) ── */
+    const shownInvites = new Set();
+    function closeInvitePopup() { try { const o = document.getElementById('gip-overlay'); if (o) o.remove(); } catch (_) {} }
+    function ackInvite(item) {
+        if (!item) return;
+        shownInvites.add(item.id);
+        for (const m of S.inbox) if (m.id === item.id) m.read = true;
+        save(); renderBell();
+        try { if (apiBase() !== null) api('notify/ack', { ids: [item.id] }).catch(() => {}); } catch (_) {}
+    }
+    function acceptInvite(item) {
+        const code = item && item.data && item.data.code;
+        closeInvitePopup();
+        ackInvite(item);
+        if (!code) return;
+        try {
+            if (!window.app) return;
+            window.app.showOnline();
+            setTimeout(() => { try { window.app._onlineJoin(code); } catch (_) {} }, 600);
+        } catch (_) {}
+    }
+    function invitePopup(item) {
+        closeInvitePopup();
+        const d = (item && item.data) || {};
+        const who = (d.fromName || (item && item.title) || 'A friend').replace(/ invites you.*$/, '');
+        const ov = document.createElement('div');
+        ov.id = 'gip-overlay';
+        ov.innerHTML = '<div class="qm-card" role="dialog" aria-label="Game invitation">'
+            + '<div class="qm-radar"><span class="qm-clockwrap">' + ((typeof ChessCourseApp !== 'undefined' && ChessCourseApp.quickClockSVG) ? ChessCourseApp.quickClockSVG('lg') : '') + '</span></div>'
+            + '<div class="qm-title">' + esc(who) + ' invites you</div>'
+            + '<div class="qm-sub">' + esc(d.control || 'chess') + (d.rating != null ? ' · ' + d.rating : '') + '</div>'
+            + '<div class="fr-acts" style="justify-content:center">'
+            + '<button class="btn-primary" data-gip="accept" type="button">Accept & play</button>'
+            + '<button class="btn-secondary" data-gip="decline" type="button">Decline</button>'
+            + '</div></div>';
+        document.body.appendChild(ov);
+        ov.addEventListener('click', (e) => {
+            const bb = e.target && e.target.closest ? e.target.closest('[data-gip]') : null;
+            if (!bb) return;
+            if (bb.dataset.gip === 'accept') acceptInvite(item);
+            else { closeInvitePopup(); ackInvite(item); }
+        });
+    }
+    async function watchInbox() {
+        try {
+            if (apiBase() === null || document.hidden) return;
+            await pullInbox();
+            const fresh = S.inbox.filter((m) => !m.read && m.kind === 'game-invite' && m.data && m.data.code && !shownInvites.has(m.id));
+            if (fresh.length && !document.getElementById('gip-overlay')) invitePopup(fresh[0]);
+        } catch (_) {}
+    }
+    setInterval(() => { try { watchInbox(); } catch (_) {} }, 15000);
     let presenceCache = { at: 0, map: {} };
     let tokenCache = { at: 0, token: null };
     // 'signed-in' | 'signed-out' | 'unknown' — drives search UI states.
@@ -422,7 +504,7 @@
         if (rating >= 2000) return { name: 'Diamond', cls: 't-dia' };
         if (rating >= 1600) return { name: 'Platinum', cls: 't-pla' };
         if (rating >= 1200) return { name: 'Gold', cls: 't-gld' };
-        if (rating >= 800) return { name: 'Silver', cls: 't-slv' };
+        if (rating >= 1000) return { name: 'Silver', cls: 't-slv' };
         return { name: 'Bronze', cls: 't-brz' };
     }
     function myRating(cat) {
@@ -682,7 +764,8 @@
     }
 
     function renderFriends(box) {
-        const rows = Object.values(S.friends).sort((a, b) => streakOf(b) - streakOf(a) || (b.lastSeen || 0) - (a.lastSeen || 0));
+        const rows = Object.values(S.friends).filter((f) => !f.outbound).sort((a, b) => streakOf(b) - streakOf(a) || (b.lastSeen || 0) - (a.lastSeen || 0));
+        const sent = Object.values(S.friends).filter((f) => f.outbound).sort((a, b) => (b.since || 0) - (a.since || 0));
         const rival = rivalOfWeek();
         const reqs = S.pendingIn;
         box.innerHTML = `
@@ -702,6 +785,9 @@
             ${reqs.length ? `<div class="fr-reqs"><h3>Requests</h3>${reqs.map((p) => `
                 <div class="fr-req">${avatarHTML(p.name, null, p.img)}<div class="fr-id"><strong>${esc(p.name)}</strong><span class="fr-sub">wants to be friends</span></div>
                 <span class="fr-reqacts"><button class="btn-primary sm" data-faction="accept" data-uid="${esc(p.uid)}" type="button">Accept</button><button class="btn-secondary sm" data-faction="decline" data-uid="${esc(p.uid)}" type="button">Decline</button></span></div>`).join('')}</div>` : ''}
+            ${sent.length ? `<div class="fr-reqs"><h3>Sent requests</h3>${sent.map((p) => `
+                <div class="fr-req sent">${avatarHTML(p.name, null, p.img)}<div class="fr-id"><strong>${esc(p.name)}</strong><span class="fr-sub">waiting for answer</span></div>
+                <span class="fr-reqacts"><button class="btn-secondary sm" data-faction="remove" data-uid="${esc(p.uid)}" type="button">Cancel request</button></span></div>`).join('')}</div>` : ''}
             <div class="fr-grid" id="fr-grid"></div>
 `;
         const grid = box.querySelector('#fr-grid');
@@ -721,10 +807,11 @@
         const renderFound = (found, extra) => {
             const all = found.concat(extra || []);
             out.innerHTML = all.length ? '<div class="fr-grid">' + all.map((p) => {
-                const tag = p.pending ? 'requested' : (p.friend ? 'friend' : (p.fromServer ? 'DoChess' : 'met over the board'));
+                const tag = p.pending ? 'requested' : (p.friend ? (p.outbound ? 'requested' : 'friend') : (p.fromServer ? 'DoChess' : 'met over the board'));
+                const hideAdd = p.friend || p.uid === uidOf() || p.outbound;
                 return '<div class="fr-card mini">' + avatarHTML(p.name, null, p.img) + '<div class="fr-id"><strong>' + esc(p.name) + '</strong>'
                 + '<span class="fr-sub">' + tag + (p.rating ? ' · ' + p.rating : '') + '</span></div>'
-                + ((p.friend || p.uid === uidOf()) ? '' : '<button class="btn-secondary sm" data-faction="add" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '"' + (p.img ? ' data-img="' + esc(p.img) + '"' : '') + ' type="button">Add</button>') + '</div>';
+                + (hideAdd ? '' : '<button class="btn-secondary sm" data-faction="add" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '"' + (p.img ? ' data-img="' + esc(p.img) + '"' : '') + ' type="button">Add</button>') + '</div>';
             }).join('') + '</div>'
                 : (authState === 'signed-out'
                     ? '<div class="fr-empty">Sign in to search <strong>all</strong> DoChess players.<br><br><button class="btn-primary sm" data-action="profile-signin" type="button">Sign in / Join</button></div>'
@@ -754,11 +841,13 @@
         const top = (data.board || []).slice(0, 3);
         if (top.length < 3) return '';
         const order = [[top[1], '2nd', 'p2'], [top[0], '1st', 'p1'], [top[2], '3rd', 'p3']];
+        const near = (r) => data.myRank != null && (r.rank === data.myRank - 1 || r.rank === data.myRank + 1);
         return '<div class="fr-podium">' + order.map(([r, place, cls]) => {
             const known = r.self || (r.uid && S.friends[r.uid]);
             const nm = (known && r.name) ? r.name : 'a quiet rival';
             const img = known ? (r.self ? myAvatar() : ((S.friends[r.uid] || {}).img || null)) : null;
-            return '<div class="fr-pstep ' + cls + '"><span class="fr-pplace">' + place + '</span>'
+            const shown = known || near(r);
+            return '<div class="fr-pstep ' + cls + (shown ? '' : ' blurry') + '"><span class="fr-pplace">' + place + '</span>'
                 + avatarHTML(nm, null, img)
                 + '<strong>' + esc(nm) + '</strong>' + tierChip(r.rating) + '<span>' + (r.rating != null ? r.rating : '') + '</span></div>';
         }).join('') + '</div>';
@@ -784,14 +873,17 @@
             </div>
             ${podiumHTML(data)}
             ${data.server ? '' : `<p class="lobby-hint">Device board — connect the API for the global ladder.</p>`}
-            <div class="fr-board">${data.board.slice(0, 50).map((r) => `
-                <div class="fr-brow${r.self ? ' me' : ''}">
+            <div class="fr-board">${data.board.slice(0, 50).map((r) => {
+                const shown = r.self || (r.uid && !!S.friends[r.uid]) || (data.myRank != null && (r.rank === data.myRank - 1 || r.rank === data.myRank + 1));
+                return `
+                <div class="fr-brow${r.self ? ' me' : ''}${shown ? '' : ' blurry'}">
                     <span class="fr-rank">${r.rank}</span>
                     ${r.name ? avatarHTML(r.name, null, r.self ? myAvatar() : ((S.friends[r.uid] || {}).img || null)) : `<span class="fr-ava ghost" aria-hidden="true">?</span>`}
                     <span class="fr-bname">${r.name ? esc(r.name) : 'a quiet rival'}</span>
                     ${r.rating != null ? tierChip(r.rating) : ''}
                     <span class="fr-brating">${r.rating != null ? r.rating : '–'}</span>
-                </div>`).join('') || `<p class="fr-empty">No rated players yet — finish an online game to open the board.</p>`}</div>`;
+                </div>`;
+            }).join('') || `<p class="fr-empty">No rated players yet — finish an online game to open the board.</p>`}</div>`;
     }
 
     async function renderHall(box) {
@@ -885,12 +977,22 @@
             return;
         }
         if (a === 'play') {
+            const f = getF(uid);
             try {
                 if (window.app) {
                     if (!window.app._clerk?.user) { notifyLocal('note', 'Sign in to host', 'Guests join games — only members can host them.'); open(currentTab); return; }
-                    window.app._onlineHost();
-                    const f = getF(uid);
-                    if (f) notifyLocal('note', `Room open for ${f.name}`, 'Send them your invite link from the Online screen.');
+                    const hosted = window.app._onlineHost();
+                    const after = () => {
+                        try {
+                            const s = window.app.online;
+                            if (s && s.code && f) {
+                                serverNotify(uid, 'game-invite', `${meName()} invites you to play`, `${(s.control && s.control.id) || 'chess'} game — tap Accept to join instantly.`, { code: s.code, control: (s.control && s.control.id) || '', fromName: meName(), rating: myRating((s.control && s.control.id) || 'blitz') });
+                                notifyLocal('note', `Invite sent to ${f.name}`, 'They get a popup if they are online right now.');
+                            }
+                        } catch (_) {}
+                    };
+                    if (hosted && typeof hosted.then === 'function') hosted.then(() => setTimeout(after, 600));
+                    else setTimeout(after, 1500);
                 }
             } catch (_) {}
             return;
@@ -924,7 +1026,7 @@
         addFriend, acceptFriend, removeFriend, search, streakOf, versus,
         list: () => Object.values(S.friends),
         unread, inbox: () => S.inbox.slice(),
-        tierOf, rankBoard, hallList, authState: () => authState,
-        apiBase, version: 1,
+        tierOf, rankBoard, hallList,
+        apiBase, pollNow: () => watchInbox(), version: 1,
     };
 })();

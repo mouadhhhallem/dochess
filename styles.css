@@ -4488,3 +4488,29 @@ body[data-theme="day"] .ms-link.active, body[data-theme="day"] .ms-link.active:h
 @media (prefers-reduced-motion: reduce) {
     .fr-hero-flame .fr-flame svg { animation: none; }
 }
+
+/* -- Ranking privacy: strangers blur, you + friends + neighbors shine -- */
+.fr-brow.blurry .fr-ava, .fr-brow.blurry .fr-avaimg,
+.fr-brow.blurry .fr-bname, .fr-brow.blurry .fr-tier,
+.fr-brow.blurry .fr-brating, .fr-brow.blurry .fr-rank,
+.fr-pstep.blurry .fr-ava, .fr-pstep.blurry .fr-avaimg,
+.fr-pstep.blurry strong, .fr-pstep.blurry .fr-tier,
+.fr-pstep.blurry span:last-child, .fr-pstep.blurry .fr-pplace {
+    filter: blur(7px);
+    user-select: none;
+    pointer-events: none;
+}
+.fr-brow.blurry, .fr-pstep.blurry { opacity: 0.75; }
+/* -- Sent requests -- */
+.fr-req.sent { border-style: dashed; }
+/* -- Game-invite popup (quick-match motion, anywhere on site) -- */
+#gip-overlay {
+    position: fixed; inset: 0; z-index: 600;
+    display: flex; align-items: center; justify-content: center; padding: 1rem;
+    background: rgba(10, 8, 5, 0.72); backdrop-filter: blur(6px);
+    animation: qmIn 0.25s ease-out;
+}
+#gip-overlay .qm-card { max-width: min(380px, 100%); }
+@media (prefers-reduced-motion: reduce) {
+    .fr-brow.blurry *, .fr-pstep.blurry * { filter: none; }
+}

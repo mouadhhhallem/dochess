@@ -123,6 +123,15 @@ export function createFriendStore() {
         return out;
     }
 
+    function cleanData(d) {
+        if (!d || typeof d !== 'object') return null;
+        const out = {};
+        if (typeof d.code === 'string' && /^[A-Z0-9]{6}$/.test(d.code)) out.code = d.code;
+        if (typeof d.control === 'string' && /^[a-z0-9-]{1,16}$/.test(d.control)) out.control = d.control;
+        if (typeof d.fromName === 'string' && d.fromName.trim()) out.fromName = d.fromName.trim().slice(0, 24);
+        if (typeof d.rating === 'number' && Number.isFinite(d.rating)) out.rating = Math.max(100, Math.min(4000, Math.round(d.rating)));
+        return Object.keys(out).length ? out : null;
+    }
     function notify(toUid, n = {}) {
         toUid = cleanUid(toUid);
         if (!toUid) return null;
@@ -135,6 +144,7 @@ export function createFriendStore() {
             from: cleanUid(n.from) || null,
             at: Date.now(),
             read: false,
+            data: cleanData(n.data),
         };
         let box = inboxes.get(toUid);
         if (!box) { box = []; inboxes.set(toUid, box); }
@@ -178,8 +188,8 @@ export function createFriendStore() {
     function rank(cat, uid, friendUids = []) {
         cat = cleanCat(cat);
         uid = cleanUid(uid);
-        const rows = [...ranks.values()].filter((r) => r.cat === cat).sort((a, b) => b.rating - a.rating);
         const friends = new Set((Array.isArray(friendUids) ? friendUids : []).filter(Boolean));
+        const rows = [...ranks.values()].filter((r) => r.cat === cat).sort((a, b) => b.rating - a.rating);
         const at = rows.findIndex((r) => r.uid === uid);
         return {
             cat,
@@ -188,8 +198,8 @@ export function createFriendStore() {
             // Strangers stay anonymous: only rank + rating, no names —
             // except friends, who are named.
             board: rows.slice(0, 100).map((r, i) => friends.has(r.uid) || r.uid === uid
-                ? { rank: i + 1, uid: r.uid, name: r.name, rating: r.rating, self: r.uid === uid }
-                : { rank: i + 1, uid: null, name: null, rating: r.rating, self: false }),
+                ? { rank: i + 1, uid: r.uid, name: r.name, rating: r.rating, self: r.uid === uid, friend: friends.has(r.uid) }
+                : { rank: i + 1, uid: null, name: null, rating: r.rating, self: false, friend: false }),
         };
     }
 
