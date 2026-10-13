@@ -174,6 +174,64 @@ test('invite link: second joiner is turned away, room stays 1v1', async ({ brows
     await B.close();
 });
 
+test('lobby polish: rail auth, quick-first order, waiting motion, overlay clock', async ({ browser }) => {
+    test.setTimeout(120000);
+    const page = await mkPage(browser, { width: 1440, height: 900 }, 'pol_a', 'PolishA');
+    await page.evaluate(() => window.app.showOnline());
+    await page.waitForSelector('[data-action="online-quick"]', { timeout: 20000 });
+    // Rail carries a visible sign-in entry on desktop (header is hidden).
+    await expect(page.locator('#sn-auth')).toBeVisible();
+    expect(await page.locator('#sn-auth .sn-auth-label').textContent()).toMatch(/Sign in|PolishA/);
+    // Quick match sits above Time control.
+    const order = await page.evaluate(() => {
+      const items = [...document.querySelectorAll('.online-lobby > *')].map((e) => e.className);
+      return [items.findIndex((c) => c.includes('qm-section')), items.findIndex((e, i, a) => document.querySelectorAll('.online-lobby > *')[i].textContent.includes('Time control'))];
+    });
+    expect(order[0]).toBeGreaterThanOrEqual(0);
+    expect(order[1]).toBeGreaterThan(order[0]);
+    // Rail active tab keeps its pill (gradient bg + dark text) while hovered.
+    await page.click('#side-nav [data-nav="online"]');
+    await page.waitForTimeout(400);
+    const pill = await page.evaluate(() => {
+      const cs = getComputedStyle(document.querySelector('#side-nav [data-nav="online"]'));
+      return { bg: cs.backgroundImage.slice(0, 30), color: cs.color };
+    });
+    expect(pill.bg).toContain('gradient');
+    expect(pill.color).toBe('rgb(26, 26, 20)');
+    // Overlay uses the clock visual with motion.
+    await page.click('[data-action="online-quick"]');
+    await expect(page.locator('#qm-overlay .qm-clock .qm-min')).toBeVisible();
+    await page.click('#qm-overlay [data-action="qm-cancel"]');
+    await page.waitForSelector('[data-action="online-quick"]', { timeout: 10000 });
+    // Hosted waiting room shares the motion language + canonical link.
+    await page.click('[data-action="online-host"]');
+    await page.waitForSelector('#invite-link', { timeout: 60000 });
+    await expect(page.locator('.waiting-card .qm-radar')).toBeVisible();
+    expect(await page.locator('#invite-link').inputValue()).toMatch(/^https:\/\/mouadhhhallem\.github\.io\/dochess\/index\.html#play-[A-Z0-9]{6}$/);
+    await page.close();
+});
+
+test('pc game: names and board all inside the viewport', async ({ browser }) => {
+    test.setTimeout(180000);
+    const vp = { width: 1440, height: 900 };
+    const A = await mkPage(browser, vp, 'fit_a', 'FitA');
+    const B = await mkPage(browser, vp, 'fit_b', 'FitB');
+    for (const P of [A, B]) await P.evaluate(() => window.app.showOnline());
+    await A.click('[data-action="online-quick"]');
+    await B.click('[data-action="online-quick"]');
+    await A.waitForFunction(() => window.app.online?.phase === 'play', null, { timeout: 120000 });
+    await A.waitForTimeout(600);
+    const g = await A.evaluate(() => {
+      const r = (s) => { const el = document.querySelector(s); const b = el.getBoundingClientRect(); return { t: Math.round(b.top), b: Math.round(b.bottom) }; };
+      return { opp: r('#oprofile-opp'), board: r('#online-board-wrapper'), you: r('#oprofile-you'), H: window.innerHeight };
+    });
+    expect(g.opp.t).toBeGreaterThanOrEqual(0);
+    expect(g.board.b).toBeLessThanOrEqual(g.H);
+    expect(g.you.b).toBeLessThanOrEqual(g.H);
+    await A.close();
+    await B.close();
+});
+
 test('quick match: server queue cancel leaves queue, back to lobby', async ({ browser }) => {
     test.setTimeout(120000);
     const ctx = await browser.newContext({ baseURL: origin });

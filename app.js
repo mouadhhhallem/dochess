@@ -286,6 +286,7 @@ class ChessCourseApp {
                 else if (a === 'movenav') this._onlineNavGo(action.dataset.where);
                 else if (a === 'next-lesson') this._nextLessonFromBoard();
                 else if (a === 'profile-signin') this._profileSignIn();
+                else if (a === 'sn-auth') { if (this._clerk?.user) this.showProfile(); else this._authSignIn(); }
                 else if (a === 'manage-account') this.openUserProfile();
                 else if (a === 'logout') this.signOut();
                 else if (a === 'goto-online') this.showOnline();
@@ -1957,6 +1958,14 @@ class ChessCourseApp {
             <div class="online-lobby">
                 ${signed ? '' : `<div class="exercise-instructions"><h4>Sign in to play online</h4><p>Online games are rated, so every player needs an identity. <button class="linklike"
            data-action="profile-signin">Sign in / Join</button></p></div>`}
+                <div class="dashboard-section qm-section">
+                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Quick match</h4>
+                    <p class="lobby-hint">Paired with a live player near your rating (<span class="qm-myelo">${signed ? OnlineRatings.get(this.userId, cur.id) : '–'}</span> ${esc(cur.name)}). No code needed — just search and play.</p>
+                    <div class="lobby-actions">
+                        <button class="btn-primary" data-action="online-quick" ${signed ? '' :
+                'disabled'}>Find opponent</button>
+                    </div>
+                </div>
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Time control</h4>
                     <div class="tc-presets" role="group" aria-label="Quick time controls">${presetHTML}</div>
@@ -1990,14 +1999,6 @@ class ChessCourseApp {
                             </button>`).join('')}
                     </div>
                     <p class="lobby-hint">Applies to every board — online games, Study, lessons, Learn and puzzles.</p>
-                </div>
-                <div class="dashboard-section qm-section">
-                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Quick match</h4>
-                    <p class="lobby-hint">Paired with a live player near your rating (<span class="qm-myelo">${signed ? OnlineRatings.get(this.userId, cur.id) : '–'}</span> ${esc(cur.name)}). No code needed — just search and play.</p>
-                    <div class="lobby-actions">
-                        <button class="btn-primary" data-action="online-quick" ${signed ? '' :
-                'disabled'}>Find opponent</button>
-                    </div>
                 </div>
                 <div class="dashboard-section">
                     <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Play a friend</h4>
@@ -2359,13 +2360,11 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
 
     _renderQuickOverlay(control, elo) {
         this._quickCloseOverlay();
-        let knight = '';
-        try { knight = (window.DoChessPieces && window.DoChessPieces.url('N', ChessCourseApp.assetV())) || ''; } catch (_) {}
         const div = document.createElement('div');
         div.id = 'qm-overlay';
         div.innerHTML = `
             <div class="qm-card" role="dialog" aria-label="Finding opponent" aria-live="polite">
-                <div class="qm-radar"><span class="qm-knight">${knight ? `<img src="${knight}" alt="" draggable="false">` : ''}</span></div>
+                <div class="qm-radar"><span class="qm-clockwrap">${ChessCourseApp.quickClockSVG('lg')}</span></div>
                 <div class="qm-title">Finding opponent<span class="qm-dots"></span></div>
                 <div class="qm-sub" id="qm-status">Contacting matchmaking…</div>
                 <div class="qm-range" id="qm-range">±100</div>
@@ -2578,13 +2577,37 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
 
     // Shareable invite link for a hosted room: the opener joins
     // instantly (rated when signed in, guest-unrated otherwise).
-    _inviteUrl(code) {
+    // Links ALWAYS target the live site: a localhost/file URL is useless
+    // to a friend on another machine (override with cc_site_url).
+    _inviteSiteBase() {
         try {
-            const u = new URL(location.href);
-            u.search = '';
-            u.hash = `play-${code}`;
-            return u.toString();
-        } catch (_) { return `#play-${code}`; }
+            const ov = localStorage.getItem('cc_site_url');
+            if (ov) return String(ov).replace(/\/+$/, '');
+        } catch (_) {}
+        try {
+            const h = location.hostname || '';
+            if (h === 'localhost' || h === '127.0.0.1' || h === '' || location.protocol === 'file:') {
+                return 'https://mouadhhhallem.github.io/dochess/index.html';
+            }
+            let path = location.pathname || '/';
+            if (path.endsWith('/')) path += 'index.html';
+            return location.origin + path;
+        } catch (_) {}
+        return 'https://mouadhhhallem.github.io/dochess/index.html';
+    }
+
+    _inviteUrl(code) {
+        return `${this._inviteSiteBase()}#play-${code}`;
+    }
+
+    // Shared waiting-room clock face (quick match + hosted rooms).
+    static quickClockSVG(cls = '') {
+        return `<svg class="qm-clock ${cls}" viewBox="0 0 64 64" aria-hidden="true">`
+            + `<circle cx="32" cy="32" r="27" fill="#26201a" stroke="#D4A44B" stroke-width="3"/>`
+            + `<circle cx="32" cy="32" r="21" fill="none" stroke="rgba(224,179,90,.35)" stroke-width="1"/>`
+            + `<line class="qm-hour" x1="32" y1="32" x2="32" y2="19" stroke="#E0B35A" stroke-width="4" stroke-linecap="round"/>`
+            + `<line class="qm-min" x1="32" y1="32" x2="32" y2="11" stroke="#F5C978" stroke-width="3" stroke-linecap="round"/>`
+            + `<circle cx="32" cy="32" r="3.2" fill="#E0B35A"/></svg>`;
     }
 
     _renderOnlineWaiting(code, msg) {
@@ -2599,7 +2622,8 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 <p class="lobby-hint">Anyone opening the link joins instantly — signed-in players are rated, guests play unrated.</p>` : '';
         box.innerHTML = `
             <div class="dashboard-section waiting-card">
-                <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Game code</h4>
+                <div class="qm-radar sm"><span class="qm-clockwrap">${ChessCourseApp.quickClockSVG()}</span></div>
+                <div class="qm-title">Waiting for rival<span class="qm-dots"></span></div>
                 <div class="game-code">${code}</div>
                 <p class="lobby-hint">${msg}</p>
                 ${inviteRow}
@@ -4125,6 +4149,16 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             this._renderOnlineLobby();
         }
         if (!slot || !cta || !this._clerk) return;
+        // Side rail auth button mirrors the header state (the header hides
+        // on desktop, so this is the visible sign-in there).
+        try {
+            const snLabel = document.querySelector('#sn-auth .sn-auth-label');
+            if (snLabel) {
+                const u = this._clerk.user;
+                snLabel.textContent = u ? ((u.fullName || u.username || 'Account').split(' ')[0]) : 'Sign in';
+                document.getElementById('sn-auth')?.setAttribute('title', u ? 'Account' : 'Sign in');
+            }
+        } catch (_) {}
         if (this._clerk.user) {
             cta.setAttribute('hidden', '');
             slot.removeAttribute('hidden');
@@ -4158,6 +4192,13 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         const v = ChessCourseApp.assetV();
         const logo = document.getElementById('logo-img');
         if (logo) logo.src = this.theme === 'day' ? `assets/logos/logo-128-light.png?${v}` : `assets/logos/logo-128-dark.png?${v}`;
+        // Side-rail brand mark follows the same rule (white knight on dark
+        // chrome, black knight on light) — it has no id, so sync by class.
+        try {
+            document.querySelectorAll('.sn-logo-img').forEach((img) => {
+                img.src = this.theme === 'day' ? `assets/logos/logo-128-light.png?${v}` : `assets/logos/logo-128-dark.png?${v}`;
+            });
+        } catch (_) {}
         const heroLogo = document.getElementById('hero-logo-img');
         if (heroLogo) heroLogo.src = this.theme === 'day' ? `assets/logos/logo-256-light.png?${v}` : `assets/logos/logo-256-dark.png?${v}`;
         if (persist) {

@@ -8,8 +8,8 @@
     <meta name="theme-color" content="#0d1526">
     <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=55">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com https://chess.mauriulloa.com http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; upgrade-insecure-requests">
+    <link rel="stylesheet" href="styles.css?v=56">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com https://chess.mauriulloa.com http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; worker-src 'self' blob:; upgrade-insecure-requests">
     <style>
     /* ══ Learn screen ══════════════════════════════════════════════════════
        Deliberately the SAME anatomy as the Lessons screen (#lesson-screen):
@@ -651,7 +651,7 @@
         <!-- ── Side rail (desktop ≥1025px, lumichess-style) ── -->
         <aside id="side-nav" aria-label="Primary">
             <button class="nav-btn sn-logo" data-nav="home" type="button" aria-label="DoChess home">
-                <img src="assets/logos/logo-128-dark.png?v=28" alt="" width="34" height="34">
+                <img class="sn-logo-img" src="assets/logos/logo-128-dark.png?v=28" alt="" width="34" height="34">
                 <span class="sn-logo-tx">Do<em>Chess</em></span>
             </button>
             <nav class="sn-links">
@@ -666,10 +666,13 @@
             </nav>
             <div class="sn-foot">
                 <button class="nav-btn sn-link theme-toggle" data-nav="theme" type="button" aria-pressed="false" title="Switch theme">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 14.5A8.5 8.5 0 0 1 9.5 3.8a.7.7 0 0 0-.9-.9 10 10 0 1 0 12.5 12.5.7.7 0 0 0-.9-.9z"/></svg>
+                    <span class="theme-sky" aria-hidden="true">
+                        <svg class="theme-sun" viewBox="0 0 24 24"><g stroke-linecap="round"><circle cx="12" cy="12" r="4.6" fill="none" stroke-width="2"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M19.2 4.8l-1.8 1.8M6.6 17.4l-1.8 1.8" stroke-width="2"/></g></svg>
+                        <svg class="theme-moon" viewBox="0 0 24 24"><path d="M20.2 14.5A8.5 8.5 0 0 1 9.5 3.8a.7.7 0 0 0-.9-.9 10 10 0 1 0 12.5 12.5.7.7 0 0 0-.9-.9z"/><circle class="theme-star" cx="17.5" cy="5.5" r="1.1"/><circle class="theme-star s2" cx="20" cy="9" r=".8"/></svg>
+                    </span>
                     <span class="theme-toggle-label">Night</span>
                 </button>
-                <button class="nav-btn sn-link" data-nav="profile" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></g></svg><span>Account</span></button>
+                <button class="nav-btn sn-link" id="sn-auth" data-action="sn-auth" type="button" title="Account"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></g></svg><span class="sn-auth-label">Sign in</span></button>
             </div>
         </aside>
 
@@ -687,7 +690,7 @@
             <button class="nav-btn ms-link" data-nav="study" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4M10 3v6l-5.5 9.5A2 2 0 006.2 21h11.6a2 2 0 001.7-2.5L14 9V3"/></g></svg><span>Study</span></button>
             <button class="nav-btn ms-link" data-nav="progress" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4v16h16"/><path d="M8 16v-5M12 16V8M16 16v-3"/></g></svg><span>Progress</span></button>
             <button class="nav-btn ms-link" data-nav="profile" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></g></svg><span>Profile</span></button>
-            <button class="nav-btn ms-link theme-toggle" data-nav="theme" type="button" aria-pressed="false" title="Switch theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 14.5A8.5 8.5 0 0 1 9.5 3.8a.7.7 0 0 0-.9-.9 10 10 0 1 0 12.5 12.5.7.7 0 0 0-.9-.9z"/></svg><span class="theme-toggle-label">Night</span></button>
+            <button class="nav-btn ms-link theme-toggle" data-nav="theme" type="button" aria-pressed="false" title="Switch theme"><span class="theme-sky" aria-hidden="true"><svg class="theme-sun" viewBox="0 0 24 24"><g stroke-linecap="round"><circle cx="12" cy="12" r="4.6" fill="none" stroke-width="2"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M19.2 4.8l-1.8 1.8M6.6 17.4l-1.8 1.8" stroke-width="2"/></g></svg><svg class="theme-moon" viewBox="0 0 24 24"><path d="M20.2 14.5A8.5 8.5 0 0 1 9.5 3.8a.7.7 0 0 0-.9-.9 10 10 0 1 0 12.5 12.5.7.7 0 0 0-.9-.9z"/><circle class="theme-star" cx="17.5" cy="5.5" r="1.1"/><circle class="theme-star s2" cx="20" cy="9" r=".8"/></svg></span><span class="theme-toggle-label">Night</span></button>
         </div>
 
         <!-- ── Main Content ── -->
@@ -923,7 +926,7 @@
     <script defer src="clerk-config.js?v=18"></script>
 <script defer src="online.js?v=33"></script>
 <script defer src="achievements.js?v=1"></script>
-    <script defer src="app.js?v=49"></script>
+    <script defer src="app.js?v=50"></script>
     <!-- Vendored chess.js (UMD global `Chess`) for the Learn curriculum -->
     <script defer src="js/vendor/chess.js?v=1"></script>
     <!-- Learn curriculum as ONE classic script: ES modules are blocked by the

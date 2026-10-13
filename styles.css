@@ -4231,3 +4231,87 @@ body[data-theme='day'] .pz-chip.pz-offline { color: #b45309; }
 .invite-row { display: flex; gap: .5rem; margin: .7rem 0 .2rem; }
 .invite-row .join-input { flex: 1; min-width: 0; font-size: .8rem; }
 .invite-prompt { border-color: rgba(212, 164, 75, 0.45); }
+
+/* -- Nav active states: gradient pills, readable in both themes -- */
+.sn-link.active, .tb-link.active, .ms-link.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+    color: #1a1a14;
+    border-color: var(--accent);
+    box-shadow: 0 4px 20px rgba(212, 164, 75, 0.4);
+}
+/* Theme-sky icons must not be resized by the row-icon rules. */
+.sn-link > svg, .ms-link > svg { width: 22px; height: 22px; flex: none; }
+
+/* -- Online arena on desktop: names always in view -- */
+@media (min-width: 1025px) {
+    #online-screen { padding-top: 12px; }
+    #online-screen #online-board-wrapper {
+        width: min(100%, calc(100dvh - 15.5rem), 920px);
+        max-width: min(100%, 920px);
+    }
+    #online-screen .profile-card { padding: .45rem .8rem; gap: .6rem; }
+    #online-screen .profile-card .avatar,
+    #online-screen .profile-card .avatar-letter { width: 32px; height: 32px; font-size: 1rem; }
+    #online-screen .profile-card .info .name { font-size: .9rem; }
+    #online-screen .profile-card .info .sub { font-size: .72rem; }
+    #online-screen .profile-card .turn-indicator { font-size: .68rem; padding: .25rem .6rem; }
+    #oprofile-you .clock, #oprofile-opp .clock { font-size: 1.2rem; }
+}
+
+/* -- Waiting room shares the quick-match motion language -- */
+.qm-radar.sm { width: 112px; height: 112px; }
+.qm-clockwrap {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    animation: qmBob 2.4s ease-in-out infinite;
+}
+.qm-clock { width: 58px; height: 58px; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5)); }
+.qm-clock.lg { width: 74px; height: 74px; }
+.qm-clock .qm-hour, .qm-clock .qm-min { transform-box: fill-box; }
+.qm-clock .qm-hour { transform-origin: 50% 100%; animation: qmSpin 24s linear infinite; }
+.qm-clock .qm-min { transform-origin: 50% 100%; animation: qmSpin 6s linear infinite; }
+@keyframes qmSpin { to { transform: rotate(360deg); } }
+.waiting-card .qm-title { font-size: 1.1rem; }
+.waiting-card .game-code { margin: .4rem 0 .2rem; }
+
+/* -- Compact online lobby: actions first, styles in tidy rows -- */
+.online-lobby .dashboard-section { margin-bottom: .9rem; }
+.tc-presets { gap: .45rem; }
+.tc-preset { padding: .5rem .35rem; gap: .15rem; }
+.tc-preset svg { width: 20px; height: 20px; }
+.tc-preset-time { font-size: 1rem; }
+.tc-preset-cat { font-size: .68rem; }
+.skin-row { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .3rem; }
+.skin-swatch { flex: 0 0 auto; }
+@media (prefers-reduced-motion: reduce) {
+    .qm-clock .qm-hour, .qm-clock .qm-min, .qm-clockwrap { animation: none; }
+}
+.sn-link .theme-sky svg, .ms-link .theme-sky svg { width: 26px; height: 26px; }
+
+/* -- Active nav never loses to :hover (the resting mouse kept washing
+   the selection pill out, swallowing icon + label into the hover tint) -- */
+.nav-btn.active, .nav-btn.active:hover,
+.sn-link.active, .sn-link.active:hover,
+.tb-link.active, .tb-link.active:hover,
+.ms-link.active, .ms-link.active:hover {
+    background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+    color: #1a1a14;
+    border-color: var(--accent);
+    box-shadow: 0 4px 20px rgba(212, 164, 75, 0.4);
+    transform: none;
+}
+body[data-theme="day"] .sn-link.active, body[data-theme="day"] .sn-link.active:hover,
+body[data-theme="day"] .tb-link.active, body[data-theme="day"] .tb-link.active:hover,
+body[data-theme="day"] .ms-link.active, body[data-theme="day"] .ms-link.active:hover {
+    background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+    color: #1a1a14;
+}
+    /* Game status floats over the board corner (same pattern as the
+       Learn coach bubble) so both name cards stay inside the viewport. */
+@media (min-width: 1025px) {
+    #online-screen .arena { position: relative; }
+    #online-screen #online-status.speech-bubble {
+        position: absolute; top: 8px; left: 8px; z-index: 6;
+        max-width: min(420px, 58%); margin: 0; pointer-events: none;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    }
+}
