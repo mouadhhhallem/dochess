@@ -63,31 +63,66 @@
                 s.pendingIn = Array.isArray(s.pendingIn) ? s.pendingIn : [];
                 s.pendingOut = Array.isArray(s.pendingOut) ? s.pendingOut : [];
                 s.inbox = Array.isArray(s.inbox) ? s.inbox : [];
+                s.hallJoined = !!s.hallJoined;
+                // Tombstones. A removal or a decline is a DELIBERATE user
+                // decision: every re-add path must respect it. Without these
+                // the shelf could be rebuilt by pullEdges, pullRequests,
+                // pullInbox, metPeer or adoptGuestShelf and the "removal"
+                // would silently undo itself.
+                s.removed = (s.removed && typeof s.removed === 'object') ? s.removed : {};
+                s.declined = (s.declined && typeof s.declined === 'object') ? s.declined : {};
                 return s;
             }
         } catch (_) {}
-        return { v: 1, friends: {}, pendingIn: [], pendingOut: [], inbox: [], hallJoined: false };
+        return { v: 2, friends: {}, pendingIn: [], pendingOut: [], inbox: [], hallJoined: false, removed: {}, declined: {} };
     }
     let S = load();
     function save() {
         try { localStorage.setItem(storeKey(), JSON.stringify(S)); } catch (_) {}
     }
+    /** True when this account deliberately removed / declined this uid. */
+    function isBlocked(uid) {
+        return !!(uid && (S.removed[uid] || S.declined[uid]));
+    }
+    function tombstone(bucket, uid) {
+        if (!uid) return;
+        S[bucket] = S[bucket] || {};
+        S[bucket][uid] = Date.now();
+    }
+    function clearTombstone(uid) {
+        if (!uid) return;
+        try { delete S.removed[uid]; } catch (_) {}
+        try { delete S.declined[uid]; } catch (_) {}
+    }
+
     // Identity switches (sign in/out) swap the shelf. Coming from a
     // guest shelf with content into an EMPTY account shelf adopts the guest
     // circle (friends, requests, streaks, inbox) instead of stranding it:
     // first sign-in must never look like deleted friends.
+    //
+    // FIX: the guest shelf is stamped as adopted, so it is imported AT MOST
+    // ONCE per browser. Previously `ccf_guest` was never cleared, so signing
+    // out and into any other fresh account re-imported the whole guest
+    // circle — including friends the user had just deleted while signed in.
+    const GUEST_ADOPTED_KEY = 'ccf_guest_adopted';
     function adoptGuestShelf() {
         try {
-            const g = JSON.parse(localStorage.getItem('ccf_guest') || 'null');
+            const raw = localStorage.getItem('ccf_guest') || 'null';
+            const g = JSON.parse(raw);
             if (!g || typeof g !== 'object') return;
-            const guestFriends = g.friends && typeof g.friends === 'object' ? g.friends : {};
+            const guestFriends = (g.friends && typeof g.friends === 'object') ? g.friends : {};
             if (!Object.keys(guestFriends).length && !(Array.isArray(g.pendingIn) && g.pendingIn.length)) return;
             if (Object.keys(S.friends).length || S.pendingIn.length || S.inbox.length) return; // account shelf non-empty: hands off
+            // Mark it adopted no matter what happens below, so a failure here
+            // can never turn into an infinite re-import.
+            try { localStorage.setItem(GUEST_ADOPTED_KEY, String(Date.now())); } catch (_) {}
             for (const [fid, f] of Object.entries(guestFriends)) {
+                // Never resurrect someone THIS account deliberately removed.
+                if (S.removed[fid] || S.declined[fid]) continue;
                 if (!S.friends[fid]) S.friends[fid] = { ...f };
             }
             for (const p of (Array.isArray(g.pendingIn) ? g.pendingIn : [])) {
-                if (p && p.uid && !S.pendingIn.some((x) => x.uid === p.uid)) S.pendingIn.push({ ...p });
+                if (p && p.uid && !S.declined[p.uid] && !S.pendingIn.some((x) => x.uid === p.uid)) S.pendingIn.push({ ...p });
             }
             for (const m of (Array.isArray(g.inbox) ? g.inbox : []).slice(0, 20)) {
                 if (m && m.id && !S.inbox.some((x) => x.id === m.id)) S.inbox.push({ ...m });
@@ -102,12 +137,15 @@
         if (u !== shelfUid) {
             const wasGuest = shelfUid === 'guest';
             shelfUid = u; S = load(); renderBell();
-            if (wasGuest && u !== 'guest') adoptGuestShelf();
-            // Signed-in identity arrived/changed: (re)open the P2P inbox so
-            // friend invites pop even on the static site with no backend.
+            // Adopt the guest circle at most once per browser, and only when
+            // signing in FROM a guest session for the first time.
+            if (wasGuest && u !== 'guest' && !hasAdoptedGuest()) adoptGuestShelf();
             try { ensureP2PInbox(); } catch (_) {}
         }
     }, 3000);
+    function hasAdoptedGuest() {
+        try { return !!localStorage.getItem(GUEST_ADOPTED_KEY); } catch (_) { return false; }
+    }
 
     /* ── API base (same rule as matchmaking) ────────────────── */
     function apiBase() {
@@ -170,7 +208,40 @@
     /* ── friends ────────────────────────────────────────────── */
     function friends() { return S.friends; }
     function getF(uid) { return S.friends[uid] || null; }
-    function addFriend(uid, name, source, img) {
+
+    /**
+     * Send (or re-send) a friend request.
+     * Optimistic locally, but the server is authoritative: on failure the
+     * optimistic row is rolled back and the user is told, rather than
+     * leaving a "Sent" row that no recipient will ever see.
+     */
+    async function requestFriend(uid, name, source, img) {
+        if (!uid || uid === uidOf()) return null;
+        clearTombstone(uid);
+        const f = addFriendLocal(uid, name, source, img);
+        if (apiBase() === null) return f; // device-local mode: honest fallback
+        try {
+            const r = await api('friends/request', {
+                friendUid: uid, friendName: f ? f.name : '',
+                friendImg: (f && f.img) || null, myName: meName(), myImg: myAvatar()
+            });
+            if (r && r.error) throw new Error(r.error);
+            return f;
+        } catch (e) {
+            // Roll back: never show a request the server refused to store.
+            try {
+                delete S.friends[uid];
+                S.pendingOut = S.pendingOut.filter((x) => x !== uid);
+                save(); renderBell();
+            } catch (_) {}
+            notifyLocal('note', 'Could not send request',
+                (e && e.message === 'http-409') ? 'You are already friends with them.'
+                    : 'The server refused the request — check your connection and try again.');
+            return null;
+        }
+    }
+
+    function addFriendLocal(uid, name, source, img) {
         if (!uid || uid === uidOf()) return null;
         let f = S.friends[uid];
         if (!f) {
@@ -178,7 +249,7 @@
                 uid, name: String(name || 'Player').slice(0, 24),
                 since: Date.now(), confirmed: false, source: source || 'link', img: cleanImg(img),
                 // Outbound = I asked, they haven't answered. Never shown
-                // as a friend (separate Sent section) until mutual/P2P.
+                // as a friend (separate Sent section) until accepted.
                 outbound: source === 'search',
                 days: {}, best: 0, lastSeen: 0,
             };
@@ -186,110 +257,232 @@
         if (img) { const ci = cleanImg(img); if (ci) f.img = ci; }
         if (!S.pendingOut.includes(uid) && !f.confirmed) S.pendingOut.push(uid);
         save(); renderBell();
-        // Actionable request: the inbox item carries who is asking (name +
-        // photo) so the recipient can render Accept/Decline without a
-        // second lookup. Friendship itself still needs mutual edges.
-        if (f.outbound) serverNotify(uid, 'friend-request', meName() + ' wants to be friends', 'Accept to start growing a streak together.', { fromName: meName(), img: myAvatar() });
-        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f.name, friendImg: f.img || null, myName: meName(), myImg: myAvatar() }).catch(() => {}); } catch (_) {}
         return f;
     }
-    function acceptFriend(uid) {
+    // Backwards-compatible internal name (search + P2P paths).
+    function addFriend(uid, name, source, img) { return requestFriend(uid, name, source, img); }
+
+    /**
+     * Accept an inbound request. The server decides; the local shelf is
+     * reconciled from the response and then from the authoritative snapshot.
+     */
+    async function acceptFriend(uid) {
+        if (!uid || uid === uidOf()) return null;
+        clearTombstone(uid);
         const ix = S.pendingIn.findIndex((p) => p.uid === uid);
         const req = ix >= 0 ? S.pendingIn[ix] : null;
         if (ix >= 0) S.pendingIn.splice(ix, 1);
-        // Never clobber a known name with the fallback: only an inbound
-        // request carries a (possibly newer) display name.
-        let f = S.friends[uid] || null;
-        if (req) f = addFriend(uid, req.name, 'link', req.img || null);
-        else if (!f) f = addFriend(uid, 'Player', 'link');
-        if (f) {
-            // Confirmed flips true only through mutual edges (server list
-            // or a P2P meeting) — accepting never un-confirms anyone.
-            f.outbound = false;
-            const po = S.pendingOut.indexOf(uid);
-            if (po >= 0) S.pendingOut.splice(po, 1);
-            serverNotify(uid, 'friend-accept', meName() + ' accepted your request', 'You are friends now - play a game to start a streak.', { fromName: meName(), img: myAvatar() });
+        try { delete S.declined[uid]; } catch (_) {}
+
+        if (apiBase() === null) {
+            // Device-local mode: accept locally, honestly labelled as such.
+            const f = req ? addFriendLocal(uid, req.name, 'link', req.img || null)
+                : (S.friends[uid] || addFriendLocal(uid, 'Player', 'link'));
+            if (f) { f.outbound = false; const po = S.pendingOut.indexOf(uid); if (po >= 0) S.pendingOut.splice(po, 1); save(); renderBell(); }
+            return f;
         }
+
+        try {
+            const r = await api('friends/respond', { fromUid: uid, accept: true, myName: meName(), myImg: myAvatar() });
+            if (!r || r.error) throw new Error((r && r.error) || 'bad-response');
+        } catch (e) {
+            // Put the request back so the user can retry, and say why.
+            if (req && !S.pendingIn.some((p) => p.uid === uid)) S.pendingIn.unshift(req);
+            save(); renderBell();
+            notifyLocal('note', 'Could not accept', 'The server did not confirm — your request is still pending.');
+            return null;
+        }
+        const f = addFriendLocal(uid, (req && req.name) || 'Player', 'link', (req && req.img) || null);
+        if (f) { f.confirmed = true; f.outbound = false; }
+        const po = S.pendingOut.indexOf(uid);
+        if (po >= 0) S.pendingOut.splice(po, 1);
         save(); renderBell();
-        try { if (apiBase() !== null) api('friends/add', { friendUid: uid, friendName: f ? f.name : '', friendImg: (f && f.img) || null, myName: meName(), myImg: myAvatar() }).catch(() => {}); } catch (_) {}
-        pullEdges();
-        pullRequests();
+        pullSnapshot();
         return f;
     }
-    function declineFriend(uid) {
+
+    /**
+     * Decline an inbound request. FIX: this now reaches the server, which
+     * writes a TERMINAL status. Previously it only filtered a local array and
+     * sent a notification, so the requester's edge survived and the next
+     * pullRequests() re-created the request within one poll cycle — which is
+     * exactly "I declined it and it came back".
+     */
+    async function declineFriend(uid) {
+        if (!uid) return;
         S.pendingIn = S.pendingIn.filter((p) => p.uid !== uid);
-        // Declining is local-only without this: the requester's Sent row
-        // would wait forever. Tell them so they can clear it instantly
-        // (stream) or on their next poll.
-        try { serverNotify(uid, 'friend-decline', meName() + ' declined your request', 'No worries — find another rival to grow a streak with.', { fromName: meName(), img: myAvatar() }); } catch (_) {}
+        tombstone('declined', uid);
+        try { delete S.friends[uid]; } catch (_) {}
+        S.pendingOut = S.pendingOut.filter((x) => x !== uid);
         save(); renderBell();
+        if (apiBase() === null) return;
+        try {
+            const r = await api('friends/respond', { fromUid: uid, accept: false, myName: meName() });
+            if (r && r.error) throw new Error(r.error);
+        } catch (_) {
+            notifyLocal('note', 'Could not decline',
+                'The server did not confirm. This device has hidden the request, but it may reappear after a refresh.');
+        }
     }
-    function removeFriend(uid) {
+
+    /**
+     * Remove a friend. FIX: this is no longer fire-and-forget. When a server
+     * is configured the UI updates optimistically, the mutation is awaited,
+     * and on failure the row is restored and the user is told — instead of
+     * pretending the removal succeeded. A tombstone stops every re-add path
+     * (snapshot, P2P hello, guest adoption) from undoing it.
+     */
+    async function removeFriend(uid) {
+        if (!uid) return;
+        const backup = S.friends[uid];
+        const wasOut = S.pendingOut.slice();
+        const wasIn = S.pendingIn.slice();
         delete S.friends[uid];
         S.pendingOut = S.pendingOut.filter((x) => x !== uid);
         S.pendingIn = S.pendingIn.filter((p) => p.uid !== uid);
+        tombstone('removed', uid);
         save(); renderBell();
-        try { if (apiBase() !== null) api('friends/remove', { friendUid: uid }).catch(() => {}); } catch (_) {}
+        if (apiBase() === null) return; // device-local mode
+        try {
+            const r = await api('friends/remove', { friendUid: uid });
+            if (!r || r.ok !== true) throw new Error((r && r.error) || 'not-removed');
+        } catch (e) {
+            // Honest failure: restore and reconcile with the server.
+            try { delete S.removed[uid]; } catch (_) {}
+            if (backup) S.friends[uid] = backup;
+            S.pendingOut = wasOut; S.pendingIn = wasIn;
+            save(); renderBell();
+            notifyLocal('note', 'Could not remove friend',
+                'The server refused the change, so nothing was deleted. Try again when you are online.');
+            return;
+        }
+        pullSnapshot();
     }
-    async function pullEdges() {
-        let changed = false;
+
+    /**
+     * The AUTHORITATIVE reconcile. One server response replaces the whole
+     * shelf: friends the server does not list are removed locally (so a
+     * removal sticks), and resolved requests are recorded as tombstones (so
+     * a decline sticks). This is the fix for pullEdges() being additive-only
+     * and therefore able to re-create a deleted friend on every poll.
+     */
+    async function pullSnapshot() {
         try {
             if (apiBase() === null) return false;
-            const r = await api('friends/list');
+            const r = await api('friends/snapshot');
             if (!r || !Array.isArray(r.friends)) return false;
+            let changed = false;
+            const serverUids = new Set();
+
             for (const e of r.friends) {
                 if (!e || !e.uid || e.uid === uidOf()) continue;
+                serverUids.add(e.uid);
+                clearTombstone(e.uid); // confirmed friendship wins a stale tombstone
                 let f = S.friends[e.uid];
                 if (!f) {
-                    f = S.friends[e.uid] = { uid: e.uid, name: String(e.name || 'Player').slice(0, 24), since: e.since || Date.now(), confirmed: !!e.confirmed, source: 'server', img: cleanImg(e.img), days: {}, best: 0, lastSeen: 0 };
-                    if (e.img) { const ci = cleanImg(e.img); if (ci) f.img = ci; }
+                    f = S.friends[e.uid] = {
+                        uid: e.uid, name: String(e.name || 'Player').slice(0, 24),
+                        since: e.since || Date.now(), confirmed: true, source: 'server',
+                        img: cleanImg(e.img), days: {}, best: 0, lastSeen: 0, outbound: false,
+                    };
+                    changed = true;
                 } else {
                     if (e.name) f.name = String(e.name).slice(0, 24);
                     if (e.img) { const ci = cleanImg(e.img); if (ci) f.img = ci; }
-                    if (e.confirmed && !f.confirmed) {
-                        f.confirmed = true;
-                        f.outbound = false;
-                        const po = S.pendingOut.indexOf(e.uid);
-                        if (po >= 0) S.pendingOut.splice(po, 1);
-                        notifyLocal('friend-accept', `${f.name} is now your friend`, 'You can now grow a streak together — play a game today.');
-                        changed = true;
-                    }
+                    if (!f.confirmed || f.outbound) { f.confirmed = true; f.outbound = false; changed = true; }
+                }
+                const po = S.pendingOut.indexOf(e.uid);
+                if (po >= 0) { S.pendingOut.splice(po, 1); changed = true; }
+                S.pendingIn = S.pendingIn.filter((p) => p.uid !== e.uid);
+            }
+
+            const reqs = r.requests || {};
+            const inbound = Array.isArray(reqs.inbound) ? reqs.inbound : [];
+            const outbound = Array.isArray(reqs.outbound) ? reqs.outbound : [];
+            const resolved = Array.isArray(reqs.resolved) ? reqs.resolved : [];
+
+            // A resolved request is terminal on BOTH sides.
+            for (const q of resolved) {
+                if (!q || !q.uid || q.uid === uidOf()) continue;
+                if (q.status === 'declined' || q.status === 'cancelled') {
+                    tombstone(q.status === 'declined' ? 'declined' : 'removed', q.uid);
+                    if (S.friends[q.uid] && S.friends[q.uid].outbound) delete S.friends[q.uid];
+                } else if (q.status === 'accepted') {
+                    clearTombstone(q.uid);
                 }
             }
-            save(); renderBell();
+
+            // Uids the server still considers in-flight. A locally optimistic
+            // row is NOT deleted while its request is in this window — the
+            // snapshot can land between the optimistic write and the server
+            // write, and deleting there would make a sent request flicker out
+            // of the Sent list.
+            const pendingUids = new Set(
+                [...inbound, ...outbound].filter((q) => q && q.uid).map((q) => q.uid)
+            );
+            // An explicit PENDING row from the server supersedes a local
+            // tombstone: the user declined earlier, but the other player has
+            // since asked again, and that new request must become visible.
+            // (Without this, a decline tombstone would silently swallow every
+            // future re-request from the same person.)
+            for (const uid of pendingUids) clearTombstone(uid);
+
+            // Authoritative deletion: a local friend the server no longer
+            // lists, and which is not an in-flight request, was removed (here
+            // or on another device) — drop it.
+            for (const uid of Object.keys(S.friends)) {
+                if (uid === uidOf() || serverUids.has(uid) || pendingUids.has(uid)) continue;
+                const wasTombstoned = !!S.removed[uid];
+                delete S.friends[uid];
+                S.pendingOut = S.pendingOut.filter((x) => x !== uid);
+                S.pendingIn = S.pendingIn.filter((p) => p.uid !== uid);
+                if (!wasTombstoned) tombstone('removed', uid);
+                changed = true;
+            }
+
+            const nextIn = [];
+            for (const q of inbound) {
+                if (!q || !q.uid || q.uid === uidOf()) continue;
+                if (isBlocked(q.uid) || S.friends[q.uid]) continue;
+                nextIn.push({ uid: q.uid, name: String(q.name || 'Player').slice(0, 24), img: cleanImg(q.img), at: q.at || Date.now() });
+            }
+            const nextOut = [];
+            for (const q of outbound) {
+                if (!q || !q.uid || q.uid === uidOf()) continue;
+                if (isBlocked(q.uid) || S.friends[q.uid]) continue;
+                nextOut.push(q.uid);
+            }
+            const inSig = nextIn.map((p) => p.uid).join(',');
+            if (inSig !== S.pendingIn.map((p) => p.uid).join(',')) changed = true;
+            S.pendingIn = nextIn;
+            if (nextOut.join(',') !== S.pendingOut.join(',')) changed = true;
+            S.pendingOut = nextOut;
+
+            if (changed) { save(); renderBell(); }
             return changed;
         } catch (_) { return false; }
     }
-    // Inbound requests from the server edge graph (they list me, I don't
-    // list them). Covers everything the inbox can miss: capped-out items,
-    // acked-then-refreshed shelves, offline gaps, missed streams, and
-    // reconnects. Idempotent: never duplicates pendingIn or friends.
+
+    // Legacy helper name kept for callers; now an alias of the authoritative
+    // snapshot (it is no longer additive-only).
+    async function pullEdges() { return pullSnapshot(); }
+
+    /**
+     * Inbound requests from the server (explicit `pending` rows only — never
+     * derived from graph asymmetry, which is what made a decline undoable).
+     */
     async function pullRequests() {
-        try {
-            if (apiBase() === null) return false;
-            const r = await api('friends/requests');
-            if (!r || !Array.isArray(r.requests)) return false;
-            let added = false;
-            for (const q of r.requests) {
-                if (!q || !q.uid || q.uid === uidOf()) continue;
-                if (S.friends[q.uid]) continue; // outbound or confirmed already
-                if (S.pendingIn.some((p) => p.uid === q.uid)) {
-                    const rec = S.pendingIn.find((p) => p.uid === q.uid);
-                    if (rec && q.img && !rec.img) { rec.img = cleanImg(q.img); added = true; }
-                    continue;
-                }
-                S.pendingIn.unshift({ uid: q.uid, name: String(q.name || 'Player').slice(0, 24), img: cleanImg(q.img), at: q.at || Date.now() });
-                added = true;
-            }
-            if (added) { save(); renderBell(); }
-            return added;
-        } catch (_) { return false; }
+        return pullSnapshot();
     }
     // Called on every PeerJS hello/profile: confirms pending friendships
     // and refreshes last-seen. Writes throttled to one per 5 minutes.
     const lastTouchWrite = {};
     function metPeer(uid, name, img) {
         if (!uid || uid === uidOf()) return;
+        // A deliberate removal or decline is never undone by meeting the
+        // person peer-to-peer. (This path used to re-add anyone in pendingOut
+        // on every PeerJS hello.)
+        if (isBlocked(uid)) return;
         img = cleanImg(img);
         const now = Date.now();
         const f = S.friends[uid];
@@ -297,27 +490,11 @@
             if (name) f.name = String(name).slice(0, 24);
             if (img) f.img = img;
             f.lastSeen = now;
-            if (!f.confirmed) {
-                f.confirmed = true;
-                f.outbound = false;
-                const po = S.pendingOut.indexOf(uid);
-                if (po >= 0) S.pendingOut.splice(po, 1);
-                notifyLocal('friend-accept', `${f.name} is now your friend`, 'Play a game together to start a streak.');
-            }
             if (!lastTouchWrite[uid] || now - lastTouchWrite[uid] > 300000) {
                 lastTouchWrite[uid] = now;
                 save();
             }
             return;
-        }
-        const po = S.pendingOut.indexOf(uid);
-        if (po >= 0) {
-            // They never used our link, but here they are live: adopt them.
-            S.pendingOut.splice(po, 1);
-            const nf = addFriend(uid, name, 'met', img);
-            if (nf) { nf.confirmed = true; nf.outbound = false; }
-            notifyLocal('friend-accept', `${name || 'A player'} is now your friend`, 'Play a game together to start a streak.');
-            save();
         }
     }
 
@@ -406,22 +583,23 @@
         }
     }
 
-    /* Relay one event to another player's server inbox (best effort). */
-    function serverNotify(toUid, kind, title, body, data) {
+/**
+     * Relay a plain note to another player's server inbox.
+     *
+     * Friend-lifecycle announcements are NO LONGER sent from here: the server
+     * composes them from the stored request/invitation rows, so a client can
+     * never put words in another account's mouth. Invitations likewise go
+     * through POST /api/invites, which mints a server-side match id and
+     * requires friendship. This helper only carries 'note' / 'streak' / 'rank'.
+     */
+    function serverNotify(toUid, kind, title, body) {
         try {
-            if (apiBase() === null || !toUid || toUid === uidOf()) return;
-            const payload = { toUid, kind, title: String(title).slice(0, 60), body: String(body || '').slice(0, 140) };
-            if (data && typeof data === 'object') {
-                const d = {};
-                if (typeof data.code === 'string') d.code = String(data.code).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-                if (typeof data.control === 'string') d.control = data.control.slice(0, 16);
-                if (typeof data.fromName === 'string') d.fromName = data.fromName.slice(0, 24);
-                if (typeof data.rating === 'number') d.rating = Math.round(data.rating);
-                if (typeof data.img === 'string' && /^https:/.test(data.img)) d.img = data.img.slice(0, 2048);
-                if (Object.keys(d).length) payload.data = d;
-            }
-            api('notify', payload).catch(() => {});
-        } catch (_) {}
+            if (apiBase() === null || !toUid || toUid === uidOf()) return Promise.resolve(false);
+            if (!['note', 'streak', 'rank'].includes(kind)) return Promise.resolve(false);
+            return api('notify', { toUid, kind, title: String(title).slice(0, 60), body: String(body || '').slice(0, 140) })
+                .then(() => true)
+                .catch(() => false);
+} catch (_) { return Promise.resolve(false); }
     }
 
     /* ── inbox ──────────────────────────────────────────────── */
@@ -454,59 +632,27 @@
             if (!r || !Array.isArray(r.items)) return false;
             const have = new Set(S.inbox.map((m) => m.id));
             let added = false;
-            let needEdges = false;
-            let needRequests = false;
+let needSnapshot = false;
             for (const m of r.items) {
                 if (!m || !m.id || have.has(m.id)) continue;
-                const dd = (m.data && typeof m.data === 'object') ? m.data : null;
-                const data = dd ? {
-                    code: (typeof dd.code === 'string' && /^[A-Z0-9]{6}$/.test(dd.code)) ? dd.code : null,
-                    control: typeof dd.control === 'string' ? dd.control.slice(0, 16) : null,
-                    fromName: typeof dd.fromName === 'string' ? dd.fromName.slice(0, 24) : null,
-                    rating: (typeof dd.rating === 'number' && Number.isFinite(dd.rating)) ? Math.round(dd.rating) : null,
-                    img: (typeof dd.img === 'string' && /^https:/.test(dd.img)) ? dd.img.slice(0, 2048) : null,
-                } : null;
-                // Server may report read (acked from another device); keep
-                // the server flag so multi-device state converges, but a
-                // locally-unknown actionable item still surfaces once.
-                S.inbox.unshift({ id: m.id, kind: m.kind || 'note', title: String(m.title || '').slice(0, 60), body: String(m.body || '').slice(0, 140), from: m.from || null, at: m.at || Date.now(), read: !!m.read, local: false, data });
+                // Server items carry no invitation payload any more (the
+                // inbox is not an invitation channel), so `data` is always
+                // null here and invites are read from /api/invites instead.
+                S.inbox.unshift({
+                    id: m.id, kind: m.kind || 'note',
+                    title: String(m.title || '').slice(0, 60),
+                    body: String(m.body || '').slice(0, 140),
+                    from: m.from || null, at: m.at || Date.now(), read: !!m.read, local: false
+                });
                 added = true;
-                // Materialize actionable requests immediately: the inbox is
-                // the delivery channel, pendingIn is the UI model. Without
-                // this the recipient only ever saw a notification.
-                try {
-                    if ((m.kind === 'friend-request') && m.from && m.from !== uidOf()) {
-                        if (!S.friends[m.from] && !S.pendingIn.some((p) => p.uid === m.from)) {
-                            const nm = (data && data.fromName) || String(m.title || '').replace(/ wants to be friends.*$/, '').slice(0, 24) || 'Player';
-                            S.pendingIn.unshift({ uid: m.from, name: String(nm).slice(0, 24) || 'Player', img: (data && data.img) || null, at: m.at || Date.now() });
-                        } else if (data && data.img && m.from) {
-                            const rec = S.pendingIn.find((p) => p.uid === m.from);
-                            if (rec && !rec.img) rec.img = data.img;
-                        }
-                        needRequests = true;
-                    } else if (m.kind === 'friend-accept' && m.from) {
-                        needEdges = true;
-                    } else if (m.kind === 'friend-decline' && m.from) {
-                        // They said no: drop my outbound Sent row so it does
-                        // not wait forever. Keep it honest — no friendship.
-                        if (S.friends[m.from] && S.friends[m.from].outbound) {
-                            delete S.friends[m.from];
-                        }
-                        S.pendingOut = S.pendingOut.filter((x) => x !== m.from);
-                        needEdges = true;
-                    }
-                } catch (_) {}
+                // A friend-lifecycle announcement is a nudge only. The shelf
+                // is reconciled from the authoritative snapshot, and a
+                // tombstoned uid is never re-created from a notification —
+                // this is what stops a declined request from coming back.
+                try { needSnapshot = true; } catch (_) {}
             }
-            if (added || needEdges || needRequests) { S.inbox = S.inbox.slice(0, 50); save(); renderBell(); }
-            // Follow-up sync (best effort, never blocks the inbox):
-            // acceptance needs the edge graph, requests need the graph
-            // fallback for anything the inbox missed.
-            try { if (needEdges) pullEdges(); } catch (_) {}
-            try { if (needRequests) pullRequests(); } catch (_) {}
-            // NOTE: no auto-ack here. Server read flags converge only when
-            // the user actually reads (Activity view) or acts (Accept /
-            // Decline / popup buttons) — otherwise a second device would
-            // inherit read=true and never show the actionable popup.
+            if (added || needSnapshot) { S.inbox = S.inbox.slice(0, 50); save(); renderBell(); }
+            try { if (needSnapshot) await pullSnapshot(); } catch (_) {}
             return added;
         } catch (_) { return false; }
     }
@@ -601,18 +747,168 @@
         } catch (_) {}
     }
     /* ── Game-invite popup (quick-match motion, anywhere on site) ── */
-    // Invites expire: the host's PeerJS room lives only while their tab is
-    // open, so a popup older than this is a dead room. Expired items are
-    // acked away (never shown) instead of stranding the recipient.
+    // Expiry is now SERVER-side (POST /api/invites stamps expiresAt and
+    // /api/invites/respond refuses an expired match). This client constant
+    // remains only as the device-local fallback TTL used when there is no
+    // backend, where the host's PeerJS room exists only while their tab is
+    // open.
     const INVITE_TTL_MS = 3 * 60 * 1000;
+
+    // The six supported time controls, each rendered exactly once, grouped by
+    // the category the rating system uses. `minutes`/`incSec` are the values
+    // the server validates against (server/lib/social.mjs TIME_CONTROLS).
+    const INVITE_CONTROLS = [
+        { minutes: 1, incSec: 0, label: '1+0', cat: 'Bullet' },
+        { minutes: 3, incSec: 0, label: '3+0', cat: 'Blitz' },
+        { minutes: 5, incSec: 0, label: '5+0', cat: 'Blitz' },
+        { minutes: 3, incSec: 2, label: '3+2', cat: 'Blitz' },
+        { minutes: 10, incSec: 0, label: '10+0', cat: 'Rapid' },
+        { minutes: 15, incSec: 10, label: '15+10', cat: 'Rapid' }
+    ];
+    function catForControl(minutes, incSec) {
+        const dur = minutes + 40 * ((incSec || 0) / 60);
+        return dur < 3 ? 'Bullet' : dur < 8 ? 'Blitz' : 'Rapid';
+    }
+    function controlCatId(minutes, incSec) {
+        return catForControl(minutes, incSec).toLowerCase();
+    }
+
+    /**
+     * Time-control picker for the invite flow. Rating / rank information is
+     * deliberately NOT shown here — it belongs to the lobby, not to the
+     * control you are choosing — and each option appears exactly once.
+     */
+    function pickTimeControl(toUid) {
+        return new Promise((resolve) => {
+            const prev = document.getElementById('tc-overlay');
+            if (prev) prev.remove();
+            let selected = INVITE_CONTROLS[3];
+            try {
+                const saved = JSON.parse(localStorage.getItem('cc_invite_control') || 'null');
+                const hit = saved && INVITE_CONTROLS.find((c) => c.minutes === saved.m && c.incSec === saved.s);
+                if (hit) selected = hit;
+            } catch (_) {}
+            const ov = document.createElement('div');
+            ov.id = 'tc-overlay';
+            const rows = ['Bullet', 'Blitz', 'Rapid'].map((cat) => {
+                const opts = INVITE_CONTROLS.filter((c) => c.cat === cat);
+                return '<fieldset class="tc-group"><legend>' + esc(cat) + '</legend>'
+                    + opts.map((c) => '<label class="tc-opt"><input type="radio" name="tc-pick" value="' + c.minutes + ':' + c.incSec + '"'
+                        + ((c.minutes === selected.minutes && c.incSec === selected.incSec) ? ' checked' : '') + '>'
+                        + '<span class="tc-time">' + esc(c.label) + '</span>'
+                        + '<span class="tc-cat">' + esc(c.cat) + '</span></label>').join('')
+                    + '</fieldset>';
+            }).join('');
+            ov.innerHTML = '<div class="qm-card" role="dialog" aria-modal="true" aria-label="Choose a time control">'
+                + '<h3 class="qm-title">Choose a time control</h3>'
+                + '<p class="qm-sub">How long should each side get on the clock?</p>'
+                + '<div class="tc-list">' + rows + '</div>'
+                + '<div class="fr-acts" style="justify-content:center">'
+                + '<button class="btn-primary" data-tc="go" type="button">Send invite</button>'
+                + '<button class="btn-secondary" data-tc="cancel" type="button">Cancel</button>'
+                + '</div></div>';
+            document.body.appendChild(ov);
+            const finish = (val) => {
+                try { ov.remove(); } catch (_) {}
+                resolve(val);
+            };
+            ov.addEventListener('change', (e) => {
+                const t = e.target;
+                if (!t || t.name !== 'tc-pick') return;
+                const parts = String(t.value).split(':');
+                const hit = INVITE_CONTROLS.find((c) => c.minutes === Number(parts[0]) && c.incSec === Number(parts[1]));
+                if (hit) selected = hit;
+            });
+            ov.addEventListener('click', (e) => {
+                const b = e.target && e.target.closest ? e.target.closest('[data-tc]') : null;
+                if (!b) return;
+                if (b.dataset.tc === 'cancel') { finish(null); return; }
+                try { localStorage.setItem('cc_invite_control', JSON.stringify({ m: selected.minutes, s: selected.incSec })); } catch (_) {}
+                finish({ minutes: selected.minutes, incSec: selected.incSec, label: selected.label, cat: selected.cat });
+            });
+            try { ov.querySelector('[data-tc="go"]').focus(); } catch (_) {}
+        });
+    }
+
+    /**
+     * Create the invitation. When a backend exists this is a real entity:
+     * POST /api/invites mints the match id, validates the time control,
+     * enforces friendship and stamps the expiry. Only then do we claim the
+     * invite was sent. Without a backend we fall back to the device-local
+     * PeerJS dial and LABEL IT as such.
+     */
+    async function sendGameInvite(toUid, code, minutes, incSec) {
+        if (!toUid || toUid === uidOf()) return { ok: false, reason: 'self' };
+        const m = Number(minutes) || 3, s = Number(incSec) || 0;
+        const known = INVITE_CONTROLS.find((c) => c.minutes === m && c.incSec === s);
+        if (!known) return { ok: false, reason: 'bad-time-control' };
+
+        if (apiBase() !== null) {
+            try {
+                const r = await api('invites', { toUid, minutes: m, incSec: s, code: String(code || '').toUpperCase() });
+                if (!r || r.error) return { ok: false, reason: (r && r.error) || 'http-error' };
+                return { ok: true, matchId: r.matchId, code: r.code, expiresAt: r.expiresAt, delivery: 'server' };
+            } catch (e) {
+                return { ok: false, reason: 'unreachable' };
+            }
+        }
+        // Device-local fallback: no server, no durability, no delivery
+        // guarantee. The caller must not present this as a confirmed invite.
+        const sent = await sendP2PInvite(toUid, code, controlCatId(m, s));
+        return sent ? { ok: true, delivery: 'device-local' } : { ok: false, reason: 'peer-unreachable' };
+    }
+
+    /** Pull pending invitations from the server into the local inbox. */
+    async function pullInvites() {
+        try {
+            if (apiBase() === null) return false;
+            const r = await api('invites');
+            if (!r || !Array.isArray(r.invites)) return false;
+            let added = false;
+            for (const inv of r.invites) {
+                if (!inv || !inv.matchId || !inv.code) continue;
+                const id = 'i' + inv.matchId;
+                if (S.inbox.some((m) => m.id === id)) continue;
+                // A server invitation can only exist between friends, so the
+                // sender's display identity is resolved from the friendship
+                // row we already hold — never from a client-asserted field.
+                const fr = S.friends[inv.from] || null;
+                S.inbox.unshift({
+                    id, kind: 'game-invite',
+                    title: 'Match invitation',
+                    body: `${(inv.control && inv.control.label) || ''} — tap Accept to join.`.trim(),
+                    from: inv.from || null, at: inv.createdAt || Date.now(), read: false, local: false,
+                    data: {
+                        matchId: inv.matchId, code: inv.code,
+                        control: (inv.control && inv.control.id) || 'blitz',
+                        fromName: (fr && fr.name) || 'A friend',
+                        img: (fr && fr.img) || null,
+                        minutes: inv.minutes, incSec: inv.incSec, expiresAt: inv.expiresAt
+                    }
+                });
+                added = true;
+            }
+            if (added) { S.inbox = S.inbox.slice(0, 50); save(); renderBell(); checkInvitePopup(); }
+            return added;
+        } catch (_) { return false; }
+    }
+
     const shownInvites = new Set();
+    // The invitation this account is currently waiting on, so the sender can
+    // be told the moment the recipient accepts or declines.
+    let pendingInvite = null;
+    try { pendingInvite = JSON.parse(localStorage.getItem('cc_pending_invite') || 'null'); } catch (_) {}
     function controlLabel(id) {
-        const map = { bullet: 'Bullet 1+0', blitz: 'Blitz 5+0', rapid: 'Rapid 10+0', classical: 'Classical', correspondence: 'Correspondence' };
-        if (id && map[id]) return map[id];
-        return id || 'chess';
+        const map = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical', correspondence: 'Correspondence' };
+        return (id && map[id]) || id || 'chess';
     }
     function inviteExpired(m) {
         try {
+            // A server invitation carries its own expiry, which is the
+            // authoritative one. Only device-local invites fall back to the
+            // client TTL.
+            const exp = m && m.data && m.data.expiresAt;
+            if (Number.isFinite(exp)) return Date.now() > exp;
             const at = (m && m.at) || 0;
             return !at || (Date.now() - at > INVITE_TTL_MS);
         } catch (_) { return false; }
@@ -638,8 +934,9 @@
         // Advance the queue: declining one invite reveals the next, if any.
         try { setTimeout(checkInvitePopup, 50); } catch (_) {}
     }
-    function acceptInvite(item, btn) {
+    async function acceptInvite(item, btn) {
         const code = item && item.data && item.data.code;
+        const matchId = item && item.data && item.data.matchId;
         // Double-tap guard: joining twice opens two sessions.
         try {
             document.querySelectorAll('#gip-overlay [data-gip]').forEach((b) => { b.disabled = true; });
@@ -648,27 +945,43 @@
         if (!code || (item && inviteExpired(item))) {
             closeInvitePopup();
             ackInvite(item);
-            try { notifyLocal('note', 'Invite expired', 'That game room is gone — ask your friend to send a fresh invite.'); } catch (_) {}
+            try { notifyLocal('note', 'Invite expired', 'That invitation is no longer valid — ask your friend to send a fresh one.'); } catch (_) {}
             return;
         }
-        // Ranked context: adopt the inviter's time control BEFORE joining
-        // so the lobby, the hello handshake and the Elo write all agree on
-        // the category. (The host's welcome would heal it anyway, but the
-        // advertised rating and lobby label must match from the first tick.)
+        // Server-authoritative accept. Only the recipient may accept, an
+        // expired or already-resolved match is refused, and a double-click is
+        // idempotent — so this cannot produce two matches.
+        if (matchId && apiBase() !== null) {
+            try {
+                const r = await api('invites/respond', { matchId, accept: true });
+                if (!r || r.error) throw new Error((r && r.error) || 'http-error');
+            } catch (e) {
+                try { document.querySelectorAll('#gip-overlay [data-gip]').forEach((b) => { b.disabled = false; }); } catch (_) {}
+                const why = (e && e.message) === 'expired' ? 'That invitation has expired.'
+                    : (e && e.message) === 'already-resolved' ? 'That invitation was already handled.'
+                        : 'The server did not confirm the match, so nothing was joined.';
+                try { notifyLocal('note', 'Could not join', why); } catch (_) {}
+                return;
+            }
+        }
+        // Adopt the inviter's time control BEFORE joining so the lobby label,
+        // the hello handshake and the rating bucket agree from the first tick.
         try {
-            const cid = item && item.data && item.data.control;
-            const preset = { bullet: { m: 1, s: 0 }, blitz: { m: 5, s: 0 }, rapid: { m: 10, s: 0 }, classical: { m: 15, s: 10 }, correspondence: { m: 30, s: 0 } }[cid];
-            if (preset) localStorage.setItem('cc_control', JSON.stringify(preset));
+            const d = item && item.data;
+            const mins = Number.isFinite(d.minutes) ? d.minutes : null;
+            const inc = Number.isFinite(d.incSec) ? d.incSec : null;
+            if (mins !== null && inc !== null) localStorage.setItem('cc_control', JSON.stringify({ m: mins, s: inc }));
         } catch (_) {}
         closeInvitePopup();
         ackInvite(item);
         try {
             if (!window.app) return;
+            // Straight to the board: the popup is global (it pops over Home,
+            // Profile, Learn — anywhere), so the recipient never has to visit
+            // the Online page themselves. showOnline() mounts the game
+            // surface and _onlineJoin dials the room; the welcome handler
+            // paints the live game. No code to type, no second tap.
             window.app.showOnline();
-            // Lands straight on the board: showOnline renders the lobby,
-            // _onlineJoin dials the room and the welcome handler paints the
-            // live game — no code to type, no second tap. Failures (unknown
-            // code, host gone) surface as lobby messages from _onlineJoin.
             setTimeout(() => { try { window.app._onlineJoin(code); } catch (_) {} }, 600);
         } catch (_) {}
     }
@@ -689,14 +1002,19 @@
             ? '<img class="fr-avaimg" src="' + esc(trustedImg) + '" alt="" width="54" height="54" loading="lazy" draggable="false">'
             : '<span class="fr-ava" aria-hidden="true">' + esc((who[0] || 'P').toUpperCase()) + '</span>';
         const eloTxt = (d.rating != null) ? String(d.rating) : null;
+        // Server invitations carry their own control label; device-local ones
+        // only carry the category.
+        const ctrlTxt = (d.minutes != null && d.incSec != null)
+            ? `${d.minutes}+${d.incSec} · ${controlLabel(d.control)}`
+            : controlLabel(d.control);
         const ov = document.createElement('div');
         ov.id = 'gip-overlay';
         ov.innerHTML = '<div class="qm-card" role="dialog" aria-modal="true" aria-label="Game invitation">'
             + '<div class="qm-radar"><span class="qm-clockwrap">' + ((typeof ChessCourseApp !== 'undefined' && ChessCourseApp.quickClockSVG) ? ChessCourseApp.quickClockSVG('lg') : '') + '</span></div>'
             + '<div style="display:flex;align-items:center;gap:.7rem;justify-content:center;margin-bottom:.3rem">' + ava
             + '<div style="text-align:left"><div class="qm-title" style="margin:0">' + esc(who) + ' invites you</div>'
-            + '<div class="qm-sub" style="margin:0">' + esc(controlLabel(d.control)) + (eloTxt ? ' · ' + esc(eloTxt) : '') + '</div></div></div>'
-            + '<div class="qm-sub">Tap Accept to join instantly — the room closes if they go offline.</div>'
+            + '<div class="qm-sub" style="margin:0">' + esc(ctrlTxt) + (eloTxt ? ' · ' + esc(eloTxt) : '') + '</div></div></div>'
+            + '<div class="qm-sub">Tap Accept to join instantly — you go straight to the board.</div>'
             + '<div class="fr-acts" style="justify-content:center">'
             + '<button class="btn-primary" data-gip="accept" type="button">Accept &amp; play</button>'
             + '<button class="btn-secondary" data-gip="decline" type="button">Decline</button>'
@@ -706,8 +1024,21 @@
             const bb = e.target && e.target.closest ? e.target.closest('[data-gip]') : null;
             if (!bb || bb.disabled) return;
             if (bb.dataset.gip === 'accept') acceptInvite(item, bb);
-            else { try { sendP2PDecline(item.from, item); } catch (_) {} closeInvitePopup(); ackInvite(item); }
+            else declineInvite(item);
         });
+    }
+
+    /** Decline an invitation: server-authoritative when one exists. */
+    async function declineInvite(item) {
+        try { closeInvitePopup(); } catch (_) {}
+        ackInvite(item);
+        const matchId = item && item.data && item.data.matchId;
+        if (matchId && apiBase() !== null) {
+            try { await api('invites/respond', { matchId, accept: false }); } catch (_) {}
+            // The sender learns of the decline through their own poll / stream.
+            return;
+        }
+        try { sendP2PDecline(item && item.from, item); } catch (_) {}
     }
     function checkInvitePopup() {
         try {
@@ -747,9 +1078,11 @@
             if (apiBase() === null || uidOf() === 'guest') return;
             const hadPopup = !!document.getElementById('gip-overlay');
             await pullInbox();
-            try { await pullRequests(); } catch (_) {}
-            if (!hadPopup) checkInvitePopup();
-            else checkInvitePopup(); // expires stale queue behind the popup too
+            // Invitations are their own entity, polled on the same cadence so
+            // the popup appears within one cycle of the sender's POST.
+            try { await pullInvites(); } catch (_) {}
+            try { await pullSnapshot(); } catch (_) {}
+            checkInvitePopup();
             // New actionable requests re-render the open Friends screen so
             // Accept/Decline appear instantly for both users.
             try {
@@ -785,22 +1118,25 @@
                 let msg = null;
                 try { msg = JSON.parse(ev.data); } catch (_) {}
                 if (!msg || typeof msg.kind !== 'string') return;
-                if (msg.kind === 'notify' || msg.kind === 'game-invite') {
-                    // Typed invite pings skip straight to the popup path,
-                    // but ALWAYS via pullInbox first: the event carries no
-                    // room data, the inbox does (code, control, avatar).
+                if (msg.kind === 'notify' || msg.kind === 'invite' || msg.kind === 'game-invite') {
+                    // A push ping carries no payload — only "something
+                    // changed for you". The authoritative reads are
+                    // /api/invites (the invitation itself) and the inbox,
+                    // so the popup is only ever rendered from real data.
                     pullInbox().then(() => {
-                        pullRequests().then(() => {
+                        pullInvites().then(() => {
                             if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
                             checkInvitePopup();
                         });
-                        checkInvitePopup();
                     });
-                } else if (msg.kind === 'friends') {
-                    Promise.all([pullEdges(), pullRequests()]).then(([ch]) => {
+                } else if (msg.kind === 'friends' || msg.kind === 'friend-request'
+                    || msg.kind === 'friend-accept' || msg.kind === 'friend-decline') {
+                    pullSnapshot().then((ch) => {
                         if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
                         else if (ch) renderBell();
                     });
+                } else if (msg.kind === 'invite-accepted' || msg.kind === 'invite-declined') {
+                    pullInvites().then(() => checkInvitePopup());
                 }
             };
             es.onerror = () => {
@@ -864,57 +1200,48 @@
         } catch (_) {}
         return 800;
     }
-    async function publishRating(cat, rating) {
+    /**
+     * The global ladder.
+     *
+     * Server-backed: ONE endpoint, GET /api/rank, which builds the board from
+     * the authoritative account store (every registered account, 800 when a
+     * player has no recorded game), derives ratings from recorded results,
+     * orders deterministically and paginates. The server also decides which
+     * fields each viewer may see, so a stranger's row has no uid/full
+     * name/photo in the response at all — this code does not have to strip
+     * them, because they were never sent.
+     *
+     * Device fallback: only when no backend is reachable, and it is labelled
+     * as a device board so it is never mistaken for the global ladder.
+     */
+    let rankPageOffset = 0;
+    async function rankBoard(cat, opts) {
+        const offset = opts && Number.isFinite(opts.offset) ? Math.max(0, opts.offset | 0) : 0;
+        rankPageOffset = offset;
         try {
-            if (apiBase() === null) return;
-            await api('rank/publish', { name: meName(), cat, rating });
-        } catch (_) {}
-    }
-    async function rankBoard(cat) {
-        // 1) Server rank (ephemeral bests, privacy-preserving). Authoritative
-        // when non-empty: accurate Elo, tier, rank ordering, strangers
-        // anonymous (blur rules enforced by renderer).
-        try {
-            if (apiBase() !== null) {
-                const friendUids = Object.keys(S.friends);
-                const r = await api(`rank?cat=${encodeURIComponent(cat)}&friends=${encodeURIComponent(friendUids.join(','))}`);
-                if (r && Array.isArray(r.board) && (r.total || 0) > 0) return { server: true, total: r.total || 0, myRank: r.myRank, board: r.board };
-                // Empty rank store (fresh boot / restart): fall through to
-                // the DURABLE leaderboard below instead of an empty page.
+            if (apiBase() === null) throw new Error('no-api');
+            const r = await api(`rank?cat=${encodeURIComponent(cat)}&limit=50&offset=${offset}`);
+            if (r && Array.isArray(r.board) && (r.total || 0) > 0) {
+                const board = r.board.map((row) => ({
+                    rank: row.rank,
+                    uid: row.uid || null,          // strangers arrive WITHOUT a uid
+                    name: row.name,
+                    rating: row.rating,
+                    tier: row.tier,
+                    self: !!row.self,
+                    friend: !!row.friend
+                }));
+                const selfRow = board.find((b) => b.self);
+                return {
+                    server: true, total: r.total, offset: r.offset || 0,
+                    hasMore: !!r.hasMore, myRank: r.myRank,
+                    myRating: (selfRow ? selfRow.rating : r.myRating),
+                    board
+                };
             }
-        } catch (_) {}
-        // 2) Durable leaderboard (Mongo ratings sections, same Elo source
-        // the profile dossier reads). Mapped into the rank shape with the
-        // SAME privacy rule: self + friends named, strangers anonymous.
-        try {
-            if (apiBase() !== null) {
-                const lb = await api(`leaderboard?cat=${encodeURIComponent(cat)}`);
-                if (lb && Array.isArray(lb.players) && lb.players.length) {
-                    const rows = lb.players.slice(0, 100).map((p, i) => {
-                        const isMe = p.uid === uidOf();
-                        const isFriend = !!(p.uid && S.friends[p.uid]);
-                        if (isMe) return { rank: i + 1, uid: p.uid, name: meName() + ' (you)', rating: p.rating, self: true, friend: false };
-                        if (isFriend) return { rank: i + 1, uid: p.uid, name: p.name || 'Player', rating: p.rating, self: false, friend: true };
-                        return { rank: i + 1, uid: null, name: firstNameOf(p.name), rating: p.rating, self: false, friend: false };
-                    });
-                    // Self may be unrated on the server: append honestly so
-                    // the board still shows #N of M with the device Elo.
-                    let myRank = rows.findIndex((b) => b.self) + 1 || null;
-                    if (!myRank) {
-                        const meR = myRating(cat);
-                        let at = rows.findIndex((b) => (b.rating ?? -1) < meR);
-                        if (at < 0) at = rows.length;
-                        rows.splice(at, 0, { rank: 0, uid: uidOf(), name: meName() + ' (you)', rating: meR, self: true, friend: false });
-                        rows.forEach((b, i) => { b.rank = i + 1; });
-                        myRank = at + 1;
-                    }
-                    return { server: true, total: rows.length, myRank, board: rows.slice(0, 100) };
-                }
-            }
-        } catch (_) {}
-        // 3) Device board: everyone this device has met, friends named.
-        // You are ALWAYS on your own board (800 START counts) so ranking
-        // is never an empty page: rank #N of M is real from day one.
+            throw new Error('empty-board');
+        } catch (_) { /* fall through to the device board */ }
+
         try {
             if (typeof OnlineRatings !== 'undefined' && OnlineRatings.board) {
                 const rows = OnlineRatings.board(cat);
@@ -929,30 +1256,23 @@
                 const board = rows.map((p, i) => {
                     const isMe = p.uid === uidOf();
                     const isFriend = !!S.friends[p.uid];
-                    if (isMe || isFriend || p.uid === 'guest') return { rank: i + 1, uid: p.uid, name: isMe ? meName() + ' (you)' : p.name, rating: p.rating, self: isMe };
-                    return { rank: i + 1, uid: null, name: firstNameOf(p.name), rating: p.rating, self: false };
+                    if (isMe || isFriend || p.uid === 'guest') return { rank: i + 1, uid: p.uid, name: isMe ? meName() + ' (you)' : p.name, rating: p.rating, tier: tierOf(p.rating), self: isMe, friend: isFriend };
+                    return { rank: i + 1, uid: null, name: firstNameOf(p.name), rating: p.rating, tier: tierOf(p.rating), self: false, friend: false };
                 });
                 const at = board.findIndex((b) => b.self);
-                return { server: false, total: board.length, myRank: at >= 0 ? at + 1 : null, board: board.slice(0, 100) };
+                return { server: false, total: board.length, offset: 0, hasMore: false, myRank: at >= 0 ? at + 1 : null, board: board.slice(0, 50) };
             }
         } catch (_) {}
-        return { server: false, total: 0, myRank: null, board: [] };
+        return { server: false, total: 0, offset: 0, hasMore: false, myRank: null, board: [] };
     }
-    async function hallJoinOnce() {
-        try {
-            if (S.hallJoined || apiBase() === null) return;
-            const r = await api('hall/join', { name: meName() });
-            if (r && r.ok) { S.hallJoined = true; save(); }
-        } catch (_) {}
-    }
+    /**
+     * The hall of fame is a DEVICE list. It used to POST /api/hall/join and
+     * read /api/hall, both of which returned every member's uid to every
+     * caller — a global identifier dump with no privacy rule. There is no
+     * server registry, so the feature stays explicitly local and is labelled
+     * as such in the UI rather than pretending to be global.
+     */
     async function hallList() {
-        try {
-            if (apiBase() !== null) {
-                const r = await api('hall');
-                if (r && Array.isArray(r.hall)) return { server: true, hall: r.hall };
-            }
-        } catch (_) {}
-        // Device fallback: friends in join order (honestly labeled).
         const rows = Object.values(S.friends).sort((a, b) => (a.since || 0) - (b.since || 0))
             .map((f, i) => ({ uid: f.uid, name: f.name, at: f.since, position: i + 1 }));
         return { server: false, hall: rows };
@@ -1085,8 +1405,10 @@
     /* ── lifecycle hooks (called by app.js) ─────────────────── */
     function onGameEnd({ oppUid, oppName, result, cat, myRating }) {
         if (oppUid && oppUid !== uidOf()) stampGame(oppUid);
-        if (typeof myRating === 'number') publishRating(cat, myRating);
-        hallJoinOnce();
+        // No rating is published from here. The ladder rating is DERIVED
+        // server-side from the recorded game result (POST /api/games), so a
+        // client cannot hand itself a rating — the old /api/rank/publish took
+        // the number straight from the browser.
         warnStreaks();
         if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
     }
@@ -1094,6 +1416,7 @@
     /* ── UI ─────────────────────────────────────────────────── */
     let currentTab = 'friends';
     let currentCat = 'blitz';
+    let currentSearchQ = '';
     const FLAME = `<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="flm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F5C978"/><stop offset="1" stop-color="#D4722E"/></linearGradient></defs><path fill="url(#flm)" d="M12.9 1.5c.3 3.2-1.2 5.3-3.2 7C7.9 10 6.5 11.6 6.5 14a5.5 5.5 0 0011 0c0-1.2-.3-2.3-.9-3.3-.4 1-1 1.7-2 2.2.4-2.9-.5-6.4-1.7-8.6-.4 1-1 1.9-1.9 2.6.3-1.9.1-3.6-.1-5.4z"/><path fill="#FBE3B0" d="M12 21.5a3.2 3.2 0 01-3.2-3.2c0-1.5 1-2.4 1.9-3.3.7-.7 1.4-1.4 1.6-2.4 1 1.2 2.9 2.7 2.9 4.7a3.2 3.2 0 01-3.2 4.2z"/></svg>`;
     const SARCASTIC = [
         'Offline. Probably touching grass.',
@@ -1194,14 +1517,19 @@
         paint();
         const input = box.querySelector('#fr-search');
         const out = box.querySelector('#fr-results');
+        // The screen re-renders whenever the authoritative snapshot changes
+        // (a poll finishing, a friend event arriving). Re-rendering used to
+        // discard a half-typed search and leave the results pane empty, so
+        // the query is kept in module state and re-applied on every render.
+        if (currentSearchQ) input.value = currentSearchQ;
         const renderFound = (found, extra) => {
             const all = found.concat(extra || []);
             out.innerHTML = all.length ? '<div class="fr-grid">' + all.map((p) => {
                 const tag = p.pending ? 'requested' : (p.friend ? (p.outbound ? 'requested' : 'friend') : (p.fromServer ? 'DoChess' : 'met over the board'));
                 const hideAdd = p.friend || p.uid === uidOf() || p.outbound;
                 return '<div class="fr-card mini">' + avatarHTML(p.name, null, p.img) + '<div class="fr-id"><strong>' + esc(p.name) + '</strong>'
-                + '<span class="fr-sub">' + tag + (p.rating ? ' · ' + p.rating : '') + '</span></div>'
-                + (hideAdd ? '' : '<button class="btn-secondary sm" data-faction="add" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '"' + (p.img ? ' data-img="' + esc(p.img) + '"' : '') + ' type="button">Add</button>') + '</div>';
+                    + '<span class="fr-sub">' + tag + (p.rating ? ' · ' + p.rating : '') + '</span></div>'
+                    + (hideAdd ? '' : '<button class="btn-secondary sm" data-faction="add" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '"' + (p.img ? ' data-img="' + esc(p.img) + '"' : '') + ' type="button">Add</button>') + '</div>';
             }).join('') + '</div>'
                 : (authState === 'signed-out'
                     ? '<div class="fr-empty">Sign in to search <strong>all</strong> DoChess players.<br><br><button class="btn-primary sm" data-action="profile-signin" type="button">Sign in / Join</button></div>'
@@ -1212,19 +1540,28 @@
                 if (apiBase() === null || q.trim().length < 3) return;
                 const r = await api('directory?q=' + encodeURIComponent(q.trim()));
                 if (!r || !Array.isArray(r.players) || !r.players.length) return;
+                // Stale-response guard: the user may have typed on, or the
+                // screen may have re-rendered, since this request went out.
                 if (!document.body.contains(out) || input.value !== q) return;
                 const have = new Set(search(q).rows.map((x) => x.uid));
                 const extra = r.players.filter((p) => p && p.uid && !have.has(p.uid)).map((p) => ({ uid: p.uid, name: p.name, friend: !!(p.friend || S.friends[p.uid]), rating: null, img: p.img || null, fromServer: true }));
                 if (extra.length) renderFound(search(q).rows, extra);
             } catch (_) {}
         };
-        input.addEventListener('input', () => {
-            const q = input.value;
+        const runSearch = (q) => {
+            currentSearchQ = q;
             if (q.trim().length < 3) { out.innerHTML = q.trim() ? '<p class="lobby-hint">Keep typing — search starts at 3 letters.</p>' : ''; return; }
             const found = search(q).rows;
             renderFound(found, []);
             serverMerge(q);
-        });
+        };
+        input.addEventListener('input', () => { runSearch(input.value); });
+        // Re-apply the preserved query (local results immediately, server
+        // merge follows) so a background re-render never loses the search.
+        if (currentSearchQ && currentSearchQ.trim().length >= 3) {
+            renderFound(search(currentSearchQ).rows, []);
+            serverMerge(currentSearchQ);
+        }
     }
 
     // Global ladder privacy: friends show full names + photos, everyone
@@ -1252,24 +1589,34 @@
     }
 
     async function renderRanking(box) {
+        const offset = rankPageOffset || 0;
         box.innerHTML = `<div class="fr-head"><div><p class="fr-kicker">Ranking</p><h2>Where you stand</h2></div>
             <div class="fr-cats" role="group" aria-label="Rating category">${RATING_CATS.map((c) => `<button class="btn-secondary sm${c === currentCat ? ' on' : ''}" data-faction="cat" data-cat="${c}" type="button">${c[0].toUpperCase() + c.slice(1)}</button>`).join('')}</div></div>
-            <div id="fr-rankout"><p class="lobby-hint">Loading the board…</p></div>`;
+            <div id="fr-rankout"><p class="lobby-hint" role="status">Loading the board…</p></div>`;
         const out = box.querySelector('#fr-rankout');
-        const data = await rankBoard(currentCat);
+        const data = await rankBoard(currentCat, { offset });
+        if (data.error === 'unavailable') {
+            out.innerHTML = `<p class="fr-empty">The ranking service is unreachable right now. Nothing is shown rather than a stale board.</p>`;
+            return;
+        }
         // Accurate Elo: prefer the server's own row for self (other-device
         // games move it); the device rating is the fallback, never a guess.
         const selfRow = (data.board || []).find((b) => b.self);
-        const me = (selfRow && typeof selfRow.rating === 'number') ? selfRow.rating : myRating(currentCat);
+        const me = (selfRow && typeof selfRow.rating === 'number') ? selfRow.rating
+            : (typeof data.myRating === 'number' ? data.myRating : myRating(currentCat));
+        const first = offset === 0;
         out.innerHTML = `
+            ${first ? `
             <div class="fr-myrank">
                 <span class="fr-bigrank">#${data.myRank != null ? data.myRank : '–'}</span>
-                <div><strong>${esc(meName())}</strong><p>${data.total} rated player${data.total === 1 ? '' : 's'} · ${currentCat} · you hold <strong>${me}</strong></p></div>
+                <div><strong>${esc(meName())}</strong><p>${data.total} registered player${data.total === 1 ? '' : 's'} · ${currentCat} · you hold <strong>${me}</strong></p></div>
                 ${tierChip(me)}
             </div>
-            ${podiumHTML(data)}
-            ${data.server ? `<p class="lobby-hint">Global ladder — every DoChess player, friends named in full.</p>` : `<p class="lobby-hint">Device board — connect the API for the global ladder.</p>`}
-            <div class="fr-board">${data.board.slice(0, 50).map((r) => {
+            ${podiumHTML(data)}` : `<p class="lobby-hint">Showing ranks ${offset + 1}–${offset + (data.board || []).length} of ${data.total}</p>`}
+            ${data.server
+                ? `<p class="lobby-hint">Global ladder — every registered DoChess account. Strangers show a first name only; friends show their full name.</p>`
+                : `<p class="lobby-hint"><strong>Device board.</strong> This browser is not connected to the ranking service, so only players this device has met are listed.</p>`}
+            <div class="fr-board">${(data.board || []).map((r) => {
                 const img = r.self ? myAvatar() : ((r.uid && (S.friends[r.uid] || {}).img) || null);
                 return `
                 <div class="fr-brow${r.self ? ' me' : ''}">
@@ -1279,7 +1626,13 @@
                     ${r.rating != null ? tierChip(r.rating) : ''}
                     <span class="fr-brating">${r.rating != null ? r.rating : '–'}</span>
                 </div>`;
-            }).join('') || `<p class="fr-empty">No rated players yet — finish an online game to open the board.</p>`}</div>`;
+            }).join('') || `<p class="fr-empty">${data.server ? 'No players on the board yet.' : 'No players on this device board yet — finish an online game to appear.'}</p>`}</div>
+            ${data.server && data.total > (data.board || []).length ? `
+            <div class="fr-pager">
+                ${data.offset > 0 ? `<button class="btn-secondary sm" data-faction="rank-page" data-offset="${Math.max(0, data.offset - 50)}" type="button">Previous</button>` : ''}
+                <span class="fr-sub">${data.offset + 1}–${data.offset + (data.board || []).length} of ${data.total}</span>
+                ${data.hasMore ? `<button class="btn-secondary sm" data-faction="rank-page" data-offset="${data.offset + 50}" type="button">Next</button>` : ''}
+            </div>` : ''}`;
     }
 
     async function renderHall(box) {
@@ -1287,7 +1640,7 @@
         const out = box.querySelector('#fr-hallout');
         const data = await hallList();
         out.innerHTML = `
-            ${data.server ? '' : `<p class="lobby-hint">Device hall — the global first-1000 needs the API.</p>`}
+            ${data.server ? '' : `<p class="lobby-hint"><strong>This hall is local to this device.</strong> There is no global registry, so it lists your friends in join order only.</p>`}
             <div class="fr-hall">${data.hall.slice(0, 100).map((h) => `
                 <div class="fr-hof">${avatarHTML(h.name, null, (S.friends[h.uid] || {}).img || null)}<div class="fr-id"><strong>#${h.position} ${esc(h.name)}</strong><span class="fr-sub">${h.at ? new Date(h.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span></div></div>`).join('') || `<p class="fr-empty">Empty hall — be early.</p>`}</div>`;
     }
@@ -1343,15 +1696,15 @@
         else if (currentTab === 'ranking') renderRanking(body);
         else if (currentTab === 'hall') renderHall(body);
         else renderActivity(body);
-        pullEdges().then((ch) => {
-            if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
-        });
-        pullRequests().then((ch) => {
+        // ONE authoritative reconcile on open (friends + requests + resolved),
+        // plus the inbox and pending invitations.
+        pullSnapshot().then((ch) => {
             if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
         });
         pullInbox().then((ch) => {
             if (ch && document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab);
         });
+        pullInvites().catch(() => {});
         try { if (apiBase() !== null) heartbeat(); } catch (_) {}
     }
 
@@ -1378,7 +1731,7 @@
             if (gip && document.getElementById('friends-screen')?.classList.contains('active')) {
                 const item = S.inbox.find((m) => m.id === gip.dataset.id);
                 if (gip.dataset.gipFeed === 'accept' && item) acceptInvite(item, gip);
-                else if (item) { try { sendP2PDecline(item.from, item); } catch (_) {} ackInvite(item); }
+                else if (item) declineInvite(item);
                 else { try { ackIds([gip.dataset.id]); } catch (_) {} }
                 setTimeout(() => { try { open(currentTab); } catch (_) {} }, 100);
                 return;
@@ -1389,7 +1742,8 @@
         const a = el.dataset.faction;
         const uid = el.dataset.uid;
         if (a === 'tab') { open(el.dataset.tab); return; }
-        if (a === 'cat') { currentCat = el.dataset.cat || 'blitz'; open('ranking'); return; }
+        if (a === 'cat') { currentCat = el.dataset.cat || 'blitz'; rankPageOffset = 0; open('ranking'); return; }
+        if (a === 'rank-page') { rankPageOffset = Math.max(0, parseInt(el.dataset.offset, 10) || 0); open('ranking'); return; }
         if (a === 'copy-link') {
             const link = profileLink();
             if (!link) { notifyLocal('note', 'Sign in first', 'Guest accounts have no friend link — sign in and try again.'); open(currentTab); return; }
@@ -1397,13 +1751,24 @@
             return;
         }
         if (a === 'add') {
-            if (S.pendingIn.some((p) => p.uid === uid)) acceptFriend(uid);
-            else addFriend(uid, el.dataset.name, 'search', el.dataset.img || null);
+            if (S.pendingIn.some((p) => p.uid === uid)) await acceptFriend(uid);
+            else await requestFriend(uid, el.dataset.name, 'search', el.dataset.img || null);
             open(currentTab); return;
         }
-        if (a === 'accept') { acceptFriend(uid); open(currentTab); return; }
-        if (a === 'decline') { declineFriend(uid); open(currentTab); return; }
-        if (a === 'remove') { removeFriend(uid); open(currentTab); return; }
+        if (a === 'accept') { await acceptFriend(uid); open(currentTab); return; }
+        if (a === 'decline') { await declineFriend(uid); open(currentTab); return; }
+        if (a === 'remove') {
+            // Destructive and asymmetric: confirm before deleting, so an
+            // accidental tap cannot silently drop a friendship.
+            const fr = getF(uid);
+            const nm = (fr && fr.name) || 'this player';
+            if (el.dataset.confirmed !== '1') {
+                if (!window.confirm(`Remove ${nm} from your friends?\n\nThis deletes the friendship for BOTH of you, along with your shared streak history. It cannot be undone.`)) return;
+                el.dataset.confirmed = '1';
+            }
+            await removeFriend(uid);
+            open(currentTab); return;
+        }
         if (a === 'ack') {
             for (const m of S.inbox) m.read = true;
             save(); renderBell(); open(currentTab);
@@ -1412,48 +1777,67 @@
         }
         if (a === 'play') {
             const f = getF(uid);
-            // Dual delivery: the server inbox when an API is configured AND
-            // a direct P2P dial to their inbox peer (works on the static
-            // live site with no backend). Either one pops the same motion
-            // card with Accept & play / Decline on their screen.
-            const deliverInvite = (toUid, fr, code, cid) => {
-                try { serverNotify(toUid, 'game-invite', `${meName()} invites you to play`, `${cid} game — tap Accept to join instantly.`, { code, control: cid, fromName: meName(), rating: myRating(cid), img: myAvatar() }); } catch (_) {}
-                notifyLocal('note', `Invite sent to ${fr ? fr.name : 'friend'}`, `Waiting room ${code} is open — they get a motion popup with Accept & play.`);
-                try {
-                    sendP2PInvite(toUid, code, cid).then((ok) => {
-                        if (ok) return; // the popup itself is the confirmation
-                        try {
-                            if (apiBase() !== null) notifyLocal('note', 'Direct popup unreachable', `They'll still get the invite on their next sync — or share code ${code} now.`);
-                            else notifyLocal('note', `${fr ? fr.name : 'Friend'} looks offline`, `Share the 6-letter code ${code} or the invite link from the waiting room.`);
-                        } catch (_) {}
-                        try { if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab); } catch (_) {}
-                    });
-                } catch (_) {}
+            // Step 3 of the sender flow: CHOOSE the time control. Previously
+            // this silently reused whatever was in localStorage, so the
+            // "choose the time control" step did not exist at all.
+            const chosen = await pickTimeControl(uid);
+            if (!chosen) { open(currentTab); return; }
+
+            /**
+             * Deliver, then REPORT. The old code printed "Invite sent"
+             * *before* attempting delivery and never revised it, so a
+             * recipient who was offline saw a success message for an invite
+             * that was never delivered. Now the message matches the outcome.
+             */
+            const deliverInvite = async (toUid, fr, code) => {
+                const r = await sendGameInvite(toUid, code, chosen.minutes, chosen.incSec);
+                if (r.ok && r.delivery === 'server') {
+                    notifyLocal('note', `Invite sent to ${fr ? fr.name : 'friend'}`,
+                        `${chosen.label} ${chosen.cat} — waiting room ${code}. They get a popup and join straight to the board.`);
+                    pendingInvite = { toUid, matchId: r.matchId, code, control: chosen, at: Date.now() };
+                    try { localStorage.setItem('cc_pending_invite', JSON.stringify(pendingInvite)); } catch (_) {}
+                } else if (r.ok) {
+                    // Device-local fallback: delivered peer-to-peer, but there
+                    // is no server record of it. Say so honestly.
+                    notifyLocal('note', `Invited ${fr ? fr.name : 'friend'} on this device`,
+                        `${chosen.label} ${chosen.cat} — this works only while they keep the app open (no backend connected).`);
+                } else if (r.reason === 'peer-unreachable') {
+                    notifyLocal('note', `${fr ? fr.name : 'Friend'} is offline`,
+                        `We could not reach them. Share the 6-letter code ${code} from the waiting room instead.`);
+                } else if (r.reason === 'not-friends') {
+                    notifyLocal('note', 'Cannot invite', 'You can only invite people who are your friends.');
+                } else if (r.reason === 'bad-time-control') {
+                    notifyLocal('note', 'Cannot invite', 'That time control is not supported.');
+                } else {
+                    notifyLocal('note', 'Invite not delivered',
+                        'The server did not accept the invitation, so nothing was sent. Try again when you are online.');
+                }
+                try { if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab); } catch (_) {}
             };
             try {
                 if (window.app) {
                     if (!window.app._clerk?.user) { notifyLocal('note', 'Sign in to host', 'Guests join games — only members can host them.'); open(currentTab); return; }
-                    // Reuse a live waiting room: spamming Invite must not
-                    // orphan rooms (each new code kills the last host).
+                    // Host with the CHOSEN control so the room and the
+                    // invitation can never disagree about the clock.
                     const cur = window.app.online;
                     if (cur && cur.phase === 'waiting' && cur.code && cur.net) {
-                        deliverInvite(uid, f, cur.code, (cur.control && cur.control.id) || 'blitz');
+                        await deliverInvite(uid, f, cur.code);
                         return;
                     }
-                    const hosted = window.app._onlineHost();
-                    const after = () => {
+                    let hosted = null;
+                    try {
+                        localStorage.setItem('cc_control', JSON.stringify({ m: chosen.minutes, s: chosen.incSec }));
+                        hosted = window.app._onlineHost();
+                    } catch (_) {}
+                    const after = async () => {
                         try {
                             const s = window.app.online;
                             // Only a LIVE waiting room is invitable: a failed
                             // host (lobby phase, dead net) must never send a
-                            // dead code (the old bug: s.code existed even on
-                            // failure, so recipients joined a ghost room).
-                            if (s && s.phase === 'waiting' && s.code && s.net && f) {
-                                deliverInvite(uid, f, s.code, (s.control && s.control.id) || 'blitz');
-                            } else {
-                                notifyLocal('note', 'Could not open a game', 'Check your connection and try the invite again.');
-                                try { open(currentTab); } catch (_) {}
-                            }
+                            // dead code.
+                            if (s && s.phase === 'waiting' && s.code && s.net && f) await deliverInvite(uid, f, s.code);
+                            else notifyLocal('note', 'Could not open a game', 'Check your connection and try the invite again.');
+                            try { open(currentTab); } catch (_) {}
                         } catch (_) {}
                     };
                     if (hosted && typeof hosted.then === 'function') hosted.then(() => setTimeout(after, 900));
@@ -1488,12 +1872,17 @@
 
     window.DoChessFriends = {
         open, renderBell, metPeer, onGameEnd, profileLink, inboundLink,
-        addFriend, acceptFriend, declineFriend, removeFriend, search, streakOf, versus,
+        requestFriend, acceptFriend, declineFriend, removeFriend, search, streakOf, versus,
+        // Backwards-compatible alias: adding is sending a request.
+        addFriend: requestFriend,
         list: () => Object.values(S.friends),
         pendingIn: () => S.pendingIn.slice(),
         unread, inbox: () => S.inbox.slice(),
         tierOf, rankBoard, hallList,
-        apiBase, pollNow: () => watchInbox(), pullRequests, pullEdges, pullInbox,
-        checkInvitePopup, p2pEnsure: ensureP2PInbox, version: 3,
+        apiBase, pollNow: () => watchInbox(),
+        // pullRequests / pullEdges are retained as aliases of the single
+        // authoritative snapshot for any external caller.
+        pullRequests, pullEdges, pullSnapshot, pullInbox, pullInvites,
+        sendGameInvite, checkInvitePopup, p2pEnsure: ensureP2PInbox, version: 4,
     };
 })();

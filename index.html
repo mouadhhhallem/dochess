@@ -219,7 +219,7 @@
 
     /* ── Board frame: shared geometry with #chess-board-wrapper ── */
     #play-board-wrap {
-      width: min(100%, calc(100dvh - 300px), 780px);
+      width: min(100%, calc(100dvh - 300px), calc(100dvw - 12px), 780px);
       max-width: min(100%, 780px);
       min-width: 0;
       margin: 0 auto;
@@ -549,7 +549,8 @@
 
     @media (max-width: 1000px) {
       #learn-screen .lesson-content { grid-template-columns: minmax(0, 1fr); }
-      #play-board-wrap { width: min(100%, calc(100dvh - 340px), 620px); max-width: min(100%, 620px); }
+      /* Board: cap at viewport width so it never overflows right on portrait phones. */
+      #play-board-wrap { width: min(100%, calc(100dvh - 340px), calc(100dvw - 12px), 620px); max-width: min(100%, 620px); }
     }
     /* ── Phone: get out of the board's way ───────────────────────────
        On a small screen the BOARD is the whole task. Lichess does the same
@@ -940,7 +941,7 @@
     <script defer src="clerk-config.js?v=18"></script>
 <script defer src="online.js?v=33"></script>
 <script defer src="achievements.js?v=1"></script>
-    <script defer src="app.js?v=51"></script>
+    <script defer src="app.js?v=52"></script>
     <!-- Vendored chess.js (UMD global `Chess`) for the Learn curriculum -->
     <script defer src="js/vendor/chess.js?v=1"></script>
     <!-- Learn curriculum as ONE classic script: ES modules are blocked by the
@@ -957,7 +958,7 @@
     <!-- Puzzles: tactic trainer backed by chess-puzzle-api (classic script) -->
     <script defer src="puzzles.js?v=3"></script>
     <!-- Friends: friend graph, streaks, notifications, ranking, hall of fame (classic script) -->
-    <script defer src="friends.js?v=4"></script>
+    <script defer src="friends.js?v=5"></script>
     <!-- Cloud chess engine assist (chess-api shapes) + chess.com data client (classic script) -->
     <script defer src="js/cloud-engine.js?v=1"></script>
 

@@ -9,27 +9,32 @@
  *   PUT  /api/state               merge {sections:{...}, profile?} in, get merged out
  *   POST /api/games               append a finished game (idempotent on gameId)
  *   GET  /api/games?limit&before  paginated game history, newest first
- *   GET  /api/leaderboard?cat=    top players for one rating category
+ *   GET  /api/leaderboard?cat=&limit=&offset=
+ *                                privacy-serialized global ladder (alias of /api/rank)
  *   POST /api/mm/join             quick-match queue: join (pairs closest ELO, any gap)
  *   GET  /api/mm/poll?ticket=     quick-match queue: waiting position or match
  *   POST /api/mm/leave            quick-match queue: leave
- *   POST /api/friends/add         friends: add edge (mutual edges = confirmed)
- *   POST /api/friends/remove      friends: remove edge
- *   GET  /api/friends/list        friends: my edges with confirmed flags
- *   GET  /api/friends/requests    friends: inbound requests (they list me, I don't list them)
- *   POST /api/presence            friends: heartbeat (90 s TTL)
- *   GET  /api/friends/status?uids= friends: online/recent map
- *   POST /api/notify              activity inbox: queue an event for a user
- *   GET  /api/notify              activity inbox: items + unread count
- *   POST /api/notify/ack          activity inbox: mark read
- *   POST /api/rank/publish        ranking: publish best rating per category
- *   GET  /api/rank?cat=&friends=  ranking: my rank + named friends, strangers anonymous
- *   POST /api/hall/join           hall of fame: claim a first-1000 seat
- *   GET  /api/hall                hall of fame: the registry
+ *   POST /api/friends/request     send (or re-send) a friend request — pending
+ *   POST /api/friends/respond     accept / decline an inbound request (terminal)
+ *   POST /api/friends/cancel      cancel a request this account sent
+ *   POST /api/friends/remove      remove a friendship in BOTH directions
+ *   GET  /api/friends/snapshot    friends + inbound + outbound + resolved (authoritative)
+ *   POST /api/presence            presence heartbeat (90 s TTL)
+ *   GET  /api/friends/status?uids=presence, restricted to known counterparties
+ *   GET  /api/directory?q=        player directory search (name + photo only)
+ *   POST /api/invites             create a match invitation (friends only)
+ *   GET  /api/invites             my pending invitations
+ *   POST /api/invites/respond     accept / decline (recipient only, idempotent)
+ *   GET  /api/rank?cat=&limit=&offset=
+ *                                global ladder: EVERY registered account at 800+,
+ *                                strangers first-name only (server-side selection)
  *   *                             static files from the project root
  *
  * Identity is Clerk session JWTs (lib/auth.mjs). MongoDB is the permanent
- * store (lib/db.mjs); Upstash Redis only rate-limits and caches (lib/redis.mjs).
+ * store (lib/db.mjs) for EVERYTHING that must survive a restart — progress,
+ * games, friendships, requests, invitations, presence. Upstash Redis only
+ * rate-limits. The quick-match queue and the SSE bus are process-local by
+ * design and documented as such.
  */
 
 import http from 'node:http';
@@ -37,13 +42,13 @@ import { createReadStream, statSync, existsSync } from 'node:fs';
 import { join, normalize, extname, resolve, sep } from 'node:path';
 
 import { config, missingConfig, isProductionReady, ROOT } from './lib/env.mjs';
-import { initDb, db, dbStatus, sanitizeGameRecord, extractCatRating } from './lib/db.mjs';
+import { initDb, db, dbStatus, sanitizeGameRecord } from './lib/db.mjs';
 import { identify, authStatus, authMode } from './lib/auth.mjs';
-import { redisStatus, rateLimit, get as rget, set as rset, del as rdel } from './lib/redis.mjs';
+import { redisStatus, rateLimit } from './lib/redis.mjs';
 import { sendJson, sendError, readJson, pathOf, query, cors, securityHeaders, header } from './lib/http.mjs';
 import { SECTION_MODES } from './lib/merge.mjs';
 import { createMatcher } from './lib/mm.mjs';
-import { createFriendStore } from './lib/friends.mjs';
+import { createSocialStore, RANK_CATS } from './lib/social.mjs';
 import { clerkSearch, mergeDirectory } from './lib/clerkdir.mjs';
 import { createBus } from './lib/events.mjs';
 
@@ -94,11 +99,21 @@ function serveStatic(req, res, pathname) {
     const etag = `W/"${st.size}-${Number(st.mtimeMs).toFixed(0)}"`;
     if (header(req, 'if-none-match') === etag) { res.writeHead(304, { ETag: etag }); res.end(); return; }
 
+    // Cache policy. HTML must never be served stale: it carries the `?v=`
+    // query keys that point every other asset at a version, so a stale
+    // index.html pins the whole app to old scripts. Assets use a short
+    // max-age WITH must-revalidate, so a deploy is picked up promptly and can
+    // never be held indefinitely by a browser cache.
+    const ext = extname(file).toLowerCase();
+    const cache = ext === '.html'
+        ? 'no-cache, must-revalidate'
+        : 'public, max-age=300, must-revalidate';
+
     res.writeHead(200, {
         'Content-Type': type,
         'Content-Length': st.size,
         ETag: etag,
-        'Cache-Control': extname(file) === '.html' ? 'no-cache' : 'public, max-age=300'
+        'Cache-Control': cache
     });
     if (req.method === 'HEAD') { res.end(); return; }
     createReadStream(file).pipe(res);
@@ -135,6 +150,11 @@ async function handleGetState(req, res, userId) {
 async function handlePutState(req, res, userId) {
     const body = await readJson(req);
     if (!body || typeof body !== 'object') { sendError(res, 400, 'bad-body'); return; }
+    // Registration is observable immediately: the account row must exist even
+    // when this first sync carries no sections and no profile, otherwise a
+    // brand-new user would not appear on the global ladder until they happened
+    // to save something.
+    await db().ensureUser(userId, body.profile);
     const incoming = (body.sections && typeof body.sections === 'object') ? body.sections : {};
     // Hard cap the payload per section so one client cannot bloat a doc.
     for (const [id, sec] of Object.entries(incoming)) {
@@ -145,25 +165,13 @@ async function handlePutState(req, res, userId) {
         if (!(id in SECTION_MODES)) delete incoming[id]; // unknown sections are dropped, not stored
     }
     const doc = await db().updateUser(userId, incoming, body.profile);
-    // Every syncing user becomes searchable: name + photo feed the
-    // directory (no enumeration — lookup needs 3+ letters, max 20).
+    // Every syncing user becomes a REAL ACCOUNT in the global ladder: the
+    // ranking is built from the users collection, so a first sync (or a
+    // brand-new registration) puts them on the board at 800 immediately.
+    // Ratings are derived from recorded games, never from this payload.
     try {
         const prof = body.profile || {};
-        if (prof.name || prof.image) FR.register(userId, prof.name, prof.image);
-    } catch (_) {}
-    // Ratings drive the leaderboard: a fresh ratings section must not wait
-    // up to 30 s behind the cache. Bust every category key for this store.
-    try {
-        if (incoming && incoming.ratings) {
-            let kind = 'none';
-            try { kind = db().kind || 'none'; } catch (_) {}
-            for (const c of LEADER_CATS) {
-                try { await rdel('lb:' + config.mongoDb + ':' + kind + ':' + c); } catch (_) {}
-                // Legacy key shape (pre-kind suffix): clear too so a stale
-                // cross-env entry can never resurface after the upgrade.
-                try { await rdel('lb:' + config.mongoDb + ':' + c); } catch (_) {}
-            }
-        }
+        if (prof.name || prof.image) await SOC.heartbeat(userId, prof.name, prof.image);
     } catch (_) {}
     sendJson(res, 200, {
         ok: true,
@@ -179,6 +187,10 @@ async function handlePostGames(req, res, userId) {
     const rec = sanitizeGameRecord(body, userId);
     if (!rec) { sendError(res, 400, 'bad-game'); return; }
     const r = await db().insertGame(rec);
+    // A recorded result changes the ladder, so the derived-rating cache must
+    // be dropped before the response — the next /api/rank must already show
+    // the new rating.
+    SOC.invalidateRatings();
     sendJson(res, 200, { ok: true, ...r, gameId: rec.gameId });
 }
 
@@ -191,55 +203,42 @@ async function handleGetGames(req, res, userId) {
     sendJson(res, 200, { ok: true, total, games });
 }
 
-const LEADER_CATS = new Set(['bullet', 'blitz', 'rapid', 'classical', 'correspondence']);
+const LEADER_CATS = RANK_CATS;
 
-async function handleLeaderboard(req, res) {
-    const cat = (query(req).cat || 'blitz').slice(0, 24);
+/**
+ * GET /api/leaderboard?cat=&limit=&offset=
+ *
+ * The SAME global ladder the ranking tab uses, kept as an alias so older
+ * clients keep working. Critically, the response is now the privacy-serialized
+ * one: a stranger's row carries a first name, a rating and a tier, and no
+ * uid / full name / photo / email. The previous version returned
+ * `{uid, name, image, rating}` for every player to every caller and relied on
+ * the browser to strip it, which put every account's identity in the network
+ * response.
+ */
+async function handleLeaderboard(req, res, userId) {
+    const q = query(req);
+    const cat = (q.cat || 'blitz').slice(0, 24);
     // Validate BEFORE touching the cache: a cached payload must never
     // satisfy a bad-category request, and a bad cat must never poison it.
-    if (!LEADER_CATS.has(cat)) { sendError(res, 400, 'bad-category'); return; }
-    // Cache key isolates both the database NAME and the live store KIND.
-    // Several environments (dev file-store, e2e, prod mongo) share one
-    // Upstash instance with the same DB name ("dochess"): without the kind
-    // suffix one env's board was served to another (stale devsmoke rows).
-    let kind = 'none';
-    try { kind = db().kind || 'none'; } catch (_) {}
-    const key = 'lb:' + config.mongoDb + ':' + kind + ':' + cat;
-    const cached = await rget(key);
-    if (cached) {
-        try { sendJson(res, 200, JSON.parse(cached)); return; } catch (_) { /* refetch */ }
-    }
+    if (!LEADER_CATS.includes(cat)) { sendError(res, 400, 'bad-category'); return; }
+    const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 50));
+    const offset = Math.max(0, parseInt(q.offset, 10) || 0);
 
-    // Top-N per category. The ratings section stores the live ratings object
-    // {rating, best, games, ...} per category (bare numbers on legacy dev
-    // records) — extract the numeric rating first, then sort. The candidate
-    // set is bounded (500) so the sort stays cheap; when the player base
-    // outgrows that, normalize to a numeric field with a descending index.
-    let rows = [];
-    if (db().kind === 'mongo') {
-        const docs = await db().users
-            .find({ ['sections.ratings.data.cats.' + cat]: { $exists: true } })
-            .project({ _id: 1, profile: 1, ['sections.ratings.data.cats.' + cat]: 1 })
-            .limit(500)
-            .toArray();
-        rows = docs
-            .map((d) => ({
-                uid: d._id,
-                name: (d.profile && d.profile.name) || 'Player',
-                image: (d.profile && d.profile.image) || null,
-                rating: extractCatRating(d.sections?.ratings?.data?.cats?.[cat])
-            }))
-            .filter((r) => r.rating != null)
-            .sort((a, b) => b.rating - a.rating)
-            .slice(0, 50);
-    } else {
-        // Dev file store: no index — scan user docs (fine for local use).
-        rows = db().fileScanLeaderboard ? db().fileScanLeaderboard(cat) : [];
-    }
+    let friends = [];
+    try { friends = (await SOC.listFriends(userId)).map((f) => f.uid); } catch (_) {}
 
-    const payload = { ok: true, cat, players: rows, generatedAt: Date.now() };
-    await rset(key, JSON.stringify(payload), 30);
-    sendJson(res, 200, payload);
+    let payload;
+    try {
+        payload = await SOC.rankPage({ cat, viewerUid: userId, friendUids: friends, limit, offset });
+    } catch (e) {
+        // Never serve a stale or empty ladder as if it were the real one.
+        console.error('[doches api] leaderboard failed', e);
+        sendError(res, 503, 'leaderboard-unavailable');
+        return;
+    }
+    // The viewer-specific view must never be cached for other viewers.
+    sendJson(res, 200, { ok: true, ...payload, players: payload.board, generatedAt: Date.now() });
 }
 
 /* ── router ─────────────────────────────────────────────────────────── */
@@ -249,9 +248,15 @@ async function handleLeaderboard(req, res) {
    comes from the Clerk session (same identity as the rest of the API);
    the ticket is the only capability the poller needs. */
 const MM = createMatcher();
-const FR = createFriendStore();
 const EV = createBus();
-setInterval(() => { try { MM.sweep(); FR.sweep(); EV.sweep(); } catch (_) {} }, 30000).unref?.();
+// The authoritative social graph: persisted through the permanent store, not
+// process memory. See server/lib/social.mjs for why the previous in-memory
+// implementation lost every friendship on restart.
+const SOC = createSocialStore(() => db());
+setInterval(() => {
+    try { MM.sweep(); EV.sweep(); } catch (_) {}
+    Promise.all([SOC.sweepPresence(), SOC.sweepInvites()]).catch(() => {});
+}, 30000).unref?.();
 
 async function handleMmJoin(req, res, userId) {
     let body = {};
@@ -275,107 +280,297 @@ async function handleMmLeave(req, res) {
     sendJson(res, 200, { ok: MM.leave(body.ticket) });
 }
 
-/* ── friends / presence / inbox / rank / hall ─────────────────── */
+/* ── friends / requests / invites / presence / rank ────────────── */
 async function readBody(req) {
     try { return await readJson(req); }
     catch (e) { return e && e.code === 'BAD_JSON' ? null : {}; }
 }
 
-async function handleFriendAdd(req, res, userId) {
-    const body = await readBody(req);
-    if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    const r = FR.addEdge(userId, { uid: body.friendUid, name: body.friendName, img: body.friendImg });
-    if (!r) { sendError(res, 400, 'bad-friend'); return; }
-    // Heartbeat carries the requester's own photo so directory search and
-    // inbound-request rows render avatars without a second lookup.
-    try { FR.heartbeat(userId, body.myName, body.myImg || null); } catch (_) {}
-    try { EV.publish(body.friendUid, { kind: 'friends' }); } catch (_) {}
-    sendJson(res, 200, { ok: true, ...r });
+/** Any store failure must surface honestly, never as a fake success. */
+function fail(res, where, e) {
+    console.error('[doches api]', where, e);
+    sendError(res, 503, 'store-unavailable');
 }
 
-async function handleDirectory(req, res, userId) {
-    const q = query(req);
-    const term = typeof q.q === 'string' ? q.q : '';
-    // Local directory: everyone who touched friends/rank/presence/sync.
-    const local = FR.lookup(term);
-    let players = local.map((p) => ({ ...p, friend: false }));
-    // Clerk directory: EVERY registered user, friend or not. Merged with
-    // local wins; strangers stay name+photo only (no emails, ever).
+/* --- friend requests (explicit lifecycle) --- */
+
+async function handleFriendRequest(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
     try {
-        const remote = await clerkSearch(term);
-        if (remote.length) {
-            const mine = new Set((FR.listEdges(userId) || []).map((f) => f.uid));
-            players = mergeDirectory(players, remote, [...mine]);
+        await SOC.heartbeat(userId, body.myName, body.myImg || null);
+        const r = await SOC.requestFriend(userId, { toUid: body.friendUid, name: body.friendName, img: body.friendImg });
+        if (r.error) { sendError(res, r.error === 'already-friends' ? 409 : 400, r.error); return; }
+        // The inbox item is COMPOSED BY THE SERVER from the stored request,
+        // so the recipient never receives a message whose text was chosen by
+        // the sender's client.
+        try {
+            const item = await SOC.notifyFriendEvent(r.request.to, 'friend-request', r.request.name);
+            try { EV.publish(r.request.to, { kind: 'friend-request', id: item && item._id }); } catch (_) {}
+        } catch (_) {}
+        sendJson(res, 200, { ok: true, status: 'pending', created: !!r.created });
+    } catch (e) { fail(res, 'friends/request', e); }
+}
+
+async function handleFriendRespond(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    try {
+        const accept = body.accept === true || body.accept === 'true' || body.accept === 1;
+        const r = await SOC.respondToRequest(userId, body.fromUid, accept);
+        if (r.error) {
+            const status = r.error === 'already-resolved' ? 409 : r.error === 'no-request' ? 404 : 400;
+            sendError(res, status, r.error, r.status ? { status: r.status } : {});
+            return;
         }
-    } catch (_) {}
-    sendJson(res, 200, { ok: true, players });
+        // Both sides are told: the requester learns the outcome, the
+        // responder's own shelf is already reconciled by this response.
+        const other = cleanOther(userId, body.fromUid);
+        const eventKind = accept ? 'friend-accept' : 'friend-decline';
+        try {
+            const item = await SOC.notifyFriendEvent(other, eventKind, body.myName || body.fromName);
+            try { EV.publish(other, { kind: eventKind, id: item && item._id }); } catch (_) {}
+        } catch (_) {}
+        if (accept) try { EV.publish(other, { kind: 'friends' }); } catch (_) {}
+        sendJson(res, 200, { ok: true, status: r.status, idempotent: !!r.idempotent, friend: r.friend || null });
+    } catch (e) { fail(res, 'friends/respond', e); }
+}
+
+function cleanOther(me, other) {
+    return typeof other === 'string' && /^[\w-]{1,64}$/.test(other) && other !== me ? other : null;
+}
+
+async function handleFriendCancel(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    try {
+        const changed = await SOC.cancelRequest(userId, body.friendUid);
+        const other = cleanOther(userId, body.friendUid);
+        if (other) try { EV.publish(other, { kind: 'friend-decline' }); } catch (_) {}
+        sendJson(res, 200, { ok: true, cancelled: changed });
+    } catch (e) { fail(res, 'friends/cancel', e); }
 }
 
 async function handleFriendRemove(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    const ok = FR.removeEdge(userId, body.friendUid);
-    try { if (body.friendUid) EV.publish(body.friendUid, { kind: 'friends' }); } catch (_) {}
-    sendJson(res, 200, { ok });
+    try {
+        // Durable before we answer: the client is told `ok:false` (and rolls
+        // its UI back) if this write did not land.
+        const existed = await SOC.removeFriend(userId, body.friendUid);
+        const other = cleanOther(userId, body.friendUid);
+        try { if (other) EV.publish(other, { kind: 'friends' }); } catch (_) {}
+        sendJson(res, 200, { ok: true, removed: existed });
+    } catch (e) { fail(res, 'friends/remove', e); }
 }
+
+/**
+ * The authoritative snapshot. The client reconciles its entire shelf from
+ * this one response, so a friend the server does not list is removed locally
+ * too — which is what makes a removal stick instead of being re-added by the
+ * next poll.
+ */
+async function handleFriendsSnapshot(req, res, userId) {
+    try {
+        const [friends, requests] = await Promise.all([
+            SOC.listFriends(userId),
+            SOC.listRequests(userId)
+        ]);
+        sendJson(res, 200, { ok: true, friends, requests });
+    } catch (e) { fail(res, 'friends/snapshot', e); }
+}
+
+/**
+ * GET /api/directory?q=
+ *
+ * Player search must find ELIGIBLE REGISTERED USERS, not just friends.
+ * Three sources, merged, strangers last:
+ *   1. this viewer's confirmed friends (always match, friend: true)
+ *   2. everyone else the server has a presence record for (any signed-in
+ *      player who has connected at least once)
+ *   3. a Clerk Backend-API search, so a brand-new account that has never
+ *      synced is still findable by name
+ *
+ * Strangers are returned with a display name and photo only — never an
+ * email, never a private field. The uid is included because the search
+ * result has to be actionable (send them a request), and a request can only
+ * be created for someone the caller names in a query anyway.
+ */
+async function handleDirectory(req, res, userId) {
+    const q = query(req);
+    const term = typeof q.q === 'string' ? q.q : '';
+    try {
+        const friends = await SOC.listFriends(userId);
+        const friendUids = friends.map((f) => f.uid);
+        const known = await SOC.searchDirectory(term, 20);
+        const remote = await clerkSearch(term).catch(() => []);
+        const merged = mergeDirectory(
+            friendUids.map((uid) => ({ uid, name: '', img: null })),
+            [...known, ...remote],
+            friendUids
+        );
+        sendJson(res, 200, { ok: true, players: merged });
+    } catch (e) { fail(res, 'directory', e); }
+}
+
+/* --- invitations --- */
+
+async function handleInviteCreate(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    try {
+        const r = await SOC.createInvite(userId, {
+            toUid: body.toUid, minutes: body.minutes, incSec: body.incSec, code: body.code
+        });
+        if (r.error) {
+            const status = r.error === 'not-friends' ? 403 : 400;
+            sendError(res, status, r.error);
+            return;
+        }
+        const inv = r.invite;
+        try { EV.publish(inv.to, { kind: 'invite', matchId: inv.matchId, code: inv.code }); } catch (_) {}
+        sendJson(res, 200, {
+            ok: true,
+            matchId: inv.matchId, code: inv.code,
+            control: inv.control, expiresAt: inv.expiresAt,
+            to: inv.to, status: inv.status
+        });
+    } catch (e) { fail(res, 'invites/create', e); }
+}
+
+async function handleInviteList(req, res, userId) {
+    try {
+        const invites = await SOC.listInvites(userId);
+        sendJson(res, 200, { ok: true, invites });
+    } catch (e) { fail(res, 'invites/list', e); }
+}
+
+async function handleInviteRespond(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    try {
+        const accept = body.accept === true || body.accept === 'true' || body.accept === 1;
+        const r = await SOC.respondToInvite(userId, body.matchId, accept);
+        if (r.error) {
+            const status = r.error === 'no-invite' ? 404
+                : r.error === 'not-recipient' ? 403
+                    : r.error === 'already-resolved' ? 409 : 400;
+            sendError(res, status, r.error, r.status ? { status: r.status } : {});
+            return;
+        }
+        const inv = r.invite;
+        const other = accept ? inv.from : inv.to;
+        if (!accept) {
+            try {
+                const item = await SOC.notifyFriendEvent(inv.from, 'invite-declined', inv.fromName);
+                try { EV.publish(other, { kind: 'invite-declined', id: item && item._id }); } catch (_) {}
+            } catch (_) {}
+        } else {
+            try { EV.publish(other, { kind: 'invite-accepted', matchId: inv.matchId }); } catch (_) {}
+        }
+        sendJson(res, 200, { ok: true, status: inv.status, idempotent: !!r.idempotent, invite: publicInvite(inv) });
+    } catch (e) { fail(res, 'invites/respond', e); }
+}
+
+/**
+ * The ONLY shape an invitation ever takes in a response. It never carries
+ * the recipient's internal account id, an auth token or an email — the
+ * sender's display fields are copied from the friendship row, not accepted
+ * from the request body.
+ */
+function publicInvite(inv) {
+    return {
+        matchId: inv.matchId, code: inv.code, control: inv.control,
+        minutes: inv.minutes, incSec: inv.incSec,
+        status: inv.status, createdAt: inv.createdAt, expiresAt: inv.expiresAt
+    };
+}
+
+/* --- presence --- */
 
 async function handlePresence(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    FR.heartbeat(userId, body.name, body.img);
-    sendJson(res, 200, { ok: true });
+    try {
+        await SOC.heartbeat(userId, body.name, body.img);
+        sendJson(res, 200, { ok: true });
+    } catch (e) { fail(res, 'presence', e); }
 }
 
-async function handleFriendStatus(req, res) {
-    const q = query(req);
-    const uids = typeof q.uids === 'string' ? q.uids.split(',') : [];
-    sendJson(res, 200, { ok: true, status: FR.status(uids) });
+/**
+ * Presence is user data and must not be enumerable. The requested uids are
+ * intersected with the caller's own friends plus the counterparties of their
+ * pending requests; anything else is simply absent from the response.
+ */
+async function handleFriendStatus(req, res, userId) {
+    try {
+        const q = query(req);
+        const asked = typeof q.uids === 'string' ? q.uids.split(',') : [];
+        const [friends, requests] = await Promise.all([
+            SOC.listFriends(userId),
+            SOC.listRequests(userId)
+        ]);
+        const allowed = new Set([
+            ...friends.map((f) => f.uid),
+            ...requests.inbound.map((r) => r.uid),
+            ...requests.outbound.map((r) => r.uid)
+        ]);
+        const permitted = asked.filter((u) => allowed.has(u));
+        const status = await SOC.status(permitted);
+        sendJson(res, 200, { ok: true, status });
+    } catch (e) { fail(res, 'friends/status', e); }
 }
 
+/* --- the activity inbox (relationship-gated, persistent) --- */
+
+/**
+ * POST /api/notify — a signed-in account may queue an item ONLY for someone
+ * it is already in a relationship with (friend, or the other side of a
+ * request). Actionable kinds are not caller-selectable: `game-invite` is
+ * rejected here and must go through POST /api/invites.
+ */
 async function handleNotify(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    const r = FR.notify(body.toUid, { kind: body.kind, title: body.title, body: body.body, from: userId, data: body.data });
-    if (!r) { sendError(res, 400, 'bad-notify'); return; }
-    // Generic inbox ping (poll fallback pulls the full item) PLUS a typed
-    // game-invite ping so recipients can prioritize the actionable popup
-    // without waiting for the inbox round-trip. Both are best-effort: the
-    // 5 s poller covers missed/lost streams, restarts, and multi-instance.
-    try { EV.publish(body.toUid, { kind: 'notify', id: r.id }); } catch (_) {}
     try {
-        if (r.kind === 'game-invite' && r.data && r.data.code) {
-            EV.publish(body.toUid, { kind: 'game-invite', id: r.id, code: r.data.code });
-        } else if (r.kind === 'friend-request' || r.kind === 'friend-accept' || r.kind === 'friend-decline') {
-            EV.publish(body.toUid, { kind: 'friends', id: r.id });
-        }
-    } catch (_) {}
-    sendJson(res, 200, { ok: true, id: r.id });
+        const r = await SOC.notify(userId, {
+            toUid: body.toUid, kind: body.kind, title: body.title, body: body.body
+        });
+        if (r.error) { sendError(res, 403, r.error); return; }
+        try { EV.publish(r.item.to, { kind: 'notify', id: r.item._id }); } catch (_) {}
+        sendJson(res, 200, { ok: true, id: r.item._id });
+    } catch (e) { fail(res, 'notify', e); }
+}
+
+async function handleNotifyGet(req, res, userId) {
+    try {
+        const items = await SOC.inbox(userId);
+        sendJson(res, 200, { ok: true, ...items });
+    } catch (e) { fail(res, 'notify/get', e); }
 }
 
 async function handleNotifyAck(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    sendJson(res, 200, { ok: true, acked: FR.ack(userId, body.ids) });
+    try {
+        sendJson(res, 200, { ok: true, acked: await SOC.ackInbox(userId, body.ids) });
+    } catch (e) { fail(res, 'notify/ack', e); }
 }
 
-async function handleRankPublish(req, res, userId) {
-    const body = await readBody(req);
-    if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    const r = FR.publishRank(userId, body.name, body.cat, body.rating);
-    if (!r) { sendError(res, 400, 'bad-rank'); return; }
-    sendJson(res, 200, { ok: true, ...r });
-}
+/* --- ranking --- */
 
 async function handleRank(req, res, userId) {
-    const q = query(req);
-    const friends = typeof q.friends === 'string' && q.friends ? q.friends.split(',') : [];
-    sendJson(res, 200, { ok: true, ...FR.rank(q.cat, userId, friends) });
-}
-
-async function handleHallJoin(req, res, userId) {
-    const body = await readBody(req);
-    if (body === null) { sendError(res, 400, 'bad-json'); return; }
-    sendJson(res, 200, { ok: true, ...FR.hallJoin(userId, body.name) });
+    try {
+        const q = query(req);
+        const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 50));
+        const offset = Math.max(0, parseInt(q.offset, 10) || 0);
+        // The `friends=` hint is IGNORED for authorization purposes: the
+        // server derives the viewer's friends from its own graph, so a
+        // caller cannot ask "reveal the full name of this uid" by passing
+        // it in the query string.
+        const r = await SOC.rankPage({ cat: q.cat, viewerUid: userId, limit, offset });
+        sendJson(res, 200, { ok: true, ...r });
+    } catch (e) { fail(res, 'rank', e); }
 }
 
 /* ── push stream (server/lib/events.mjs) ──────────────────────── */
@@ -415,24 +610,31 @@ async function handleApi(req, res) {
     if (p === '/api/state' && req.method === 'PUT') { await handlePutState(req, res, id.userId); return; }
     if (p === '/api/games' && req.method === 'POST') { await handlePostGames(req, res, id.userId); return; }
     if (p === '/api/games' && req.method === 'GET') { await handleGetGames(req, res, id.userId); return; }
-    if (p === '/api/leaderboard' && req.method === 'GET') { await handleLeaderboard(req, res); return; }
+    if (p === '/api/leaderboard' && req.method === 'GET') { await handleLeaderboard(req, res, id.userId); return; }
     if (p === '/api/mm/join' && req.method === 'POST') { await handleMmJoin(req, res, id.userId); return; }
     if (p === '/api/mm/poll' && req.method === 'GET') { await handleMmPoll(req, res); return; }
     if (p === '/api/mm/leave' && req.method === 'POST') { await handleMmLeave(req, res); return; }
-    if (p === '/api/friends/add' && req.method === 'POST') { await handleFriendAdd(req, res, id.userId); return; }
+
+    // Friend requests — an explicit lifecycle with a terminal status.
+    if (p === '/api/friends/request' && req.method === 'POST') { await handleFriendRequest(req, res, id.userId); return; }
+    if (p === '/api/friends/respond' && req.method === 'POST') { await handleFriendRespond(req, res, id.userId); return; }
+    if (p === '/api/friends/cancel' && req.method === 'POST') { await handleFriendCancel(req, res, id.userId); return; }
     if (p === '/api/friends/remove' && req.method === 'POST') { await handleFriendRemove(req, res, id.userId); return; }
-    if (p === '/api/friends/list' && req.method === 'GET') { sendJson(res, 200, { ok: true, friends: FR.listEdges(id.userId) }); return; }
-    if (p === '/api/friends/requests' && req.method === 'GET') { sendJson(res, 200, { ok: true, requests: FR.inboundRequests(id.userId) }); return; }
+    // One authoritative snapshot: friends + inbound + outbound + resolved.
+    if (p === '/api/friends/snapshot' && req.method === 'GET') { await handleFriendsSnapshot(req, res, id.userId); return; }
     if (p === '/api/directory' && req.method === 'GET') { await handleDirectory(req, res, id.userId); return; }
     if (p === '/api/presence' && req.method === 'POST') { await handlePresence(req, res, id.userId); return; }
-    if (p === '/api/friends/status' && req.method === 'GET') { await handleFriendStatus(req, res); return; }
+    if (p === '/api/friends/status' && req.method === 'GET') { await handleFriendStatus(req, res, id.userId); return; }
     if (p === '/api/notify' && req.method === 'POST') { await handleNotify(req, res, id.userId); return; }
-    if (p === '/api/notify' && req.method === 'GET') { sendJson(res, 200, { ok: true, ...FR.inbox(id.userId) }); return; }
+    if (p === '/api/notify' && req.method === 'GET') { await handleNotifyGet(req, res, id.userId); return; }
     if (p === '/api/notify/ack' && req.method === 'POST') { await handleNotifyAck(req, res, id.userId); return; }
-    if (p === '/api/rank/publish' && req.method === 'POST') { await handleRankPublish(req, res, id.userId); return; }
+
+    // Match invitations — a real entity with an id, expiry and status.
+    if (p === '/api/invites' && req.method === 'POST') { await handleInviteCreate(req, res, id.userId); return; }
+    if (p === '/api/invites' && req.method === 'GET') { await handleInviteList(req, res, id.userId); return; }
+    if (p === '/api/invites/respond' && req.method === 'POST') { await handleInviteRespond(req, res, id.userId); return; }
+
     if (p === '/api/rank' && req.method === 'GET') { await handleRank(req, res, id.userId); return; }
-    if (p === '/api/hall/join' && req.method === 'POST') { await handleHallJoin(req, res, id.userId); return; }
-    if (p === '/api/hall' && req.method === 'GET') { sendJson(res, 200, { ok: true, hall: FR.hall() }); return; }
     if (p === '/api/events/ticket' && req.method === 'POST') { sendJson(res, 200, { ok: true, ticket: EV.mintTicket(id.userId) }); return; }
 
     sendError(res, 404, 'not-found');

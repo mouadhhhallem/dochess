@@ -223,14 +223,24 @@ test('friend links carry photos; metPeer confirms and stores them', async ({ bro
     await page.click('[data-faction="accept"]');
     const acc = await page.evaluate(() => window.DoChessFriends.list().find((x) => x.uid === 'sender99'));
     expect(acc.img).toBe('https://x.test/me.png');
-    // P2P meeting confirms a pending outbound edge + stores the photo.
+    // A peer-to-peer meeting must NOT create or confirm a friendship.
+    // This path used to auto-adopt anyone in the Sent list and mark them
+    // confirmed, which silently turned an unanswered request into a
+    // friendship and could re-add a friend the user had just removed.
+    // Only the server's accept (below) may confirm.
     await page.evaluate(() => {
         window.DoChessFriends.addFriend('live9', 'Liva', 'search');
         window.DoChessFriends.metPeer('live9', 'Liva', 'https://x.test/liva.png');
     });
     const lv = await page.evaluate(() => window.DoChessFriends.list().find((x) => x.uid === 'live9'));
-    expect(lv.confirmed).toBe(true);
-    expect(lv.img).toBe('https://x.test/liva.png');
+    expect(lv, 'the request row still exists').toBeTruthy();
+    expect(lv.confirmed, 'meeting someone does not accept their request').toBe(false);
+
+    // And a friend this account deliberately removed is never re-added by a
+    // later peer-to-peer meeting.
+    await page.evaluate(() => window.DoChessFriends.removeFriend('live9'));
+    await page.evaluate(() => window.DoChessFriends.metPeer('live9', 'Liva', 'https://x.test/liva.png'));
+    expect(await page.evaluate(() => window.DoChessFriends.list().some((x) => x.uid === 'live9'))).toBe(false);
     await page.close();
 });
 
@@ -238,7 +248,9 @@ test('ranking always shows self, even with zero other players', async ({ browser
     const page = await freshPage(browser, { width: 1280, height: 800 });
     await page.evaluate(() => window.app.showFriends('ranking'));
     await expect(page.locator('.fr-myrank')).toContainText('#1');
-    await expect(page.locator('.fr-myrank')).toContainText('1 rated player');
+    // The board counts REGISTERED accounts (that is what the global ladder
+    // lists), not just players who have finished a game.
+    await expect(page.locator('.fr-myrank')).toContainText(/1 registered player/);
     await expect(page.locator('#fr-rankout')).toContainText('(you)');
     await expect(page.locator('#fr-rankout')).not.toContainText('No rated players yet');
     await page.close();
@@ -308,11 +320,19 @@ test('outbound requests wait in Sent, never pose as friends', async ({ browser }
     });
     // Not in the friends grid…
     await expect(page.locator('#fr-grid')).not.toContainText('Olivia');
-    // …but in Sent with a cancel action.
+    // …but in Sent with a cancel action. Cancelling is destructive, so it
+    // asks first.
     await expect(page.locator('.fr-reqs')).toContainText('waiting for answer');
+    page.once('dialog', (d) => d.accept());
     await page.click('[data-faction="remove"]');
     await expect(page.locator('.fr-reqs')).toBeHidden();
     expect(await page.evaluate(() => window.DoChessFriends.list().length)).toBe(0);
+    // The removal is permanent across a reload, not a view-only change.
+    await page.reload();
+    await page.waitForFunction(() => !!window.app && !!window.DoChessFriends, null, { timeout: 15000 });
+    await page.evaluate(() => window.app._setUser('fr_u1'));
+    await page.waitForTimeout(3600);
+    expect(await page.evaluate(() => window.DoChessFriends.list().some((x) => x.uid === 'out1'))).toBe(false);
     await page.close();
 });
 
@@ -350,45 +370,62 @@ test('ranking privacy: everyone visible, friends full names, strangers first nam
     await page.close();
 });
 
-test('request + accept notify both sides through the server inbox', async ({ browser }) => {
+test('the friend lifecycle runs through the server, and the client cannot forge inbox text', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
-    const posts = [];
+    const calls = [];
     await page.route('https://api.stub/api/**', (r) => {
         const url = r.request().url();
-        if (url.includes('/notify') && r.request().method() === 'POST' && !url.includes('ack')) {
-            posts.push(JSON.parse(r.request().postData() || '{}'));
-        }
-        r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [], unread: 0, friends: [] }) });
+        calls.push({ url: url.replace('https://api.stub/api/', ''), method: r.request().method(), body: r.request().postData() });
+        r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, status: 'pending', friends: [], requests: { inbound: [], outbound: [], resolved: [] }, items: [], unread: 0, invites: [] }) });
     });
     await page.evaluate(() => {
         localStorage.setItem('cc_api_base', 'https://api.stub');
         window.app.showFriends();
         window.DoChessFriends.addFriend('nbx', 'Nina', 'search');
     });
-    await page.waitForTimeout(500);
-    expect(posts.some((p) => p.toUid === 'nbx' && p.kind === 'friend-request')).toBe(true);
+    await page.waitForTimeout(600);
+    // Sending is an explicit request entity…
+    expect(calls.some((c) => c.url.startsWith('friends/request') && c.method === 'POST')).toBe(true);
+    // …and NOT a client-authored notification: the recipient's inbox text is
+    // composed by the server, so one account cannot put words in another's
+    // mouth (that was how a forged "wants to be friends" popup was possible).
+    expect(calls.some((c) => c.url === 'notify' && c.method === 'POST')).toBe(false);
+
     await page.evaluate(() => window.DoChessFriends.acceptFriend('nbx'));
-    await page.waitForTimeout(500);
-    expect(posts.some((p) => p.toUid === 'nbx' && p.kind === 'friend-accept')).toBe(true);
+    await page.waitForTimeout(600);
+    expect(calls.some((c) => c.url.startsWith('friends/respond') && c.method === 'POST')).toBe(true);
+    // The client reconciles from the authoritative snapshot, not by guessing.
+    expect(calls.some((c) => c.url.startsWith('friends/snapshot'))).toBe(true);
     await page.close();
 });
 
 test('game invite pops up anywhere and accepts into the room', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
-    await page.route('https://api.stub/api/notify', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    const now = Date.now();
+    // Invitations are their own entity now, not inbox items: the popup is fed
+    // by GET /api/invites so a caller-chosen "game-invite" notification can
+    // never manufacture an Accept & Play card.
+    await page.route('https://api.stub/api/invites', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
         ok: true,
-        items: [{ id: 'gip1', kind: 'game-invite', title: 'Rival invites you', body: 'blitz game', from: 'u9', at: Date.now(), read: false, data: { code: 'INVITE', control: 'blitz', fromName: 'Rival', rating: 1100 } }],
-        unread: 1,
+        invites: [{
+            matchId: 'm_0123456789abcdef', code: 'INVITE',
+            control: { id: 'blitz', name: 'Blitz', base: 3, inc: 0, label: '3+0' },
+            minutes: 3, incSec: 0, status: 'pending',
+            createdAt: now, expiresAt: now + 600000, from: 'u9', to: 'fr_u1',
+        }],
     }) }));
-    await page.route('https://api.stub/api/notify/ack', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, acked: 1 }) }));
+    await page.route('https://api.stub/api/invites/respond', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, status: 'accepted', invite: { matchId: 'm_0123456789abcdef', code: 'INVITE' } }) }));
+    await page.route('https://api.stub/api/notify', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [], unread: 0 }) }));
+    await page.route('https://api.stub/api/notify/ack', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, acked: 0 }) }));
     await page.evaluate(() => {
         localStorage.setItem('cc_api_base', 'https://api.stub');
         window.app.showHome();
     });
-    await page.waitForTimeout(500);
-    // Poll now (the 15 s interval would do it on its own).
+    // Poll now (the 5 s interval would do it on its own). The recipient is on
+    // HOME and must still receive it.
     await page.evaluate(() => window.DoChessFriends.pollNow());
-    await expect(page.locator('#gip-overlay')).toContainText('Rival invites you', { timeout: 15000 });
+    await expect(page.locator('#gip-overlay')).toContainText('A friend invites you', { timeout: 15000 });
+    await expect(page.locator('#gip-overlay')).toContainText('3+0');
     await expect(page.locator('#gip-overlay .qm-clock')).toBeVisible();
     await page.click('#gip-overlay [data-gip="accept"]');
     await page.waitForFunction(() => window.app.online?.code === 'INVITE', null, { timeout: 30000 });
@@ -396,22 +433,28 @@ test('game invite pops up anywhere and accepts into the room', async ({ browser 
     await page.close();
 });
 
-test('push stream delivers inbox events live (no polling wait)', async ({ browser }) => {
+test('push stream delivers invitations live (no polling wait)', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
+    const now = Date.now();
     await page.route('https://api.stub/api/events/ticket', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, ticket: 'STUBTICKET' }) }));
-    await page.route('https://api.stub/api/notify', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    await page.route('https://api.stub/api/invites', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
         ok: true,
-        items: [{ id: 'stream1', kind: 'game-invite', title: 'Zed invites you', body: 'blitz', from: 'uz', at: Date.now(), read: false, data: { code: 'STREAM', control: 'blitz', fromName: 'Zed', rating: 1000 } }],
-        unread: 1,
+        invites: [{
+            matchId: 'm_fedcba9876543210', code: 'STREAM',
+            control: { id: 'rapid', name: 'Rapid', base: 10, inc: 0, label: '10+0' },
+            minutes: 10, incSec: 0, status: 'pending',
+            createdAt: now, expiresAt: now + 600000, from: 'uz', to: 'fr_u1',
+        }],
     }) }));
-    await page.route('https://api.stub/api/notify/ack', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, acked: 1 }) }));
-    await page.route('https://api.stub/api/events*', (r) => r.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\ndata: {"kind":"notify"}\n\n' }));
+    await page.route('https://api.stub/api/notify', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [], unread: 0 }) }));
+    await page.route('https://api.stub/api/notify/ack', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, acked: 0 }) }));
+    await page.route('https://api.stub/api/events*', (r) => r.fulfill({ status: 200, contentType: 'text/event-stream', body: ': connected\n\ndata: {"kind":"invite","matchId":"m_fedcba9876543210"}\n\n' }));
     await page.evaluate(() => {
         localStorage.setItem('cc_api_base', 'https://api.stub');
         window.app.showHome();
     });
-    // Stream path (not the 15 s poller): popup lands on any screen.
-    await expect(page.locator('#gip-overlay')).toContainText('Zed invites you', { timeout: 20000 });
+    // Stream path (not the poller): popup lands on any screen.
+    await expect(page.locator('#gip-overlay')).toContainText('A friend invites you', { timeout: 20000 });
     await page.close();
 });
 

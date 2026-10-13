@@ -4,6 +4,31 @@ Target: a **controlled public release** of the API on a persistent-process
 host, with the static site staying on GitHub Pages. Nothing here deploys
 itself — every step below is manual and reviewable.
 
+## ⚠️ Status as of the 2026-10-13 audit: NOT DEPLOYED
+
+This document has described a Railway deployment since it was written, but
+**no API has ever been deployed**. Verified during the audit:
+
+- No `.github/` directory and no CI workflow of any kind exists in the repo.
+- No `railway.json` / `render.yaml` / `fly.toml` / `Procfile` / `Dockerfile`.
+- No `RAILWAY*` / `RENDER*` / `VERCEL*` / `NETLIFY*` / `FLY*` credential is
+  present on the deployment machine; the `railway` CLI is not installed;
+  `gh secret list` is empty.
+- Every hostname in this document is still the literal placeholder
+  `https://<your-api>.up.railway.app`.
+- The live site (`https://mouadhhhallem.github.io/dochess/`) serves static
+  files only, and its deployed `index.html` contains no API base URL.
+
+**Consequence:** on the live site the client's `apiBase()` returns `null`, so
+friends, requests, invitations, presence and the global ranking all run in an
+explicitly-labelled **device-local** mode. Nothing about the social or ranking
+features is global in production until §1–§5 below are actually performed by
+an operator with hosting credentials.
+
+MongoDB Atlas is also unreachable from the build/audit machine (TCP 27017
+connects, TLS handshake fails with `tlsv1 alert internal error`), so no
+Atlas-backed verification could be performed here either.
+
 ## Architecture (what runs where)
 
 | Piece | Host | Notes |
@@ -53,12 +78,22 @@ Promote the Clerk instance first: development instances show dev-mode walls
 and have dev-only rate limits. Create/use a **production** Clerk instance,
 put its publishable key in `clerk-config.js` and its secret key in Railway.
 
-3. Quick match before the frontend points at the API: the client tries
-   same-origin `/api/mm/*` only when the node server serves the page. On
-   GitHub Pages it falls back to P2P bucket rendezvous (works, no server
-   needed). To force the server queue on Pages, set
-   `localStorage.cc_api_base = 'https://<your-api>.up.railway.app'` in the
-   browser console (also needs the `connect-src` CSP entry from item 1).
+3. **Point the frontend at the API.** Quick match used to need this; so do
+   every social feature now. The client reads `localStorage.cc_api_base`
+   first and otherwise assumes same-origin, which is wrong on GitHub Pages.
+   For a one-off test, set it in the browser console:
+
+   ```js
+   localStorage.cc_api_base = 'https://<your-api>.up.railway.app'
+   ```
+
+   For a real release, set the same value **in the source** so every visitor
+   gets it — the cleanest place is a new constant in `app.js`/`friends.js`
+   next to `apiBase()`, e.g. a `DEFAULT_API_BASE` that is returned when no
+   override is present. It is currently left empty on purpose: shipping a
+   hard-coded hostname that does not resolve yet would make the client send
+   every request into a black hole instead of honestly degrading to the
+   labelled device-local mode.
 
 ## 3. Atlas network access, permissions, backups
 

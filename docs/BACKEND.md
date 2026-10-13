@@ -1,8 +1,21 @@
 # DoChess backend — API, database, sync
 
-Phase-2 foundation for server-side persistence. The **static site keeps working
-exactly as before** (localStorage, `file://`, offline); the backend is an
-optional layer that mirrors progress into MongoDB for signed-in learners.
+The **static site keeps working exactly as before** (localStorage, `file://`,
+offline); the backend is an optional layer that persists the social graph,
+progress and the global ranking.
+
+> ### ⚠️ Current deployment state (read this first)
+>
+> **There is no production deployment of this API.** The live site is
+> GitHub Pages (`https://mouadhhhallem.github.io/dochess/`), which is
+> static-only. Every server-backed feature below is **inactive in
+> production** unless an API origin is configured — see
+> [`docs/DEPLOY.md`](DEPLOY.md) for the exact steps an operator must take.
+>
+> On `*.github.io` the client's `apiBase()` returns `null`, so the app runs
+> in an explicitly-labelled device-local mode. `docs/PRODUCTION_AUDIT.md`
+> records why, and `docs/PRODUCTION_FIX_REPORT.md` records what was fixed and
+> what still blocks a genuinely global product.
 
 ## What runs
 
@@ -17,29 +30,30 @@ One Node process serves **both** the static site and the API on `PORT`
 | --- | --- | --- |
 | `GET /api/health` | none | config + dependency report (never leaks secrets) |
 | `GET /api/state` | Clerk session | the signed-in user's saved sections |
-| `PUT /api/state` | Clerk session | merge `{sections, profile?}` in, merged doc out |
-| `POST /api/games` | Clerk session | append a finished game (idempotent per user+`gameId`) |
+| `PUT /api/state` | Clerk session | merge `{sections, profile?}` in, merged doc out; **creates the account row** so registration is observable immediately |
+| `POST /api/games` | Clerk session | append a finished game (idempotent per user+`gameId`); invalidates the derived-rating cache |
 | `GET /api/games?limit&before` | Clerk session | paginated history, newest first |
-| `GET /api/leaderboard?cat=` | Clerk session | top players per rating category (30 s Redis cache) |
+| `GET /api/leaderboard?cat=&limit=&offset=` | Clerk session | alias of `/api/rank`; privacy-serialized |
 | `POST /api/mm/join` | Clerk session | quick-match queue join (pairs closest ELO, any gap — testing mode) |
 | `GET /api/mm/poll?ticket=` | Clerk session | queue position or `{code, role, opp}` match |
 | `POST /api/mm/leave` | Clerk session | leave the quick-match queue |
-| `POST /api/friends/add` | Clerk session | add edge (mutual edges = confirmed) |
-| `POST /api/friends/remove` | Clerk session | remove edge |
-| `GET /api/friends/list` | Clerk session | my edges with confirmed flags |
-| `GET /api/friends/requests` | Clerk session | inbound requests (they list me, I don't list them back) |
+| `POST /api/friends/request` | Clerk session | send (or re-send) a friend request → `pending` |
+| `POST /api/friends/respond` | Clerk session | accept / decline an inbound request (**terminal**) |
+| `POST /api/friends/cancel` | Clerk session | cancel a request this account sent |
+| `POST /api/friends/remove` | Clerk session | remove a friendship in **both** directions |
+| `GET /api/friends/snapshot` | Clerk session | authoritative `{friends, requests:{inbound,outbound,resolved}}` — the client reconciles its whole shelf from this |
 | `POST /api/presence` | Clerk session | heartbeat (90 s TTL) |
-| `GET /api/friends/status?uids=` | Clerk session | online/recent map |
-| `GET /api/directory?q=` | Clerk session | player directory search: local touchpoints + every registered Clerk user (3+ letters, max 20, names+photos only) |
-| `POST /api/notify` | Clerk session | queue an inbox event for a user (optional data envelope: room code etc.) |
+| `GET /api/friends/status?uids=` | Clerk session | presence for **known counterparties only** (arbitrary uids are withheld) |
+| `GET /api/directory?q=` | Clerk session | player search: friends + known players + Clerk, 3+ letters, max 20, names+photos only |
+| `POST /api/notify` | Clerk session | queue a **plain note** for a known counterpart. Actionable kinds are NOT caller-selectable |
 | `GET /api/notify` | Clerk session | inbox items + unread count |
 | `POST /api/notify/ack` | Clerk session | mark inbox read |
-| `POST /api/rank/publish` | Clerk session | publish best rating per category |
-| `GET /api/rank?cat=&friends=` | Clerk session | global ladder: every registered account (unrated at 800), self + friends fully named, strangers first-name only |
-| `POST /api/hall/join` | Clerk session | claim a first-1000 seat |
-| `GET /api/hall` | Clerk session | the hall-of-fame registry |
+| `POST /api/invites` | Clerk session | create a match invitation (friends only; server mints the match id and expiry) |
+| `GET /api/invites` | Clerk session | my pending invitations |
+| `POST /api/invites/respond` | Clerk session | accept / decline (recipient only, idempotent) |
+| `GET /api/rank?cat=&limit=&offset=` | Clerk session | **global ladder**: every registered account at 800+, deterministic order, real pagination, per-viewer serialization |
 | `POST /api/events/ticket` | Clerk session | one-time ticket for the push stream (60 s) |
-| `GET /api/events?ticket=` | ticket (no session header; EventSource cannot set headers) | Server-Sent Events fan-out: notify / friends / game-invite, auto-reconnect |
+| `GET /api/events?ticket=` | ticket (no session header; EventSource cannot set headers) | SSE fan-out, auto-reconnect |
 | `*` | none | static files from the project root |
 
 `server/`, `node_modules/`, `.git`, `skills/` and the screenshot folders are
@@ -47,25 +61,38 @@ One Node process serves **both** the static site and the API on `PORT`
 
 ## What is stored
 
-MongoDB collections (see `server/lib/db.mjs`):
+MongoDB collections (see `server/lib/db.mjs`, `server/lib/social.mjs`):
 
-- `users` — `{_id: <clerk user id>, profile, sections:{…}, updatedAt}`
+- `users` — `{_id: <clerk user id>, createdAt, updatedAt, profile, sections:{…}}`
 - `games` — one document **per player per finished game**:
   `{userId, gameId, result, termination, plies, moves[UCI…], control,
   opp, delta, ratingBefore, ratingAfter, date, endedAt}`.
   Indexes: `{userId:1,date:-1}`, unique `{userId:1,gameId:1}`, `{date:-1}`.
-  Both players post their own copy under the shared game id, so a host and
-  a joiner never overwrite each other; re-posting the same game is a no-op
-  (`{ok:true, duplicate:true}`). The legacy global-unique `{gameId:1}` index
-  is dropped on boot. Move lists replay from the standard start position
-  (online games always start there); clock ticks are never written.
+- `friends` — **undirected**, one row per pair: `{_id: 'f:<a>|<b>', a, b, since, names}`.
+  A single canonical row means the one-directional-removal asymmetry is not
+  representable.
+- `requests` — directed rows with an explicit terminal status:
+  `{_id: 'r:<from>|<to>', from, to, status: pending|accepted|declined|cancelled, name, img, at, updatedAt, resolvedAt}`.
+  Requests are **never derived** from graph asymmetry.
+- `invites` — `{_id: matchId, matchId, code, control, minutes, incSec, from, to, status: pending|accepted|declined|expired, createdAt, expiresAt, respondedAt}`
+- `presence` — `{_id: uid, uid, name, img, at}` with a 90 s TTL read
+- `notify` — `{_id, to, from, kind, title, body, at, read}`
+
+Everything above is written **before** the HTTP response is sent, so an
+acknowledged mutation is durable.
+
+> The previous implementation kept friendships, requests, presence, the
+> inbox, the hall and the whole ranking in process-memory `Map`s
+> (`server/lib/friends.mjs`, removed). Every restart or redeploy erased
+> them. That is the root cause behind "removing a friend works, then they
+> are back".
 
 `PUT /api/state` merges per section with per-section atomicity: concurrent
 writes from one account (background sync + a manual save, two devices) only
 `$set` the sections they merged, each guarded so an older writer cannot
 overwrite a newer section that landed mid-merge. Last-writer-wins holds per
 section timestamp, not per document — a lost race re-reads and retries
-instead of dropping data. Proven by the 10-parallel-PUT test (see Tests).
+instead of dropping data.
 
 Sections mirrored from the browser (`server/lib/merge.mjs` is the contract):
 
@@ -165,25 +192,29 @@ Copy `.env.example` → `.env` and fill in:
 | `DOCHESS_DEV_NO_AUTH` | **dev only** | `1` accepts `x-doChess-user` instead of Clerk |
 | `DOCHESS_DEV_FILE_STORE` | no | `0` refuses the file fallback when Mongo is missing |
 
-### Current state on this machine
+### Current state (verified, not assumed)
 
-`GET /api/health` is the single source of truth. With real credentials in
-`.env` (Atlas + Clerk, never committed) it reports:
+`GET /api/health` is the single source of truth. As of the 2026-10-13
+production audit, the honest report from this machine is:
 
-- `productionReady: true`, `missing: []`
-- `db.kind = "mongo"` — data lives in the Atlas cluster (`MONGODB_DB`,
-  default `dochess`). The `server/.data/` file store only takes over if the
-  Mongo dial fails at boot, and health reports which one is live.
-- `auth.mode = "clerk"` — every `/api/state`, `/api/games` and
-  `/api/leaderboard` call must carry a Clerk session JWT (Bearer); the
-  `x-doChess-user` dev header is rejected.
+- **There is no deployed API.** Only the static GitHub Pages site is live.
+- **MongoDB Atlas is unreachable from this environment.** TCP 27017 to the
+  shard connects, but every TLS handshake fails
+  (`tlsv1 alert internal error` / `SSL alert number 80`) for both hostname
+  and IP. Local runs therefore boot into the **dev file store**, and health
+  reports `db.kind = "file(dev)"` with `db.error` set — which is exactly the
+  signal the server is supposed to give instead of pretending.
+- Because of that, the two signed-in suites (`test-auth-e2e.spec.js`,
+  `test-sync-accounts.spec.js`) **skip with that reason printed**. They are
+  not passing and not passing silently: they are not running.
+
+Anything claiming `productionReady: true` must be re-verified against the
+**public** `/api/health` URL after a real deployment. Do not copy the old
+claim from a previous revision of this document.
 
 The dev escape hatch (`DOCHESS_DEV_NO_AUTH=1`) stays **off** in `.env`;
 uncomment it only to exercise the API without a browser session. The server
 **refuses to boot** if `DOCHESS_DEV_NO_AUTH=1` while `NODE_ENV=production`.
-
-No credential was invented: the publishable key matches `clerk-config.js`,
-and the secret key was verified against Clerk's JWKS endpoint before use.
 
 ## Local development
 
@@ -234,10 +265,11 @@ curl http://127.0.0.1:8787/api/health
    API CPU, Mongo connections or static bandwidth dominating. Do not add a
    second database, queue or cache before that.
 
-## Realtime multiplayer: decision record (audited, no new server)
+## Realtime multiplayer: decision record (audited 2026-10-13)
 
-Audit outcome: **no WebSocket server is built** — the existing transport is
-reused, and match data is recorded server-side at game end.
+Outcome: **still no WebSocket game server** — the transport is unchanged and
+that decision stands. What changed is the **invitation layer**, which used
+to be a best-effort PeerJS dial with no server record at all.
 
 - Transport today is **WebRTC DataChannels via vendored PeerJS**
   (`online.js`, lazy-loaded; PeerJS public cloud is rendezvous-only, game
@@ -245,19 +277,25 @@ reused, and match data is recorded server-side at game end.
   6-letter share codes, joiner auto-reconnect, host re-host resume, and
   per-move idempotency are implemented and covered by the online specs
   (`test-online-*.spec.js`, `test-elo-*.spec.js`).
-- A `ws` + TypeScript server was evaluated and rejected for now: the product
-  ships on **static hosting (GitHub Pages)**, there is no production host
-  that could run a realtime server, and P2P already delivers responsive play
-  with a tested reconnection story. Adding a server would add hosting,
-  auth-surface and ops burden with no workload justifying it.
-- What a server would buy (and the triggers to revisit): global matchmaking,
-  spectators, and server-authoritative anti-cheat. Those need a host with
-  persistent WebSocket support first — until then, completed P2P games are
-  durably recorded via `POST /api/games` (both players, idempotent).
+- **Invitations are now a server entity** (`POST /api/invites`,
+  `GET /api/invites`, `POST /api/invites/respond` in `lib/social.mjs`): a
+  server-minted match id, a validated time control, sender, recipient,
+  expiry and status. Only the intended recipient can accept; expired,
+  duplicated, malformed and unauthorized invitations are rejected with
+  distinct errors; accepting twice is idempotent, so a double-click cannot
+  produce two matches. Inviting requires friendship.
+- Before this change an invitation was just a `{code}` payload inside a
+  notification, any signed-in account could push one at any other account,
+  expiry was a client-side constant, and the UI said "Invite sent" before
+  delivery was attempted. See `docs/PRODUCTION_AUDIT.md` §S1-10 and §S2-12.
+- Device-local P2P invites remain as a **clearly-labelled fallback** for the
+  no-backend case (GitHub Pages). That path says so in the UI instead of
+  claiming a durable delivery.
 - Durability contract: acknowledged API writes (state sections, game
-  records) are in MongoDB before the 200 response. In-flight move traffic
-  stays peer-to-peer and is never blocked on the database; if the API is
-  down mid-game, the device-local history is the fallback and syncs later.
+  records, friendships, requests, invitations) are durable before the 200
+  response. In-flight move traffic stays peer-to-peer and is never blocked on
+  the database; if the API is down mid-game, the device-local history is the
+  fallback and syncs later.
 
 ## Measured performance (no projections)
 
@@ -270,12 +308,15 @@ with the same setup.
 | What | Measured |
 | --- | --- |
 | Engine: legal-move gen + apply, per ply (200 plies, client) | **0.19 ms** |
-| `PUT /api/state` authed round-trip (Atlas write), p50 / p95 (n=5) | **187 ms / 693 ms** (one M0 outlier) |
-| `GET /api/state` authed round-trip, p50 / p95 (n=5) | **93 ms / 94 ms** |
 | 10 parallel `PUT`s, one section each | **10× 200, all 10 sections present** (proves the per-section atomicity fix) |
 | 5 parallel `PUT`s, same section, increasing timestamps | **newest won** regardless of arrival order (LWW guards hold) |
-| Full sync flush cycle (dirty → `saved` chip state) | **411 ms** |
 | `GET /api/health` ×200 parallel | **200/200 in 141 ms wall, 0 failures** |
+
+> The Atlas round-trip rows from the previous revision of this table were
+> **not re-measurable** during the 2026-10-13 audit (Atlas is unreachable
+> from this environment) and have been removed rather than presented as
+> current. Re-run `test-auth-e2e.spec.js` against a reachable Atlas to
+> regenerate them; do not quote them without doing that.
 | Rate limiter under burst (30 PUT/min/user) | **429 returned correctly** on the 31st write |
 
 Not measured (needs production traffic, not invented): concurrent games at

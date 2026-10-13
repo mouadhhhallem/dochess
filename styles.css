@@ -4514,3 +4514,38 @@ body[data-theme="day"] .ms-link.active, body[data-theme="day"] .ms-link.active:h
 @media (prefers-reduced-motion: reduce) {
     .fr-brow.blurry *, .fr-pstep.blurry * { filter: none; }
 }
+
+/* ── Invite time-control picker (#tc-overlay) ─────────────────────
+   Six controls, each rendered exactly once, grouped by the rating
+   category. Deliberately carries NO rating or rank information: that
+   belongs to the lobby, not to the clock you are choosing. */
+#tc-overlay {
+    position: fixed; inset: 0; z-index: 610;
+    display: flex; align-items: center; justify-content: center; padding: 1rem;
+    background: rgba(10, 8, 5, 0.72); backdrop-filter: blur(6px);
+}
+#tc-overlay .qm-card { max-width: min(420px, 100%); width: 100%; }
+#tc-overlay .tc-list {
+    display: grid; gap: 0.7rem; margin: 0.9rem 0 1rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 420px) { #tc-overlay .tc-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+#tc-overlay .tc-group {
+    border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.12));
+    border-radius: 10px; margin: 0; padding: 0.45rem 0.5rem 0.55rem;
+    min-width: 0;
+}
+#tc-overlay .tc-group legend {
+    padding: 0 0.3rem; font-size: 0.68rem; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-muted, #9aa4b2);
+}
+#tc-overlay .tc-opt {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.4rem;
+    padding: 0.42rem 0.35rem; border-radius: 8px; cursor: pointer;
+    font-size: 0.92rem; min-height: 40px;
+}
+#tc-overlay .tc-opt:hover { background: var(--surface-2, rgba(255, 255, 255, 0.06)); }
+#tc-overlay .tc-opt input { accent-color: var(--accent, #d9a441); }
+#tc-overlay .tc-time { font-weight: 650; font-variant-numeric: tabular-nums; }
+#tc-overlay .tc-cat { font-size: 0.7rem; color: var(--text-muted, #9aa4b2); }
+#tc-overlay .fr-pager { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.7rem; }

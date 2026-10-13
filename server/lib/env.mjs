@@ -62,7 +62,11 @@ export const config = Object.freeze({
     // Empty in production: the API is same-origin behind one host.
     corsOrigin: process.env.CORS_ORIGIN || '',
 
-    maxBodyBytes: num(process.env.MAX_BODY_BYTES, 1_500_000)
+    maxBodyBytes: num(process.env.MAX_BODY_BYTES, 1_500_000),
+
+    // Dev-only: relocate the file-store directory. Used by the test suites so
+    // they never read or write server/.data. Ignored when MONGODB_URI works.
+    dataDir: process.env.DOCHESS_DATA_DIR || ''
 });
 
 /** Everything the operator still has to fill in for a production deploy. */

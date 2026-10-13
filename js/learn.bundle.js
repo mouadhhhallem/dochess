@@ -2499,12 +2499,12 @@ function openLevel(id) {
     }
     paint();
     updateNextBtn();
-    // Keep the screen on the board: showLearn() pins the page to the top,
-    // which strands the board below the fold on most screens. Center it on
-    // the board like the Lessons screen does (one instant jump after layout,
-    // so it never fights the focus call below).
+    // Keep the screen on the board: snap to top so the sticky bar + board
+    // appear immediately — no need to scroll down on mobile.
+    // scrollIntoView({block:'center'}) was pulling the board below the sticky
+    // bar on small phones; a plain scrollTo(0,0) is reliable and instant.
     requestAnimationFrame(() => {
-        try { document.getElementById('play-board-wrap')?.scrollIntoView({ block: 'center' }); } catch (_) {}
+        try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch (_) {}
     });
     // Forced: on a freshly opened level the board does not hold focus yet, so
     // the first Tab must land on the piece the level expects.
