@@ -16,7 +16,7 @@
     'use strict';
 
     var STORE_KEY = 'cc_piece_set';
-    var DEFAULT_ID = 'classic';
+    var DEFAULT_ID = 'modern';
 
     var SETS = [
         { id: 'classic', name: 'Classic', dir: 'pieces-main' },

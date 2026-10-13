@@ -72,11 +72,38 @@
     function save() {
         try { localStorage.setItem(storeKey(), JSON.stringify(S)); } catch (_) {}
     }
-    // Identity switches (sign in/out) swap the shelf.
+    // Identity switches (sign in/out) swap the shelf. Coming from a
+    // guest shelf with content into an EMPTY account shelf adopts the guest
+    // circle (friends, requests, streaks, inbox) instead of stranding it:
+    // first sign-in must never look like deleted friends.
+    function adoptGuestShelf() {
+        try {
+            const g = JSON.parse(localStorage.getItem('ccf_guest') || 'null');
+            if (!g || typeof g !== 'object') return;
+            const guestFriends = g.friends && typeof g.friends === 'object' ? g.friends : {};
+            if (!Object.keys(guestFriends).length && !(Array.isArray(g.pendingIn) && g.pendingIn.length)) return;
+            if (Object.keys(S.friends).length || S.pendingIn.length || S.inbox.length) return; // account shelf non-empty: hands off
+            for (const [fid, f] of Object.entries(guestFriends)) {
+                if (!S.friends[fid]) S.friends[fid] = { ...f };
+            }
+            for (const p of (Array.isArray(g.pendingIn) ? g.pendingIn : [])) {
+                if (p && p.uid && !S.pendingIn.some((x) => x.uid === p.uid)) S.pendingIn.push({ ...p });
+            }
+            for (const m of (Array.isArray(g.inbox) ? g.inbox : []).slice(0, 20)) {
+                if (m && m.id && !S.inbox.some((x) => x.id === m.id)) S.inbox.push({ ...m });
+            }
+            S.inbox = S.inbox.slice(0, 50);
+            save(); renderBell();
+        } catch (_) {}
+    }
     let shelfUid = uidOf();
     setInterval(() => {
         const u = uidOf();
-        if (u !== shelfUid) { shelfUid = u; S = load(); renderBell(); }
+        if (u !== shelfUid) {
+            const wasGuest = shelfUid === 'guest';
+            shelfUid = u; S = load(); renderBell();
+            if (wasGuest && u !== 'guest') adoptGuestShelf();
+        }
     }, 3000);
 
     /* ── API base (same rule as matchmaking) ────────────────── */

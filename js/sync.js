@@ -47,18 +47,18 @@
         } catch (_) { return null; }
     }
     function anon() {
-        try { return (window.app && window.app.userId) || 'anon'; } catch (_) { return 'anon'; }
+        try { return (window.app && window.app.userId) || 'guest'; } catch (_) { return 'guest'; }
     }
 
     var SECTIONS = [
         { id: 'learn', keys: function () { return ['dochess:v1']; } },
-        { id: 'lessons', keys: function (u) { return ['ccp_v4' + (u && u !== 'anon' ? '_' + u : '')]; } },
-        { id: 'achievements', keys: function (u) { return ['cca_v1_' + (u || 'anon')]; } },
-        { id: 'ratings', keys: function (u) { return ['ccr_' + (u || 'anon')]; } },
+        { id: 'lessons', keys: function (u) { return ['ccp_v4' + (u && u !== 'guest' ? '_' + u : '')]; } },
+        { id: 'achievements', keys: function (u) { return ['cca_v1_' + (u || 'guest')]; } },
+        { id: 'ratings', keys: function (u) { return ['ccr_' + (u || 'guest')]; } },
         { id: 'puzzles', keys: function () { return ['dochess:puzzles:v1']; } },
-        { id: 'playtime', keys: function (u) { return ['cc_time_' + (u || 'anon')]; } },
-        { id: 'study', keys: function (u) { return ['dcstudy_v1_' + (u || 'anon')]; } },
-        { id: 'games', keys: function (u) { return ['ccgh_' + (u || 'anon')]; } },
+        { id: 'playtime', keys: function (u) { return ['cc_time_' + (u || 'guest')]; } },
+        { id: 'study', keys: function (u) { return ['dcstudy_v1_' + (u || 'guest')]; } },
+        { id: 'games', keys: function (u) { return ['ccgh_' + (u || 'guest')]; } },
         { id: 'leaderboard', keys: function () { return ['ccr_board']; } },
         {
             id: 'settings',
@@ -143,7 +143,7 @@
         try { return JSON.parse(raw); } catch (_) { return raw; }
     }
 
-    function metaKey(uid) { return META_KEY + ':' + (uid || 'anon'); }
+    function metaKey(uid) { return META_KEY + ':' + (uid || 'guest'); }
 
     function normalizeMeta(m) {
         if (!m || typeof m !== 'object') return { sections: {}, hash: {}, lastOkAt: 0, lastError: null, pendingGames: [] };
@@ -314,7 +314,7 @@
         try { return sec.keys(uid); } catch (_) { return []; }
     }
 
-    function stashKey(uid, k) { return 'dochess:stash:' + (uid || 'anon') + ':' + k; }
+    function stashKey(uid, k) { return 'dochess:stash:' + (uid || 'guest') + ':' + k; }
 
     function stashGlobals(uid) {
         try {
@@ -333,7 +333,7 @@
         } catch (_) {}
     }
 
-    function restoreGlobals(uid) {
+    function restoreGlobals(uid, adoptGuest) {
         try {
             for (var i = 0; i < SECTIONS.length; i++) {
                 if (!swapsOnIdentity(SECTIONS[i])) continue;
@@ -341,6 +341,16 @@
                 for (var j = 0; j < ks.length; j++) {
                     var sv = null;
                     try { sv = localStorage.getItem(stashKey(uid, ks[j])); } catch (_) {}
+                    if (sv == null && adoptGuest) {
+                        // First sign-in: the guest state on screen belongs to
+                        // the human signing in — adopt it under their stash
+                        // instead of deleting what no cloud can refill.
+                        try {
+                            var cur = localStorage.getItem(ks[j]);
+                            if (cur != null) localStorage.setItem(stashKey(uid, ks[j]), cur);
+                            sv = cur;
+                        } catch (_) {}
+                    }
                     try {
                         // No stash entry: clear so nothing leaks in from the
                         // previous identity — the cloud pull refills it.
@@ -362,10 +372,10 @@
     // and the copy: the app derives it on sign-in (evaluate() runs inside
     // _setUser), so its key always exists by flush time, and its badges
     // recompute from the migrated underlying stores anyway.
-    var MIGRATE_SECTIONS = ['lessons', 'ratings', 'playtime', 'study', 'games'];
+    var MIGRATE_SECTIONS = ['learn', 'lessons', 'ratings', 'playtime', 'study', 'games', 'leaderboard', 'puzzles'];
     function maybeMigrateAnon(doc) {
         var uid = S.userId;
-        if (!uid || uid === 'anon') return false;
+        if (!uid || uid === 'guest') return false;
         var srv = (doc && doc.sections) || {};
         if (Object.keys(srv).length) return false;
         var i, sec;
@@ -380,8 +390,8 @@
             if (MIGRATE_SECTIONS.indexOf(sec.id) < 0) continue;
             var raw = null;
             try {
-                raw = readRaw(sec, 'anon');
-                if (raw == null) raw = localStorage.getItem(stashKey('anon', sectionKeys(sec, 'anon')[0]));
+                raw = readRaw(sec, 'guest');
+                if (raw == null) raw = localStorage.getItem(stashKey('guest', sectionKeys(sec, 'guest')[0]));
             } catch (_) { raw = null; }
             if (raw == null) continue;
             writeRaw(sec, uid, raw);
@@ -402,7 +412,7 @@
                 var cur = null, sv2 = null;
                 try { cur = localStorage.getItem(ks[j]); } catch (_) {}
                 if (cur != null) continue;
-                try { sv2 = localStorage.getItem(stashKey('anon', ks[j])); } catch (_) {}
+                try { sv2 = localStorage.getItem(stashKey('guest', ks[j])); } catch (_) {}
                 if (sv2 == null) continue;
                 try { localStorage.setItem(ks[j], sv2); } catch (_) {}
                 copied = true;
@@ -412,9 +422,34 @@
         return copied;
     }
 
+    function adoptGuestSections() {
+        var uid = S.userId;
+        if (!uid || uid === 'guest') return;
+        var gmeta = null;
+        try { gmeta = loadMeta('guest'); } catch (_) {}
+        if (!gmeta) return;
+        var touched = false;
+        for (var i = 0; i < SECTIONS.length; i++) {
+            var sec = SECTIONS[i];
+            if (MIGRATE_SECTIONS.indexOf(sec.id) < 0) continue;
+            if (readRaw(sec, uid) != null) continue;
+            var raw = readRaw(sec, 'guest');
+            if (raw == null) continue;
+            writeRaw(sec, uid, raw);
+            // Honest guest timestamps travel along so later cloud merges
+            // compare correctly instead of treating adopted data as new.
+            if (gmeta.sections && gmeta.sections[sec.id] != null) {
+                S.meta.sections[sec.id] = gmeta.sections[sec.id];
+                if (gmeta.hash) S.meta.hash[sec.id] = gmeta.hash[sec.id];
+            }
+            touched = true;
+        }
+        if (touched) saveMeta(S.meta);
+    }
+
     function dropForeignPendingGames(uid) {
         try {
-            var keep = (S.meta.pendingGames || []).filter(function (p) { return p && p.uid === (uid || 'anon'); });
+            var keep = (S.meta.pendingGames || []).filter(function (p) { return p && p.uid === (uid || 'guest'); });
             if (keep.length !== (S.meta.pendingGames || []).length) {
                 S.meta.pendingGames = keep;
                 saveMeta(S.meta);
@@ -423,14 +458,15 @@
     }
 
     function switchIdentity(nextUser) {
-        var prev = S.userId || 'anon';
-        var next = nextUser || 'anon';
+        var prev = S.userId || 'guest';
+        var next = nextUser || 'guest';
         S.userId = nextUser || null;
         if (prev === next) return;
         stashGlobals(prev);
-        restoreGlobals(next);
+        restoreGlobals(next, prev === 'guest');
         S.meta = loadMeta(next);
         S.lastConflict = null;
+        if (prev === 'guest' && next !== 'guest') adoptGuestSections();
         dropForeignPendingGames(next);
     }
 
@@ -589,7 +625,7 @@
     function queueGame(rec) {
         try {
             var q = S.meta.pendingGames || [];
-            q.push({ rec: rec, uid: S.userId || 'anon', tries: 0, nextAt: Date.now() + 30000 });
+            q.push({ rec: rec, uid: S.userId || 'guest', tries: 0, nextAt: Date.now() + 30000 });
             while (q.length > 50) q.shift();
             S.meta.pendingGames = q;
             saveMeta(S.meta);
@@ -618,7 +654,7 @@
             var q = S.meta.pendingGames || [];
             for (var i = 0; i < q.length && due.length < 3; i++) {
                 var p = q[i];
-                if (!p || p.uid !== (S.userId || 'anon') || (p.nextAt || 0) > now || (p.tries || 0) >= 10) continue;
+                if (!p || p.uid !== (S.userId || 'guest') || (p.nextAt || 0) > now || (p.tries || 0) >= 10) continue;
                 due.push(p);
             }
         } catch (_) { return Promise.resolve(null); }

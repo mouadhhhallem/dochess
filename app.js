@@ -4355,7 +4355,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
        lobby so the swatch state follows the click. ── */
     _pieceSet() {
         if (window.DoChessPieces) return DoChessPieces.get();
-        return 'classic';
+        return 'modern';
     }
 
     _setPieceSet(id) {
