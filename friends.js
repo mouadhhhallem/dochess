@@ -146,7 +146,12 @@
         const u = uidOf();
         if (u !== shelfUid) {
             const wasGuest = shelfUid === 'guest';
+            const wasSignedIn = shelfUid && shelfUid !== 'guest';
             shelfUid = u; S = load(); renderBell();
+            // Signed out through ANY path (our button, Clerk's account menu,
+            // an expired session): say goodbye at once, while the cached
+            // token may still be honoured, instead of leaving a ghost.
+            if (wasSignedIn && u === 'guest') { try { presenceLeaveBeacon(); } catch (_) {} }
             // Adopt the guest circle at most once per browser, and only when
             // signing in FROM a guest session for the first time.
             if (wasGuest && u !== 'guest' && !hasAdoptedGuest()) adoptGuestShelf();
@@ -1370,6 +1375,21 @@ let needSnapshot = false;
                     // The SENDER learns here: an accept must take them to
                     // the board, a decline/expire must clear the wait.
                     try { watchSentInvite(); } catch (_) {}
+                } else if (msg.kind === 'presence' && msg.uid) {
+                    // A friend just went online or offline: repaint the grid
+                    // NOW instead of waiting for the next 30 s cycle. This
+                    // half is what makes "offline" read instantly. The push
+                    // payload is stashed so "last seen just now" survives
+                    // even though the server row is already deleted.
+                    try {
+                        presencePush[msg.uid] = { online: !!msg.online, lastSeen: Number(msg.lastSeen) || 0, at: Date.now() };
+                        for (const [k, v] of Object.entries(presencePush)) {
+                            if (Date.now() - (v.at || 0) > 600000) delete presencePush[k];
+                        }
+                        if (gridRepaint && document.getElementById('friends-screen')?.classList.contains('active')) {
+                            gridRepaint().then(() => { lastGridPaint = Date.now(); }).catch(() => {});
+                        }
+                    } catch (_) {}
                 }
             };
             es.onerror = () => {
@@ -1402,6 +1422,9 @@ let needSnapshot = false;
         } catch (_) {}
     });
     let presenceCache = { at: 0, map: {} };
+    // Live presence pushes (uid -> {online, lastSeen, at}), so a goodbye
+    // that deleted the server row still renders "last seen just now".
+    let presencePush = {};
     let gridRepaint = null;
     let lastGridPaint = 0;
     let tokenCache = { at: 0, token: null };
@@ -1461,7 +1484,9 @@ let needSnapshot = false;
             }).catch(() => {});
         } catch (_) {}
     }
-    document.addEventListener('pagehide', () => { try { presenceLeaveBeacon(); } catch (_) {} });
+    // pagehide fires at the WINDOW (not the document) — a document-level
+    // listener would never run, leaving exactly the ghost this removes.
+    window.addEventListener('pagehide', () => { try { presenceLeaveBeacon(); } catch (_) {} });
 
     /* ── rank + hall ────────────────────────────────────────── */
     // Rapid is the game's main rating and leads everywhere; bullet and
@@ -1868,7 +1893,7 @@ let needSnapshot = false;
         const dotCls = online ? 'on' : (st > 0 ? 'warm' : '');
         const joke = SARCASTIC[f.uid.length % SARCASTIC.length];
         const gamesTxt = v.games ? `${v.w}W · ${v.l}L · ${v.d}D` : 'no games yet';
-        return `<article class="fr-card${online ? '' : ' off'}${f.confirmed ? '' : ' pend'}">
+        return `<article class="fr-card${online ? '' : ' off'}${f.confirmed ? '' : ' pend'}" data-uid="${esc(f.uid)}">
             <div class="fr-top">
                 ${avatarHTML(f.name, null, f.img)}
                 <div class="fr-id">
@@ -1921,6 +1946,18 @@ let needSnapshot = false;
                 if (apiBase() !== null) {
                     const r = await api(`friends/status?uids=${encodeURIComponent(rows.map((f) => f.uid).join(','))}`);
                     pres = (r && r.status) || {};
+                }
+            } catch (_) {}
+            // Overlay live pushes: a deleted row reads {online:false,
+            // lastSeen:0} from the server, but the push remembers exactly
+            // when they left. A live ONLINE read always beats a stale
+            // offline push.
+            try {
+                for (const [uid, pe] of Object.entries(presencePush)) {
+                    if (!pe || typeof pe !== 'object') continue;
+                    if (!pres[uid]) pres[uid] = {};
+                    if (pe.online) { pres[uid].online = true; if (pe.lastSeen) pres[uid].lastSeen = pe.lastSeen; }
+                    else if (!pres[uid].online && pe.lastSeen) pres[uid].lastSeen = pe.lastSeen;
                 }
             } catch (_) {}
             grid.innerHTML = rows.length ? rows.map((f) => friendRow(f, pres)).join('') : `<div class="fr-onboard"><h3>Grow your first flame</h3><ol><li><strong>Copy your invite link</strong> — anyone, anywhere.</li><li><strong>Play one game together</strong> — any day, any control.</li><li><strong>+1 every day</strong> you both play. Miss a day and it resets.</li></ol><div class="fr-acts"><button class="btn-primary sm" data-faction="copy-link" type="button">Copy invite link</button><button class="btn-secondary sm" data-faction="goto-search" type="button">Search DoChess players</button></div></div>`;

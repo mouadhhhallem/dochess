@@ -825,9 +825,16 @@ export function createSocialStore(getDb) {
 
     async function heartbeat(uid, name, img) {
         uid = cleanUid(uid);
-        if (!uid) return false;
-        await getDb().putDoc('presence', uid, { uid, name: cleanName(name), img: cleanImg(img), at: Date.now() });
-        return true;
+        if (!uid) return { ok: false, becameOnline: false, freshReturn: false };
+        const db = getDb();
+        const prev = await db.getDoc('presence', uid).catch(() => null);
+        const now = Date.now();
+        const age = prev ? now - (prev.at || 0) : Infinity;
+        await db.putDoc('presence', uid, { uid, name: cleanName(name), img: cleanImg(img), at: now });
+        // becameOnline drives the read state; freshReturn gates the PUSH so
+        // a throttled background tab (one late beat) doesn't spam friends —
+        // only a real return after minutes away is announced.
+        return { ok: true, becameOnline: age > PRESENCE_TTL_MS, freshReturn: age > 4 * PRESENCE_TTL_MS };
     }
 
     /**

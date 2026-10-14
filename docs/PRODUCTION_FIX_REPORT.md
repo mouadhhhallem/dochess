@@ -668,3 +668,30 @@ A third user batch from the live local server:
 Test deltas: `node --test` **71/71** (+2 name-convention tests);
 E2E test 16 extended with both-sides snapshot-name assertions.
 Assets re-keyed (`friends.js?v=9`, `app.js?v=55`).
+
+---
+
+## 18. Presence that is actually instant (2026-10-15)
+
+"Offline still not instant": two deeper root causes beneath the beacon.
+
+1. **The goodbye listener was on the wrong target.** `pagehide`
+   fires at the WINDOW, but the beacon was registered on
+   `document` — so it never ran anywhere, production included.
+   Now `window.addEventListener('pagehide', …)` with a synchronously
+   fired keepalive fetch (cached token only — pagehide cannot await
+   a fresh one). Any sign-out path (own button, Clerk menu, expired
+   session detected by the shelf watcher) also fires the goodbye.
+2. **Nothing pushed to the friend's screen.** The observer repainted
+   presence every 30 s, so even a working goodbye read late. Now the
+   server fans `presence` events out to all friends on leave AND on a
+   real return (first beat after minutes away; repeat beats stay
+   silent), and the open friends screen repaints on arrival —
+   typically 1–2 s. The push payload is stashed so "last seen just
+   now" renders even though the server row is already deleted.
+
+New E2E test 17 proves the user's exact complaint on pixels: B parks
+on the friends screen; A comes online → B reads "online now" with no
+reload; A leaves → B reads "last seen …" with no reload; firing
+pagehide clears A's server row far inside the ~90 s TTL. Assets
+re-keyed (`friends.js?v=10`).

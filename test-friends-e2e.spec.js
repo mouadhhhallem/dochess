@@ -791,3 +791,39 @@ test('16: friend streaks survive refresh; XP pays per result; presence leave wor
 
     await a.ctx.close(); await b.ctx.close();
 });
+
+test('17: presence flips on the friend screen within seconds, no reload', async ({ browser }) => {
+    const a = await newAccount(browser, ALICE, 'Alice Wonder');
+    const b = await newAccount(browser, BOB, 'Bob Builder');
+    await call('POST', '/api/friends/request', { friendUid: BOB, friendName: 'Bob Builder' }, ALICE);
+    await call('POST', '/api/friends/respond', { fromUid: ALICE, accept: true }, BOB);
+    await expect.poll(() => relist(b.page), { timeout: 25000 }).toContain(ALICE);
+
+    // Bob parks on the friends screen with Alice's row on display.
+    await b.page.evaluate(() => window.app.showFriends('friends'));
+    const row = b.page.locator(`article.fr-card[data-uid="${ALICE}"]`);
+    await expect(row, 'friend row renders').toBeVisible({ timeout: 20000 });
+
+    // Alice comes online: Bob's screen flips WITHOUT any reload or click.
+    await call('POST', '/api/presence', { name: 'Alice Wonder', img: null }, ALICE);
+    await expect(row, 'online push reaches the open screen').toContainText(/online now/i, { timeout: 25000 });
+
+    // Alice leaves: Bob's screen flips to last-seen WITHOUT any reload.
+    await call('POST', '/api/presence/leave', {}, ALICE);
+    await expect(row, 'offline push reaches the open screen').toContainText(/last seen/i, { timeout: 25000 });
+
+    // The tab-close path: firing pagehide must clear the server-side row
+    // fast (proves the beacon fired — the TTL alone would take ~90 s).
+    // Note: this dispatches the REAL pagehide handler on the live page. A
+    // headless page.close() does not reliably run pagehide, and the
+    // dev-header test identity lives in page routes that die with the page
+    // — so a literal close cannot carry auth here the way production does
+    // (cached Clerk token + keepalive fetch). Handler, fetch and server
+    // path are exactly what a real close runs.
+    await call('POST', '/api/presence', { name: 'Alice Wonder', img: null }, ALICE);
+    await a.page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    await expect.poll(async () => (await call('GET', `/api/friends/status?uids=${ALICE}`, undefined, BOB))
+        .body.status[ALICE].online, { timeout: 25000 }).toBe(false);
+
+    await b.ctx.close(); await a.ctx.close();
+});

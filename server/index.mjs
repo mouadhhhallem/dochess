@@ -527,9 +527,15 @@ async function handlePresence(req, res, userId) {
     const body = await readBody(req);
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
     try {
-        await SOC.heartbeat(userId, body.name, body.img);
+        const hb = await SOC.heartbeat(userId, body.name, body.img);
         // Keep the ladder photo fresh (durable before we answer).
         try { await SOC.touchProfile(userId, body.name, body.img); } catch (_) {}
+        // Offline → online is PUSHED to friends at once: their screens flip
+        // to "online now" in a second or two instead of waiting for the next
+        // 30 s repaint. Repeat beats stay silent (no spam).
+        if (hb && hb.freshReturn) {
+            try { await fanoutPresence(userId, true); } catch (_) {}
+        }
         sendJson(res, 200, { ok: true });
     } catch (e) { fail(res, 'presence', e); }
 }
@@ -543,8 +549,24 @@ async function handlePresence(req, res, userId) {
 async function handlePresenceLeave(req, res, userId) {
     try {
         await SOC.leavePresence(userId);
+        // The goodbye is PUSHED to friends at once: their screens flip to
+        // "last seen just now" in a second or two instead of waiting for
+        // the next 30 s repaint (or the 90 s TTL).
+        try { await fanoutPresence(userId, false); } catch (_) {}
         sendJson(res, 200, { ok: true });
     } catch (e) { fail(res, 'presence/leave', e); }
+}
+
+/** Tell every friend of `userId` that their reachability just flipped. */
+async function fanoutPresence(userId, online) {
+    try {
+        const friends = await SOC.listFriends(userId);
+        const msg = { kind: 'presence', uid: userId, online: !!online, lastSeen: Date.now() };
+        for (const f of friends) {
+            if (!f || !f.uid) continue;
+            try { EV.publish(f.uid, msg); } catch (_) {}
+        }
+    } catch (_) {}
 }
 
 /**
