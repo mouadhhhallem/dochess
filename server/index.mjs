@@ -557,6 +557,26 @@ async function handleNotifyAck(req, res, userId) {
     } catch (e) { fail(res, 'notify/ack', e); }
 }
 
+/**
+ * GET /api/hall?cat=&limit=&offset=
+ *
+ * The hall of fame: EVERY registered account with their avatar, paginated
+ * and privacy-filtered exactly like the ladder. The previous implementation
+ * returned every member's raw uid + full name to every caller and had no
+ * server registry at all; this is the real thing, and the client labels its
+ * offline fallback as device-local rather than pretending it is global.
+ */
+async function handleHall(req, res, userId) {
+    try {
+        const q = query(req);
+        const cat = (q.cat || 'blitz').slice(0, 24);
+        if (!LEADER_CATS.includes(cat)) { sendError(res, 400, 'bad-category'); return; }
+        const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 50));
+        const offset = Math.max(0, parseInt(q.offset, 10) || 0);
+        sendJson(res, 200, { ok: true, ...(await SOC.hallPage({ cat, viewerUid: userId, limit, offset })) });
+    } catch (e) { fail(res, 'hall', e); }
+}
+
 /* --- ranking --- */
 
 async function handleRank(req, res, userId) {
@@ -635,6 +655,7 @@ async function handleApi(req, res) {
     if (p === '/api/invites/respond' && req.method === 'POST') { await handleInviteRespond(req, res, id.userId); return; }
 
     if (p === '/api/rank' && req.method === 'GET') { await handleRank(req, res, id.userId); return; }
+    if (p === '/api/hall' && req.method === 'GET') { await handleHall(req, res, id.userId); return; }
     if (p === '/api/events/ticket' && req.method === 'POST') { sendJson(res, 200, { ok: true, ticket: EV.mintTicket(id.userId) }); return; }
 
     sendError(res, 404, 'not-found');

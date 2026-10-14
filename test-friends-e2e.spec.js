@@ -503,7 +503,113 @@ test('14b: a stale response cannot overwrite newer state', async ({ browser }) =
     await p.ctx.close();
 });
 
-/* ── 15: an unconfigured backend never masquerades as global ────────── */
+/* ── the three things the user reported, verified end to end ──────── */
+
+// The reported bug: "Could not send request — the server refused the
+// request". The real cause was that a 401 (no session token) was reported as
+// a generic refusal AND the row the user had just created was deleted.
+// Uses its OWN pair of accounts so it cannot be perturbed by the shared
+// ALICE/BOB state the lifecycle test above leaves behind.
+const RETRY_ME = 'user_retrysender01';
+const RETRY_THEM = 'user_retrytarget01';
+
+test('a failed send keeps the request, says why, and can be retried', async ({ browser }) => {
+    for (const u of [RETRY_ME, RETRY_THEM]) {
+        await call('PUT', '/api/state', { sections: {} }, u);
+    }
+    const p = await newAccount(browser, RETRY_ME, 'Retry Sender');
+    // Refuse the send the way a signed-out session does.
+    await p.page.route('**/api/friends/request', (r) =>
+        r.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'not-signed-in' }) }));
+
+    await p.page.evaluate((u) => window.DoChessFriends.requestFriend(u, 'Retry Target', 'search'), RETRY_THEM);
+    await p.page.waitForTimeout(1500);
+
+    // The user's work is NOT thrown away.
+    const stillThere = await p.page.evaluate((u) =>
+        window.DoChessFriends.list().some((f) => f.uid === u && f.unsent), RETRY_THEM);
+    expect(stillThere, 'the request is kept and flagged as not delivered').toBe(true);
+
+    // And the message names the actual problem.
+    const notes = await p.page.evaluate(() => window.DoChessFriends.inbox().map((m) => m.title + ' :: ' + m.body).join(' | '));
+    expect(notes, 'the failure is explained specifically').toMatch(/Sign in/i);
+    expect(notes, 'and it does not claim the server refused a request').not.toMatch(/server refused/i);
+
+    // A retry that succeeds clears the flag.
+    await p.page.unroute('**/api/friends/request');
+    const retried = await p.page.evaluate((u) => window.DoChessFriends.requestFriend(u, 'Retry Target', 'search'), RETRY_THEM);
+    await p.page.waitForTimeout(2500);
+    const after = await p.page.evaluate((u) => ({
+        unsent: window.DoChessFriends.list().find((f) => f.uid === u)?.unsent,
+        why: window.DoChessFriends.list().find((f) => f.uid === u)?.unsentWhy,
+        notes: window.DoChessFriends.inbox().map((m) => m.title).slice(0, 4),
+    }), RETRY_THEM);
+    after.gotRow = !!retried;
+    expect(after.unsent, `retry should clear the undelivered flag (${JSON.stringify(after)})`).toBeUndefined();
+    const snap = await call('GET', '/api/friends/snapshot', undefined, RETRY_ME);
+    expect(snap.body.requests.outbound.map((r) => r.uid), 'the retry actually reached the server').toContain(RETRY_THEM);
+    await p.ctx.close();
+});
+
+// The hall must list EVERY registered account from the database, with
+// their picture — not just this device's friends.
+test('the hall of fame lists every registered account with their picture', async () => {
+    const PHO = 'user_e2ehallphoto01';
+    await call('PUT', '/api/state', {
+        sections: {},
+        profile: { name: 'Hall Photo', image: 'https://img.example/hall.png' },
+    }, PHO);
+    const r = await call('GET', '/api/hall?cat=blitz&limit=100&offset=0', undefined, EVE);
+    expect(r.status).toBe(200);
+    const row = r.body.board.find((h) => h.name === 'Hall');
+    expect(row, 'a stranger from the database is in the hall').toBeTruthy();
+    expect(row.img, 'with their picture').toBe('https://img.example/hall.png');
+    expect(r.body.total, 'the hall counts every registered account').toBeGreaterThanOrEqual(7);
+    // Privacy still holds in the hall.
+    expect('uid' in row).toBe(false);
+    expect(JSON.stringify(r.body.board)).not.toContain('Hall Photo');
+});
+
+// "you and your friends and the rest", complete no matter which page is open.
+test('the ladder shows you, every friend, and the rest of the database', async ({ browser }) => {
+    const me = await newAccount(browser, CAROL, 'Carol Chen');
+    const friend = await newAccount(browser, DAVE, 'Dave Diaz');
+    await call('POST', '/api/friends/request', { friendUid: CAROL, friendName: 'Carol Chen' }, DAVE);
+    await call('POST', '/api/friends/respond', { fromUid: DAVE, accept: true }, CAROL);
+    await expect.poll(() => relist(me.page), { timeout: 20000 }).toContain(DAVE);
+
+    // A stranger with a name, so the UI has something to blur.
+    const STR = 'user_e2estranger42';
+    await call('PUT', '/api/state', { sections: {} }, STR);
+
+    await me.page.evaluate(() => window.app.showFriends('ranking'));
+    await expect(me.page.locator('#fr-rankout')).toContainText('Global ladder', { timeout: 25000 });
+    await expect(me.page.locator('.fr-brow.me')).toBeVisible();
+    // The friend is listed by full name and is NOT blurred.
+    const daveRow = me.page.locator('.fr-brow', { hasText: 'Dave Diaz' }).first();
+    await expect(daveRow).toBeVisible();
+    expect(await daveRow.evaluate((el) => el.classList.contains('blurry')),
+        'a friend is never blurred').toBe(false);
+    // Strangers from the database are blurred.
+    expect(await me.page.locator('.fr-brow.blurry').count(), 'strangers are blurred').toBeGreaterThan(0);
+    // And the board says it refreshes itself.
+    await expect(me.page.locator('.fr-live')).toContainText(/refreshes every 30s/i);
+    // Ranks run in order, top to bottom.
+    const ranks = (await me.page.locator('.fr-rank').allInnerTexts()).map((t) => Number(t.trim())).filter(Number.isFinite);
+    const sorted = [...ranks].sort((a, b) => a - b);
+    expect(ranks, 'the ladder is in rank order').toEqual(sorted);
+
+    // The board refreshes on demand: register a new player and press Refresh.
+    const NEW = 'user_efreshnew0001';
+    await call('PUT', '/api/state', {
+        sections: {}, profile: { name: 'Fresh Newcomer' },
+    }, NEW);
+    await me.page.click('[data-faction="rank-refresh"]');
+    await expect(me.page.locator('.fr-bname').filter({ hasText: 'Fresh' }).first(),
+        'a newly registered account appears without a page reload').toBeVisible({ timeout: 20000 });
+
+    await me.ctx.close(); await friend.ctx.close();
+});
 
 test('15: with no backend the app says so and shows no fake global ladder', async ({ browser }) => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });

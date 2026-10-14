@@ -188,10 +188,14 @@ test('ranking is global: friends full names, strangers first names; hall lists j
     });
     await page.evaluate(() => window.app.showFriends('ranking'));
     await expect(page.locator('#fr-rankout')).toContainText('Bobby');
-    // Strangers stand on the ladder by first name only (no blur, no photo).
+    // Strangers stand on the ladder by first name only, and are BLURRED.
+    // The blur is presentation only: the server already reduced them to a
+    // first name, and the full name never reaches the browser at all.
     await expect(page.locator('#fr-rankout')).toContainText('Xenia');
     await expect(page.locator('#fr-rankout')).not.toContainText('Wilkinson');
-    await expect(page.locator('#fr-rankout .fr-brow.blurry')).toHaveCount(0);
+    await expect(page.locator('#fr-rankout .fr-brow.blurry')).toHaveCount(1);
+    // The friend and the viewer are never blurred.
+    await expect(page.locator('#fr-rankout .fr-brow.blurry')).not.toContainText('Bobby');
     await expect(page.locator('.fr-myrank')).toContainText(/#3/);
     await page.evaluate(() => window.app.showFriends('hall'));
     await expect(page.locator('#fr-hallout')).toContainText('Bobby');
@@ -351,19 +355,20 @@ test('ranking privacy: everyone visible, friends full names, strangers first nam
         window.DoChessFriends.acceptFriend('b');
         window.app.showFriends('ranking');
     });
-    // Global ladder: self #3 of 5, every row visible (no blur), friends in
-    // full, strangers by first name only (family names never leak).
+    // Global ladder: self #3 of 5. Friends are shown in full; strangers
+    // appear by first name only (family names never reach the browser) and
+    // are blurred. The viewer's own row is never blurred.
     const rows = await page.evaluate(() => [...document.querySelectorAll('.fr-brow')].map((el) => ({
         rank: el.querySelector('.fr-rank').textContent,
         name: el.querySelector('.fr-bname').textContent,
         blurry: el.classList.contains('blurry'),
     })));
     expect(rows).toEqual([
-        { rank: '1', name: 'Amy', blurry: false },
-        { rank: '2', name: 'Ben', blurry: false },
-        { rank: '3', name: expect.any(String), blurry: false },
-        { rank: '4', name: 'Cat', blurry: false },
-        { rank: '5', name: 'Dan', blurry: false },
+        { rank: '1', name: 'Amy', blurry: true },
+        { rank: '2', name: 'Ben', blurry: false },   // a friend
+        { rank: '3', name: expect.any(String), blurry: false }, // you
+        { rank: '4', name: 'Cat', blurry: true },
+        { rank: '5', name: 'Dan', blurry: true },
     ]);
     await expect(page.locator('#fr-rankout')).not.toContainText('Anderson');
     await expect(page.locator('#fr-rankout')).not.toContainText('Doe');

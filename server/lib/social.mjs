@@ -623,7 +623,7 @@ export function createSocialStore(getDb) {
                 games: 0
             });
         }
-        rows.sort((a, b) => (b.rating - a.rating) || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
+rows.sort((a, b) => (b.rating - a.rating) || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
         rows.forEach((r, i) => { r.rank = i + 1; });
 
         const total = rows.length;
@@ -631,6 +631,14 @@ export function createSocialStore(getDb) {
         const size = Math.max(1, Math.min(100, limit));
         const off = Math.max(0, offset);
         const page = rows.slice(off, off + size).map((r) => serializeRow(r, viewerUid, friends));
+
+        // EVERY friend, with their real global rank, regardless of whether
+        // they happen to fall inside the requested page. Without this the
+        // "you and your friends" view silently truncates as soon as a friend
+        // ranks outside the current page.
+        const rankedFriends = rows
+            .filter((r) => friends.has(r.uid))
+            .map((r) => serializeRow(r, viewerUid, friends));
 
         return {
             cat,
@@ -640,7 +648,56 @@ export function createSocialStore(getDb) {
             hasMore: off + size < total,
             myRank: myIndex >= 0 ? myIndex + 1 : null,
             myRating: myIndex >= 0 ? rows[myIndex].rating : null,
-            board: page
+            friends: rankedFriends,
+            board: page,
+        };
+    }
+
+    /**
+     * The hall of fame: every registered account, same ordering, same
+     * privacy rules and same pagination as the ladder, with the avatar
+     * included for every row.
+     *
+     * Including avatars discloses nothing new: `/api/directory` already
+     * serves a display name and avatar for any registered player to any
+     * signed-in account, and avatars are public profile imagery. Full names
+     * and uids still follow the per-viewer rule used everywhere else.
+     */
+    async function hallPage({ cat = 'blitz', viewerUid, limit = 50, offset = 0 } = {}) {
+        cat = cleanCat(cat);
+        viewerUid = cleanUid(viewerUid);
+        const db = getDb();
+        const [identities, ratings, friendRows] = await Promise.all([
+            db.listUserIdentities(),
+            ratingTable(),
+            viewerUid ? listFriends(viewerUid) : Promise.resolve([])
+        ]);
+        const friends = new Set(friendRows.map((f) => f.uid));
+        const rows = identities
+            .filter((id) => id && id._id)
+            .map((id) => {
+                const profile = (id.profile) || {};
+                const perCat = ratings.get(id._id);
+                return {
+                    uid: id._id,
+                    name: cleanName(profile.name),
+                    img: cleanImg(profile.image),
+                    rating: (perCat && perCat.get(cat)) || START_RATING,
+                };
+            });
+        rows.sort((a, b) => (b.rating - a.rating) || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
+        rows.forEach((r, i) => { r.rank = i + 1; });
+        const size = Math.max(1, Math.min(100, limit));
+        const off = Math.max(0, offset);
+        return {
+            cat,
+            total: rows.length,
+            offset: off,
+            limit: size,
+            hasMore: off + size < rows.length,
+            myRank: viewerUid ? (rows.findIndex((r) => r.uid === viewerUid) + 1 || null) : null,
+            friends: rows.filter((r) => friends.has(r.uid)).map((r) => serializeRow(r, viewerUid, friends, true)),
+            board: rows.slice(off, off + size).map((r) => serializeRow(r, viewerUid, friends, true)),
         };
     }
 
@@ -654,10 +711,11 @@ export function createSocialStore(getDb) {
      *          photo, no email, no internal id — the field is never selected
      *          into the response, so it cannot leak through devtools either.
      */
-    function serializeRow(row, viewerUid, friends) {
+    function serializeRow(row, viewerUid, friends, includeImg) {
         const base = { rank: row.rank, rating: row.rating, tier: tierOf(row.rating) };
+        if (includeImg && row.img) base.img = row.img;
         if (viewerUid && row.uid === viewerUid) return { ...base, uid: row.uid, name: row.name, self: true, friend: false };
-        if (friends.has(row.uid)) return { ...base, uid: row.uid, name: row.name, img: row.img || null, self: false, friend: true };
+        if (friends.has(row.uid)) return { ...base, uid: row.uid, name: row.name, img: row.img || base.img || null, self: false, friend: true };
         return { ...base, name: firstName(row.name), self: false, friend: false };
     }
 
@@ -775,7 +833,7 @@ export function createSocialStore(getDb) {
         // inbox
         notify, notifyFriendEvent, inbox, ackInbox,
         // ranking
-        rankPage,
+        rankPage, hallPage,
         // housekeeping
         invalidateRatings
     };

@@ -176,7 +176,11 @@
                 body: body === undefined ? undefined : JSON.stringify(body),
                 signal: ctrl.signal,
             });
-            if (res.status === 401 || res.status === 403) authState = 'signed-out';
+            // Only 401 means "no valid session". A 403 is an authorization decision
+            // (not a friend, wrong relationship) and must NOT latch the
+            // account into a signed-out state.
+            if (res.status === 401) authState = 'signed-out';
+            else if (res.ok) authState = 'signed-in';
             if (!res.ok) throw new Error('http-' + res.status);
             return await res.json();
         } finally { clearTimeout(to); }
@@ -205,39 +209,103 @@
         return null;
     }
 
+    /* ── failure handling: say what actually went wrong ─────────────── */
+    // The previous version collapsed every failure into "The server refused
+    // the request — check your connection", DELETED the row the user had just
+    // created, and moved on. A signed-out user, a real outage and a genuine
+    // rejection produced identical (useless) feedback, and the user's work
+    // was destroyed either way. These helpers classify the failure so the
+    // message names the actual problem, and nothing is thrown away silently.
+    const FAILURES = {
+        signedOut: { title: 'Sign in to use friends', body: 'Friend requests, rankings and invitations need a DoChess account. Sign in and try again — nothing was sent.' },
+        offline: { title: 'Cannot reach DoChess', body: 'We could not reach the server, so nothing was sent or changed. Check your connection and try again.' },
+        alreadyFriends: { title: 'Already friends', body: 'You are already friends with them — there is nothing to send.' },
+        badRecipient: { title: 'That player is not reachable', body: 'This entry is not a real DoChess account, so no request could be sent to them.' },
+        notFound: { title: 'Nothing to act on', body: 'That request or invitation no longer exists — it may already have been resolved.' },
+        expired: { title: 'That invitation expired', body: 'Invitations are short-lived. Ask for a fresh one and it will land instantly.' },
+        forbidden: { title: 'Not allowed', body: 'You do not have permission for that action.' },
+        generic: { title: 'That did not work', body: 'The server did not accept it, so nothing was changed. Please try again.' }
+    };
+    /** True when this browser has a signed-in Clerk identity. */
+    function hasIdentity() {
+        try {
+            const u = window.app && window.app._clerk && window.app._clerk.user;
+            return !!(u && u.id);
+        } catch (_) { return false; }
+    }
+    /**
+     * True when we genuinely have no identity.
+     *
+     * This must NOT be based on the cached `authState` alone: a single
+     * transient 401 latches that flag to 'signed-out', which would then block
+     * every later retry for a user who is in fact signed in — the request
+     * could never be re-sent. A live Clerk user always wins over the flag.
+     */
+    function isSignedOut() {
+        if (uidOf() === 'guest') return true;
+        if (hasIdentity()) return false;
+        return authState === 'signed-out';
+    }
+    /** Map a thrown error onto a specific, honest explanation. */
+    function explainFailure(e) {
+        const m = String((e && e.message) || '');
+        if (m === 'no-api' || !m) return FAILURES.offline;
+        if (/^http-40[13]$/.test(m)) {
+            if (m === 'http-409') return FAILURES.alreadyFriends;
+            return FAILURES.signedOut;
+        }
+        if (/^http-5/.test(m)) return FAILURES.offline;
+        if (m === 'already-friends') return FAILURES.alreadyFriends;
+        if (m === 'bad-recipient') return FAILURES.badRecipient;
+        if (m === 'no-request' || m === 'no-invite') return FAILURES.notFound;
+        if (m === 'expired') return FAILURES.expired;
+        if (m === 'not-a-relationship' || m === 'not-friends' || m === 'not-recipient') return FAILURES.forbidden;
+        // AbortError (7 s timeout), TypeError (DNS / offline / CORS).
+        if (/abort|failed|network|load/i.test(m)) return FAILURES.offline;
+        return FAILURES.generic;
+    }
+    function reportFailure(title, why) {
+        notifyLocal('note', title || why.title, why.body);
+    }
+
     /* ── friends ────────────────────────────────────────────── */
     function friends() { return S.friends; }
     function getF(uid) { return S.friends[uid] || null; }
 
     /**
      * Send (or re-send) a friend request.
-     * Optimistic locally, but the server is authoritative: on failure the
-     * optimistic row is rolled back and the user is told, rather than
-     * leaving a "Sent" row that no recipient will ever see.
+     *
+     * On failure the row is KEPT and flagged `unsent` rather than deleted:
+     * the user keeps what they did, the UI shows it as "not delivered" with
+     * a Retry action, and nothing claims to have been sent.
      */
     async function requestFriend(uid, name, source, img) {
         if (!uid || uid === uidOf()) return null;
         clearTombstone(uid);
         const f = addFriendLocal(uid, name, source, img);
+        if (!f) return null;
         if (apiBase() === null) return f; // device-local mode: honest fallback
+        if (isSignedOut()) {
+            f.unsent = true; f.unsentWhy = 'signedOut';
+            save(); renderBell();
+            reportFailure(null, FAILURES.signedOut);
+            return f;
+        }
         try {
             const r = await api('friends/request', {
                 friendUid: uid, friendName: f ? f.name : '',
                 friendImg: (f && f.img) || null, myName: meName(), myImg: myAvatar()
             });
             if (r && r.error) throw new Error(r.error);
+            delete f.unsent; delete f.unsentWhy;
+            save(); renderBell();
             return f;
         } catch (e) {
-            // Roll back: never show a request the server refused to store.
-            try {
-                delete S.friends[uid];
-                S.pendingOut = S.pendingOut.filter((x) => x !== uid);
-                save(); renderBell();
-            } catch (_) {}
-            notifyLocal('note', 'Could not send request',
-                (e && e.message === 'http-409') ? 'You are already friends with them.'
-                    : 'The server refused the request — check your connection and try again.');
-            return null;
+            const why = explainFailure(e);
+            f.unsent = true; f.unsentWhy = String((e && e.message) || '').slice(0, 24);
+            save(); renderBell();
+            reportFailure(null, why);
+            return f;
         }
     }
 
@@ -289,7 +357,7 @@
             // Put the request back so the user can retry, and say why.
             if (req && !S.pendingIn.some((p) => p.uid === uid)) S.pendingIn.unshift(req);
             save(); renderBell();
-            notifyLocal('note', 'Could not accept', 'The server did not confirm — your request is still pending.');
+            notifyLocal('note', 'Could not accept', explainFailure(e).body);
             return null;
         }
         const f = addFriendLocal(uid, (req && req.name) || 'Player', 'link', (req && req.img) || null);
@@ -319,9 +387,16 @@
         try {
             const r = await api('friends/respond', { fromUid: uid, accept: false, myName: meName() });
             if (r && r.error) throw new Error(r.error);
-        } catch (_) {
-            notifyLocal('note', 'Could not decline',
-                'The server did not confirm. This device has hidden the request, but it may reappear after a refresh.');
+        } catch (e) {
+            // The local hide stays (the user asked for it), but say exactly
+            // what happened. On a transport failure the request is still
+            // alive server-side, so drop the tombstone rather than silently
+            // swallowing a decline that never landed.
+            reportFailure('Could not decline the request', explainFailure(e));
+            if (/abort|failed|network|load|^http-5|no-api/.test(String((e && e.message) || ''))) {
+                try { delete S.declined[uid]; } catch (_) {}
+                save();
+            }
         }
     }
 
@@ -352,8 +427,7 @@
             if (backup) S.friends[uid] = backup;
             S.pendingOut = wasOut; S.pendingIn = wasIn;
             save(); renderBell();
-            notifyLocal('note', 'Could not remove friend',
-                'The server refused the change, so nothing was deleted. Try again when you are online.');
+            notifyLocal('note', 'Could not remove friend', explainFailure(e).body);
             return;
         }
         pullSnapshot();
@@ -429,9 +503,14 @@
 
             // Authoritative deletion: a local friend the server no longer
             // lists, and which is not an in-flight request, was removed (here
-            // or on another device) — drop it.
+            // or on another device) — drop it. Rows flagged `unsent` are kept:
+            // they represent an attempt that never reached the server, and
+            // deleting them would destroy the user's work before they could
+            // retry it.
             for (const uid of Object.keys(S.friends)) {
                 if (uid === uidOf() || serverUids.has(uid) || pendingUids.has(uid)) continue;
+                const rec = S.friends[uid];
+                if (rec && rec.unsent) continue;
                 const wasTombstoned = !!S.removed[uid];
                 delete S.friends[uid];
                 S.pendingOut = S.pendingOut.filter((x) => x !== uid);
@@ -451,6 +530,21 @@
                 if (!q || !q.uid || q.uid === uidOf()) continue;
                 if (isBlocked(q.uid) || S.friends[q.uid]) continue;
                 nextOut.push(q.uid);
+            }
+            // An undelivered attempt stays listed so the user can retry or cancel it.
+            for (const uid of S.pendingOut.slice()) {
+                if (uid === uidOf()) continue;
+                const rec = S.friends[uid];
+                if (rec && rec.unsent && !nextOut.includes(uid)) nextOut.push(uid);
+            }
+            // The flag clears ONLY once the server actually lists the request
+            // as pending — i.e. the send landed. (Inverting this condition
+            // would wipe the flag on every poll and hide a failed send.)
+            for (const uid of nextOut.slice()) {
+                const rec = S.friends[uid];
+                if (rec && rec.unsent && outbound.some((q) => q && q.uid === uid)) {
+                    delete rec.unsent; delete rec.unsentWhy;
+                }
             }
             const inSig = nextIn.map((p) => p.uid).join(',');
             if (inSig !== S.pendingIn.map((p) => p.uid).join(',')) changed = true;
@@ -1222,7 +1316,7 @@ let needSnapshot = false;
             if (apiBase() === null) throw new Error('no-api');
             const r = await api(`rank?cat=${encodeURIComponent(cat)}&limit=50&offset=${offset}`);
             if (r && Array.isArray(r.board) && (r.total || 0) > 0) {
-                const board = r.board.map((row) => ({
+                const shape = (row) => ({
                     rank: row.rank,
                     uid: row.uid || null,          // strangers arrive WITHOUT a uid
                     name: row.name,
@@ -1230,17 +1324,31 @@ let needSnapshot = false;
                     tier: row.tier,
                     self: !!row.self,
                     friend: !!row.friend
-                }));
-                const selfRow = board.find((b) => b.self);
+                });
+                const board = r.board.map(shape);
+                // Every friend with their real global rank, regardless of the
+                // page on screen, so "you and your friends" is never cut off
+                // by whichever slice the ladder happens to be showing.
+                const friendBoard = Array.isArray(r.friends) ? r.friends.map(shape) : [];
+                const selfRow = board.find((b) => b.self) || friendBoard.find((b) => b.self);
                 return {
                     server: true, total: r.total, offset: r.offset || 0,
                     hasMore: !!r.hasMore, myRank: r.myRank,
                     myRating: (selfRow ? selfRow.rating : r.myRating),
+                    friends: friendBoard,
                     board
                 };
             }
             throw new Error('empty-board');
-        } catch (_) { /* fall through to the device board */ }
+        } catch (e) {
+            // A live backend that errors must NOT silently degrade to the
+            // device board: that would present a two-player local list as if
+            // it were the global ladder. Say it is unavailable instead.
+            const m = String((e && e.message) || '');
+            if (m && !/no-api|empty-board/.test(m)) {
+                return { server: true, error: 'unavailable', total: 0, offset: 0, hasMore: false, myRank: null, friends: [], board: [] };
+            }
+        }
 
         try {
             if (typeof OnlineRatings !== 'undefined' && OnlineRatings.board) {
@@ -1260,23 +1368,51 @@ let needSnapshot = false;
                     return { rank: i + 1, uid: null, name: firstNameOf(p.name), rating: p.rating, tier: tierOf(p.rating), self: false, friend: false };
                 });
                 const at = board.findIndex((b) => b.self);
-                return { server: false, total: board.length, offset: 0, hasMore: false, myRank: at >= 0 ? at + 1 : null, board: board.slice(0, 50) };
+                return { server: false, total: board.length, offset: 0, hasMore: false, myRank: at >= 0 ? at + 1 : null, friends: board.filter((b) => b.friend || b.self), board: board.slice(0, 50) };
             }
         } catch (_) {}
-        return { server: false, total: 0, offset: 0, hasMore: false, myRank: null, board: [] };
+        return { server: false, total: 0, offset: 0, hasMore: false, myRank: null, friends: [], board: [] };
     }
+
     /**
-     * The hall of fame is a DEVICE list. It used to POST /api/hall/join and
-     * read /api/hall, both of which returned every member's uid to every
-     * caller — a global identifier dump with no privacy rule. There is no
-     * server registry, so the feature stays explicitly local and is labelled
-     * as such in the UI rather than pretending to be global.
+     * The hall of fame.
+     *
+     * With a backend it is EVERY registered account from the authoritative
+     * store, with avatars, paginated and privacy-filtered exactly like the
+     * ladder (GET /api/hall). Without one it stays a clearly-labelled local
+     * list: the previous server endpoint leaked every member's raw uid and
+     * full name to every caller, and there is no registry to fall back on.
      */
-    async function hallList() {
+    async function hallList(opts) {
+        const offset = opts && Number.isFinite(opts.offset) ? Math.max(0, opts.offset | 0) : 0;
+        hallOffset = offset;
+        const shape = (row) => ({
+            position: row.rank, name: row.name, uid: row.uid || null,
+            img: row.img || null, rating: row.rating, tier: row.tier,
+            self: !!row.self, friend: !!row.friend,
+        });
+        try {
+            if (apiBase() === null) throw new Error('no-api');
+            const r = await api(`hall?cat=${encodeURIComponent(currentCat)}&limit=50&offset=${offset}`);
+            if (r && Array.isArray(r.board) && r.total > 0) {
+                return {
+                    server: true, total: r.total, offset: r.offset || 0, hasMore: !!r.hasMore,
+                    hall: r.board.map(shape),
+                    friends: (Array.isArray(r.friends) ? r.friends : []).map(shape),
+                };
+            }
+            throw new Error('empty-hall');
+        } catch (e) {
+            const m = String((e && e.message) || '');
+            if (m && !/no-api|empty-hall/.test(m)) {
+                return { server: true, error: 'unavailable', total: 0, offset: 0, hasMore: false, hall: [], friends: [] };
+            }
+        }
         const rows = Object.values(S.friends).sort((a, b) => (a.since || 0) - (b.since || 0))
-            .map((f, i) => ({ uid: f.uid, name: f.name, at: f.since, position: i + 1 }));
-        return { server: false, hall: rows };
+            .map((f, i) => ({ position: i + 1, uid: f.uid, name: f.name, img: f.img || null, rating: null, self: false, friend: true }));
+        return { server: false, total: rows.length, offset: 0, hasMore: false, hall: rows, friends: rows };
     }
+    let hallOffset = 0;
 
     /* base64url (link-safe, no padding) for embedding photos in links */
     function b64urlEncode(str) {
@@ -1478,7 +1614,7 @@ let needSnapshot = false;
 
     function renderFriends(box) {
         const rows = Object.values(S.friends).filter((f) => !f.outbound).sort((a, b) => streakOf(b) - streakOf(a) || (b.lastSeen || 0) - (a.lastSeen || 0));
-        const sent = Object.values(S.friends).filter((f) => f.outbound).sort((a, b) => (b.since || 0) - (a.since || 0));
+        const sent = Object.values(S.friends).filter((f) => f.outbound && !f.confirmed).sort((a, b) => (b.since || 0) - (a.since || 0));
         const rival = rivalOfWeek();
         const reqs = S.pendingIn;
         box.innerHTML = `
@@ -1499,8 +1635,8 @@ let needSnapshot = false;
                 <div class="fr-req">${avatarHTML(p.name, null, p.img)}<div class="fr-id"><strong>${esc(p.name)}</strong><span class="fr-sub">wants to be friends</span></div>
                 <span class="fr-reqacts"><button class="btn-primary sm" data-faction="accept" data-uid="${esc(p.uid)}" type="button">Accept</button><button class="btn-secondary sm" data-faction="decline" data-uid="${esc(p.uid)}" type="button">Decline</button></span></div>`).join('')}</div>` : ''}
             ${sent.length ? `<div class="fr-reqs"><h3>Sent requests</h3>${sent.map((p) => `
-                <div class="fr-req sent">${avatarHTML(p.name, null, p.img)}<div class="fr-id"><strong>${esc(p.name)}</strong><span class="fr-sub">waiting for answer</span></div>
-                <span class="fr-reqacts"><button class="btn-secondary sm" data-faction="remove" data-uid="${esc(p.uid)}" type="button">Cancel request</button></span></div>`).join('')}</div>` : ''}
+                <div class="fr-req sent${p.unsent ? ' unsent' : ''}">${avatarHTML(p.name, null, p.img)}<div class="fr-id"><strong>${esc(p.name)}</strong><span class="fr-sub">${p.unsent ? 'not delivered — nothing was sent' : 'waiting for answer'}</span></div>
+                <span class="fr-reqacts">${p.unsent ? `<button class="btn-primary sm" data-faction="retry-req" data-uid="${esc(p.uid)}" data-name="${esc(p.name)}"${p.img ? ` data-img="${esc(p.img)}"` : ''} type="button">Retry</button>` : ''}<button class="btn-secondary sm" data-faction="remove" data-uid="${esc(p.uid)}" type="button">Cancel request</button></span></div>`).join('')}</div>` : ''}
             <div class="fr-grid" id="fr-grid"></div>
 `;
         const grid = box.querySelector('#fr-grid');
@@ -1588,15 +1724,69 @@ let needSnapshot = false;
         return `<span class="fr-tier ${t.cls}">${t.name}</span>`;
     }
 
+    /**
+     * One ladder row. Strangers are blurred: their name is only ever a first
+     * name (chosen server-side), so the blur is presentation, not concealment,
+     * and the readable text stays in the accessibility tree so a screen reader
+     * is never handed an unreadable string.
+     */
+    function boardRow(r) {
+        const blur = !r.self && !r.friend;
+        const img = r.self ? myAvatar() : ((r.uid && (S.friends[r.uid] || {}).img) || null);
+        return `<div class="fr-brow${r.self ? ' me' : ''}${blur ? ' blurry' : ''}">`
+            + `<span class="fr-rank">${r.rank}</span>`
+            + (r.name ? avatarHTML(r.name, null, img) : '<span class="fr-ava ghost" aria-hidden="true">?</span>')
+            + `<span class="fr-bname"${blur ? ' title="A stranger on DoChess"' : ''}>${r.name ? esc(r.name) : 'a quiet rival'}</span>`
+            + (r.rating != null ? tierChip(r.rating) : '')
+            + `<span class="fr-brating">${r.rating != null ? r.rating : '–'}</span></div>`;
+    }
+
+    let rankTimer = null;
+    let rankLoading = false;
+    let rankResumeHandler = null;
+    function stopRankAutoRefresh() {
+        try { if (rankTimer) { clearInterval(rankTimer); rankTimer = null; } } catch (_) {}
+    }
+    /**
+     * Keep the ladder fresh on its own: someone registers, or finishes a
+     * game, at any moment. Polls every 30 s while the tab is visible, and
+     * immediately when the user comes back to it.
+     */
+    function startRankAutoRefresh(box) {
+        stopRankAutoRefresh();
+        rankTimer = setInterval(() => {
+            try {
+                if (rankLoading || document.hidden) return;
+                if (!document.body.contains(box)) { stopRankAutoRefresh(); return; }
+                if (!document.getElementById('friends-screen')?.classList.contains('active')) return;
+                renderRanking(box);
+            } catch (_) {}
+        }, 30000);
+        try {
+            if (rankResumeHandler) document.removeEventListener('visibilitychange', rankResumeHandler);
+            rankResumeHandler = () => {
+                try {
+                    if (document.hidden) return;
+                    if (document.getElementById('friends-screen')?.classList.contains('active')) renderRanking(box);
+                } catch (_) {}
+            };
+            document.addEventListener('visibilitychange', rankResumeHandler);
+        } catch (_) {}
+    }
+
     async function renderRanking(box) {
         const offset = rankPageOffset || 0;
+        rankLoading = true;
         box.innerHTML = `<div class="fr-head"><div><p class="fr-kicker">Ranking</p><h2>Where you stand</h2></div>
             <div class="fr-cats" role="group" aria-label="Rating category">${RATING_CATS.map((c) => `<button class="btn-secondary sm${c === currentCat ? ' on' : ''}" data-faction="cat" data-cat="${c}" type="button">${c[0].toUpperCase() + c.slice(1)}</button>`).join('')}</div></div>
             <div id="fr-rankout"><p class="lobby-hint" role="status">Loading the board…</p></div>`;
         const out = box.querySelector('#fr-rankout');
         const data = await rankBoard(currentCat, { offset });
+        rankLoading = false;
         if (data.error === 'unavailable') {
-            out.innerHTML = `<p class="fr-empty">The ranking service is unreachable right now. Nothing is shown rather than a stale board.</p>`;
+            stopRankAutoRefresh();
+            out.innerHTML = `<p class="fr-empty" role="status">The ranking service is unreachable right now. Nothing is shown rather than a local list pretending to be the global ladder.</p>
+                <div class="fr-pager"><button class="btn-secondary sm" data-faction="rank-refresh" type="button">Try again</button></div>`;
             return;
         }
         // Accurate Elo: prefer the server's own row for self (other-device
@@ -1604,12 +1794,17 @@ let needSnapshot = false;
         const selfRow = (data.board || []).find((b) => b.self);
         const me = (selfRow && typeof selfRow.rating === 'number') ? selfRow.rating
             : (typeof data.myRating === 'number' ? data.myRating : myRating(currentCat));
-        // Count the noun phrase as a whole so pluralisation is never wrong
-        // ("1 player on this device" / "2 players on this device").
+        // Count the noun phrase as a whole so pluralisation is never wrong.
         const noun = data.server
             ? `registered player${data.total === 1 ? '' : 's'}`
             : `player${data.total === 1 ? '' : 's'} on this device`;
         const first = offset === 0;
+        const friendRows = (data.friends || []).filter((f) => !f.self).sort((a, b) => a.rank - b.rank);
+        // ONE ladder in true rank order. Friends who fall outside the current
+        // page are listed separately, so nothing is duplicated and the board
+        // never looks out of order.
+        const onPage = new Set((data.board || []).map((r) => `${r.uid || r.name}:${r.rank}`));
+        const offPageFriends = friendRows.filter((f) => !onPage.has(`${f.uid || f.name}:${f.rank}`));
         out.innerHTML = `
             ${first ? `
             <div class="fr-myrank">
@@ -1618,36 +1813,58 @@ let needSnapshot = false;
                 ${tierChip(me)}
             </div>
             ${podiumHTML(data)}` : `<p class="lobby-hint">Showing ranks ${offset + 1}–${offset + (data.board || []).length} of ${data.total}</p>`}
+            <div class="fr-livebar">
+                <span class="fr-live" role="status">${data.server ? 'Live — refreshes every 30s, so a player who just registered shows up' : 'Local list — connect DoChess for the global ladder'}</span>
+                <button class="btn-secondary sm" data-faction="rank-refresh" type="button">Refresh now</button>
+            </div>
             ${data.server
                 ? `<p class="lobby-hint">Global ladder — every registered DoChess account. Strangers show a first name only; friends show their full name.</p>`
                 : `<p class="lobby-hint"><strong>Device board.</strong> This browser is not connected to the ranking service, so only players this device has met are listed.</p>`}
-            <div class="fr-board">${(data.board || []).map((r) => {
-                const img = r.self ? myAvatar() : ((r.uid && (S.friends[r.uid] || {}).img) || null);
-                return `
-                <div class="fr-brow${r.self ? ' me' : ''}">
-                    <span class="fr-rank">${r.rank}</span>
-                    ${r.name ? avatarHTML(r.name, null, img) : `<span class="fr-ava ghost" aria-hidden="true">?</span>`}
-                    <span class="fr-bname">${r.name ? esc(r.name) : 'a quiet rival'}</span>
-                    ${r.rating != null ? tierChip(r.rating) : ''}
-                    <span class="fr-brating">${r.rating != null ? r.rating : '–'}</span>
-                </div>`;
-            }).join('') || `<p class="fr-empty">${data.server ? 'No players on the board yet.' : 'No players on this device board yet — finish an online game to appear.'}</p>`}</div>
+            ${offPageFriends.length ? `<h3 class="fr-subhead">Your friends, further down the ladder</h3><div class="fr-board">${offPageFriends.map(boardRow).join('')}</div>` : ''}
+            <div class="fr-board">${(data.board || []).map(boardRow).join('')
+                || `<p class="fr-empty">${data.server ? 'No other players on the board yet.' : 'No players on this device board yet — finish an online game to appear.'}</p>`}</div>
             ${data.server && data.total > (data.board || []).length ? `
             <div class="fr-pager">
                 ${data.offset > 0 ? `<button class="btn-secondary sm" data-faction="rank-page" data-offset="${Math.max(0, data.offset - 50)}" type="button">Previous</button>` : ''}
                 <span class="fr-sub">${data.offset + 1}–${data.offset + (data.board || []).length} of ${data.total}</span>
                 ${data.hasMore ? `<button class="btn-secondary sm" data-faction="rank-page" data-offset="${data.offset + 50}" type="button">Next</button>` : ''}
             </div>` : ''}`;
+        startRankAutoRefresh(box);
     }
 
-    async function renderHall(box) {
-        box.innerHTML = `<div class="fr-head"><div><p class="fr-kicker">Hall of fame</p><h2>First 1000 through the door</h2></div></div><div id="fr-hallout"><p class="lobby-hint">Polishing the plaques…</p></div>`;
+async function renderHall(box) {
+        const offset = hallOffset || 0;
+        box.innerHTML = `<div class="fr-head"><div><p class="fr-kicker">Hall of fame</p><h2>Every player on DoChess</h2></div></div><div id="fr-hallout"><p class="lobby-hint" role="status">Loading the hall…</p></div>`;
         const out = box.querySelector('#fr-hallout');
-        const data = await hallList();
+        const data = await hallList({ offset });
+        if (data.error === 'unavailable') {
+            out.innerHTML = `<p class="fr-empty" role="status">The hall of fame is unreachable right now. Nothing is shown rather than a local list pretending to be global.</p>
+                <div class="fr-pager"><button class="btn-secondary sm" data-faction="hall-refresh" type="button">Try again</button></div>`;
+            return;
+        }
+        const friendUids = new Set((data.friends || []).map((f) => f.uid).filter(Boolean));
+        const hallRow = (h) => {
+            const blur = !h.self && !h.friend;
+            const img = h.img || (h.uid && (S.friends[h.uid] || {}).img) || null;
+            return `<div class="fr-hof${h.self ? ' me' : ''}${blur ? ' blurry' : ''}">`
+                + avatarHTML(h.name, null, img)
+                + `<div class="fr-id"><strong>#${h.position} ${esc(h.name)}</strong>`
+                + `<span class="fr-sub">${h.rating != null ? h.rating : '–'}${h.rating != null ? ' · ' + tierOf(h.rating).name : ''}</span></div></div>`;
+        };
         out.innerHTML = `
-            ${data.server ? '' : `<p class="lobby-hint"><strong>This hall is local to this device.</strong> There is no global registry, so it lists your friends in join order only.</p>`}
-            <div class="fr-hall">${data.hall.slice(0, 100).map((h) => `
-                <div class="fr-hof">${avatarHTML(h.name, null, (S.friends[h.uid] || {}).img || null)}<div class="fr-id"><strong>#${h.position} ${esc(h.name)}</strong><span class="fr-sub">${h.at ? new Date(h.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span></div></div>`).join('') || `<p class="fr-empty">Empty hall — be early.</p>`}</div>`;
+            ${data.server
+                ? `<p class="lobby-hint">Every registered DoChess account — <strong>${data.total}</strong> in total. Strangers show a first name only.</p>`
+                : `<p class="lobby-hint"><strong>This hall is local to this device.</strong> Connect to DoChess to see every registered player.</p>`}
+            ${friendUids.size ? `<h3 class="fr-subhead">Your friends</h3><div class="fr-hall">${(data.friends || []).map(hallRow).join('')}</div>` : ''}
+            <h3 class="fr-subhead">${friendUids.size ? 'Everyone else' : 'The hall'}</h3>
+            <div class="fr-hall">${(data.hall || []).filter((h) => !friendUids.has(h.uid)).map(hallRow).join('')
+                || `<p class="fr-empty">${data.server ? 'Nobody else is registered yet.' : 'Be early — your friends appear here.'}</p>`}</div>
+            ${data.server && data.total > (data.hall || []).length ? `
+            <div class="fr-pager">
+                ${data.offset > 0 ? `<button class="btn-secondary sm" data-faction="hall-page" data-offset="${Math.max(0, data.offset - 50)}" type="button">Previous</button>` : ''}
+                <span class="fr-sub">${data.offset + 1}–${data.offset + (data.hall || []).length} of ${data.total}</span>
+                ${data.hasMore ? `<button class="btn-secondary sm" data-faction="hall-page" data-offset="${data.offset + 50}" type="button">Next</button>` : ''}
+            </div>` : ''}`;
     }
 
     function renderActivity(box) {
@@ -1699,8 +1916,8 @@ let needSnapshot = false;
         warnStreaks();
         if (currentTab === 'friends') renderFriends(body);
         else if (currentTab === 'ranking') renderRanking(body);
-        else if (currentTab === 'hall') renderHall(body);
-        else renderActivity(body);
+        else if (currentTab === 'hall') { stopRankAutoRefresh(); renderHall(body); }
+        else { stopRankAutoRefresh(); renderActivity(body); }
         // ONE authoritative reconcile on open (friends + requests + resolved),
         // plus the inbox and pending invitations.
         pullSnapshot().then((ch) => {
@@ -1749,6 +1966,9 @@ let needSnapshot = false;
         if (a === 'tab') { open(el.dataset.tab); return; }
         if (a === 'cat') { currentCat = el.dataset.cat || 'blitz'; rankPageOffset = 0; open('ranking'); return; }
         if (a === 'rank-page') { rankPageOffset = Math.max(0, parseInt(el.dataset.offset, 10) || 0); open('ranking'); return; }
+        if (a === 'rank-refresh') { open('ranking'); return; }
+        if (a === 'hall-page') { hallOffset = Math.max(0, parseInt(el.dataset.offset, 10) || 0); open('hall'); return; }
+        if (a === 'hall-refresh') { open('hall'); return; }
         if (a === 'copy-link') {
             const link = profileLink();
             if (!link) { notifyLocal('note', 'Sign in first', 'Guest accounts have no friend link — sign in and try again.'); open(currentTab); return; }
@@ -1757,7 +1977,22 @@ let needSnapshot = false;
         }
         if (a === 'add') {
             if (S.pendingIn.some((p) => p.uid === uid)) await acceptFriend(uid);
-            else await requestFriend(uid, el.dataset.name, 'search', el.dataset.img || null);
+            else {
+                // Do not fire a doomed request at the server when there is no
+                // identity: name the missing step instead of surfacing a
+                // generic refusal a few seconds later.
+                if (apiBase() !== null && isSignedOut()) {
+                    notifyLocal('note', FAILURES.signedOut.title, FAILURES.signedOut.body);
+                    open(currentTab);
+                    return;
+                }
+                await requestFriend(uid, el.dataset.name, 'search', el.dataset.img || null);
+            }
+            open(currentTab); return;
+        }
+        if (a === 'retry-req') {
+            const rec = getF(uid);
+            await requestFriend(uid, el.dataset.name || (rec && rec.name) || 'Player', 'search', el.dataset.img || (rec && rec.img) || null);
             open(currentTab); return;
         }
         if (a === 'accept') { await acceptFriend(uid); open(currentTab); return; }
@@ -1888,6 +2123,8 @@ let needSnapshot = false;
         // pullRequests / pullEdges are retained as aliases of the single
         // authoritative snapshot for any external caller.
         pullRequests, pullEdges, pullSnapshot, pullInbox, pullInvites,
-        sendGameInvite, checkInvitePopup, p2pEnsure: ensureP2PInbox, version: 4,
+        sendGameInvite, checkInvitePopup, p2pEnsure: ensureP2PInbox, version: 5,
+        // Exposed for tests and for the retry UI.
+        explainFailure, FAILURES, isSignedOut,
     };
 })();

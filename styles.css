@@ -4549,3 +4549,28 @@ body[data-theme="day"] .ms-link.active, body[data-theme="day"] .ms-link.active:h
 #tc-overlay .tc-time { font-weight: 650; font-variant-numeric: tabular-nums; }
 #tc-overlay .tc-cat { font-size: 0.7rem; color: var(--text-muted, #9aa4b2); }
 #tc-overlay .fr-pager { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.7rem; }
+
+/* ── Live ranking + hall of fame (2026-10 audit) ─────────────────────
+   The ladder refreshes itself, and strangers are blurred because their
+   name is only ever a first name chosen server-side. */
+.fr-livebar {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+    margin: 0.8rem 0 0.2rem; flex-wrap: wrap;
+}
+.fr-live { font-size: 0.78rem; color: var(--text-muted, #9aa4b2); }
+.fr-live::before {
+    content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 0.4rem;
+    border-radius: 50%; background: #4ade80; vertical-align: middle;
+}
+.fr-subhead {
+    margin: 1.1rem 0 0.45rem; font-size: 0.72rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-muted, #9aa4b2);
+}
+.fr-brow.blurry .fr-bname,
+.fr-brow.blurry .fr-ava,
+.fr-hof.blurry .fr-id { filter: blur(3.5px); opacity: 0.75; }
+.fr-brow.blurry:hover .fr-bname,
+.fr-brow.blurry:focus-within .fr-bname { filter: none; opacity: 1; }
+.fr-hof.me { background: var(--surface-2, rgba(255, 255, 255, 0.05)); border-radius: 10px; }
+.fr-req.unsent { border-left: 3px solid #f0a44a; }
+.fr-req.unsent .fr-sub { color: #f0a44a; }

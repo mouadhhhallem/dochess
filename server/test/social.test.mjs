@@ -432,6 +432,57 @@ test('a caller cannot unlock a stranger by claiming them as a friend', async () 
 
 /* ── tiers + time controls ───────────────────────────────────────── */
 
+/* ── the hall of fame ────────────────────────────────────────────── */
+
+// The user-facing requirement: the hall lists EVERY registered account from
+// the authoritative store, with their picture, not just this device's friends.
+test('the hall lists every registered account, with avatars', async () => {
+    const withPhoto = await register('user_hallphoto001', 'Hall Photo');
+    await db().updateUser(withPhoto, { s: { updatedAt: Date.now(), data: 1 } },
+        { name: 'Hall Photo', image: 'https://img.example/hall.png' });
+    const viewer = await register('user_hallviewer01', 'Hall Viewer');
+
+    const hall = await SOC.hallPage({ cat: 'blitz', viewerUid: viewer, limit: 100, offset: 0 });
+    assert.ok(hall.total >= 3, `hall should list every registered account, got ${hall.total}`);
+    assert.ok(hall.board.some((r) => r.name === 'Hall'), 'strangers appear by first name');
+    const photo = hall.board.find((r) => r.name === 'Hall');
+    assert.equal(photo.img, 'https://img.example/hall.png', 'the hall carries a profile picture');
+    // Privacy is unchanged in the hall: still no uid, no full name for a stranger.
+    assert.equal('uid' in photo, false);
+    assert.ok(!JSON.stringify(hall.board).includes('Hall Photo'));
+
+    // It is paginated, like the ladder.
+    const seen = [];
+    for (let off = 0; off < hall.total; off += 2) {
+        const page = await SOC.hallPage({ cat: 'blitz', viewerUid: viewer, limit: 2, offset: off });
+        for (const row of page.board) seen.push(row.rank);
+    }
+    assert.equal(new Set(seen).size, hall.total);
+});
+
+// "You and your friends" must be complete no matter which ladder page is open.
+test('the ladder always returns every friend, even off-page', async () => {
+    const viewer = await register('user_friendpage001', 'Viewer');
+    const friend = await register('user_friendpage002', 'Far Friend');
+    await SOC.requestFriend(friend, { toUid: viewer, name: 'Far Friend' });
+    await SOC.respondToRequest(viewer, friend, true);
+
+    // Put a lot of higher-rated accounts on the ladder so the friend falls
+    // well outside page 1.
+    for (let i = 0; i < 60; i++) {
+        const u = `user_rich${String(i).padStart(6, '0')}`;
+        await db().updateUser(u, { s: { updatedAt: Date.now(), data: 1 } }, { name: `Rich ${i}` });
+        await db().insertGame({ userId: u, gameId: `g${i}`, result: 'win', date: i + 1, control: { id: 'blitz', base: 180000, inc: 0 } });
+    }
+    SOC.invalidateRatings();
+
+    const page1 = await SOC.rankPage({ cat: 'blitz', viewerUid: viewer, limit: 50, offset: 0 });
+    assert.ok(page1.friends.some((r) => r.uid === friend), 'the friend is returned even off-page');
+    assert.equal(page1.friends.find((r) => r.uid === friend).name, 'Far Friend', 'friends see the full name');
+    assert.equal(page1.board.some((r) => r.uid === friend), false, 'and is not on page 1');
+    assert.ok(page1.friends.find((r) => r.uid === friend).rank > 50);
+});
+
 test('tiers are derived from the rating', () => {
     assert.equal(tierOf(800), 'bronze');
     assert.equal(tierOf(1000), 'silver');
