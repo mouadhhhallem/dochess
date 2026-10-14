@@ -411,6 +411,71 @@ test('8-10: every supported time control invites, and both players reach the sam
     }
 });
 
+test('11: the sender is taken to the board when the recipient accepts', async ({ browser }) => {
+    const sender = await newAccount(browser, DAVE, 'Dave Diaz');
+    const recip = await newAccount(browser, EVE, 'Eve Ellis');
+    await call('POST', '/api/friends/request', { friendUid: EVE, friendName: 'Eve Ellis' }, DAVE);
+    await call('POST', '/api/friends/respond', { fromUid: DAVE, accept: true }, EVE);
+
+    // The sender drives the REAL flow: friends list → Invite to play →
+    // time-control picker → Send invite (which also hosts the room).
+    await expect.poll(() => relist(sender.page), { timeout: 25000 }).toContain(EVE);
+    await sender.page.evaluate(() => window.app.showFriends('friends'));
+    await sender.page.evaluate(() => window.DoChessFriends.pollNow());
+    const playBtn = sender.page.locator(`[data-faction="play"][data-uid="${EVE}"]`);
+    await expect(playBtn, 'sender can invite without visiting Online').toBeVisible({ timeout: 20000 });
+    await playBtn.click();
+    await expect(sender.page.locator('#tc-overlay')).toBeVisible({ timeout: 10000 });
+    await sender.page.locator('#tc-overlay input[value="5:0"]').check();
+    await sender.page.locator('#tc-overlay [data-tc="go"]').click();
+    await sender.page.waitForFunction(() => {
+        try { return !!JSON.parse(localStorage.getItem('cc_pending_invite') || 'null')?.matchId; }
+        catch (_) { return false; }
+    }, null, { timeout: 30000 });
+    const matchId = await sender.page.evaluate(() => JSON.parse(localStorage.getItem('cc_pending_invite')).matchId);
+
+    // The sender sees their own sent invite — and nobody else does.
+    const asSender = await call('GET', '/api/invites', undefined, DAVE);
+    const row = (asSender.body.sent || []).find((s) => s.matchId === matchId);
+    expect(row?.status, 'sent invite visible to the sender').toBe('pending');
+    const asStranger = await call('GET', '/api/invites', undefined, CAROL);
+    expect((asStranger.body.sent || []).some((s) => s.matchId === matchId), 'sent invites never leak').toBe(false);
+
+    // The recipient accepts exactly like the popup does.
+    expect((await call('POST', '/api/invites/respond', { matchId, accept: true }, EVE)).body.status).toBe('accepted');
+
+    // The sender must NOT still be parked on friends: within a couple of
+    // poll cycles they land on the live board — same room they hosted.
+    await sender.page.waitForFunction(
+        () => document.getElementById('online-screen')?.classList.contains('active'),
+        null, { timeout: 30000 });
+    const code = await sender.page.evaluate(() => window.app.online?.code);
+    expect(code, 'sender reaches their own waiting room').toBeTruthy();
+    await expect.poll(async () => sender.page.evaluate(() => localStorage.getItem('cc_pending_invite')),
+        { timeout: 15000 }).toBe(null);
+
+    // Decline: the sender is NOT dragged anywhere; the wait just clears
+    // (the server's inbox note carries the news).
+    await sender.page.evaluate(() => window.app.showFriends('friends'));
+    await sender.page.evaluate(() => window.DoChessFriends.pollNow());
+    await expect(sender.page.locator(`[data-faction="play"][data-uid="${EVE}"]`)).toBeVisible({ timeout: 20000 });
+    await sender.page.locator(`[data-faction="play"][data-uid="${EVE}"]`).click();
+    await expect(sender.page.locator('#tc-overlay')).toBeVisible({ timeout: 10000 });
+    await sender.page.locator('#tc-overlay [data-tc="go"]').click();
+    await sender.page.waitForFunction(() => {
+        try { return !!JSON.parse(localStorage.getItem('cc_pending_invite') || 'null')?.matchId; }
+        catch (_) { return false; }
+    }, null, { timeout: 30000 });
+    const matchId2 = await sender.page.evaluate(() => JSON.parse(localStorage.getItem('cc_pending_invite')).matchId);
+    expect(matchId2).not.toBe(matchId);
+    expect((await call('POST', '/api/invites/respond', { matchId: matchId2, accept: false }, EVE)).body.status).toBe('declined');
+    await expect.poll(async () => sender.page.evaluate(() => localStorage.getItem('cc_pending_invite')),
+        { timeout: 20000 }).toBe(null);
+    await expect(sender.page.locator('#online-screen')).not.toHaveClass(/active/);
+
+    await sender.ctx.close(); await recip.ctx.close();
+});
+
 test('12-13: expiry, decline, reload, duplicate and malformed invitations', async () => {
     // Declining removes it from the pending list.
     const inv = await call('POST', '/api/invites', { toUid: EVE, minutes: 3, incSec: 2, code: 'DDD444' }, DAVE);
@@ -552,7 +617,8 @@ test('a failed send keeps the request, says why, and can be retried', async ({ b
 });
 
 // The hall must list EVERY registered account from the database, with
-// their picture — not just this device's friends.
+// their picture AND their full name, out in the open — not just this
+// device's friends, not blurred.
 test('the hall of fame lists every registered account with their picture', async () => {
     const PHO = 'user_e2ehallphoto01';
     await call('PUT', '/api/state', {
@@ -561,13 +627,16 @@ test('the hall of fame lists every registered account with their picture', async
     }, PHO);
     const r = await call('GET', '/api/hall?cat=blitz&limit=100&offset=0', undefined, EVE);
     expect(r.status).toBe(200);
-    const row = r.body.board.find((h) => h.name === 'Hall');
-    expect(row, 'a stranger from the database is in the hall').toBeTruthy();
+    expect(r.body.naming, 'the hall contract is full names').toBe('full');
+    expect(['all', 'synced'], 'the hall says honestly which registry it read').toContain(r.body.scope);
+    const row = r.body.board.find((h) => h.name === 'Hall Photo');
+    expect(row, 'a stranger from the database is in the hall by full name').toBeTruthy();
     expect(row.img, 'with their picture').toBe('https://img.example/hall.png');
     expect(r.body.total, 'the hall counts every registered account').toBeGreaterThanOrEqual(7);
-    // Privacy still holds in the hall.
+    // Full name and photo — but still no uid, never an email.
     expect('uid' in row).toBe(false);
-    expect(JSON.stringify(r.body.board)).not.toContain('Hall Photo');
+    expect('email' in row).toBe(false);
+    expect(JSON.stringify(r.body.board)).not.toContain('@');
 });
 
 // "you and your friends and the rest", complete no matter which page is open.

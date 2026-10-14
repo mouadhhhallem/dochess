@@ -49,9 +49,10 @@ One Node process serves **both** the static site and the API on `PORT`
 | `GET /api/notify` | Clerk session | inbox items + unread count |
 | `POST /api/notify/ack` | Clerk session | mark inbox read |
 | `POST /api/invites` | Clerk session | create a match invitation (friends only; server mints the match id and expiry) |
-| `GET /api/invites` | Clerk session | my pending invitations |
+| `GET /api/invites` | Clerk session | my pending invitations **plus `sent`**: my own sent invites with their live status, so the sender auto-joins on accept |
 | `POST /api/invites/respond` | Clerk session | accept / decline (recipient only, idempotent) |
-| `GET /api/rank?cat=&limit=&offset=` | Clerk session | **global ladder**: every registered account at 800+, deterministic order, real pagination, per-viewer serialization |
+| `GET /api/rank?cat=&limit=&offset=` | Clerk session | **global ladder**: EVERY registered account (users collection + the full Clerk registry, even never-synced), deterministic order, real pagination, per-viewer serialization; `scope: all/synced` says honestly which registry was read |
+| `GET /api/hall?cat=&limit=&offset=` | Clerk session | **hall of fame**: the FIRST 1000 accounts by rating, FULL display names + avatars, out in the open (explicit owner decision, contract `naming: full`); no uid/email; same Clerk-union registry + `scope` as the ladder |
 | `POST /api/events/ticket` | Clerk session | one-time ticket for the push stream (60 s) |
 | `GET /api/events?ticket=` | ticket (no session header; EventSource cannot set headers) | SSE fan-out, auto-reconnect |
 | `*` | none | static files from the project root |
@@ -291,6 +292,22 @@ to be a best-effort PeerJS dial with no server record at all.
 - Device-local P2P invites remain as a **clearly-labelled fallback** for the
   no-backend case (GitHub Pages). That path says so in the UI instead of
   claiming a durable delivery.
+- **Both players land on the board (2026-10-14).** The recipient's accept
+  already went straight to the board; now the SENDER does too: `GET
+  /api/invites` carries `sent` (the sender's own invites with live status),
+  and the client watches them on every poll/push/boot. On accept the sender
+  is taken to their live waiting room — or, after a reload killed the room,
+  the SAME code is re-hosted (same control) and then shown. Decline clears
+  the wait silently (the server's inbox note carries the news); expiry clears
+  it with an honest message. Neither player visits the Online page by hand.
+- **Registry union (2026-10-14).** The ladder and the hall read the `users`
+  collection PLUS the full Clerk registry (`clerkListUsers`, paginated,
+  120 s cache), so accounts that registered but never synced appear at 800
+  immediately. `scope: all/synced` reports honestly which was read.
+- **Hall naming (2026-10-14, explicit owner decision).** The hall of fame
+  shows FULL display names + avatars for the first 1000 accounts, unblurred
+  (`naming: full`). The ladder keeps first-name-only strangers. No uid or
+  email is included in hall rows; both endpoints stay signed-in-only.
 - Durability contract: acknowledged API writes (state sections, game
   records, friendships, requests, invitations) are durable before the 200
   response. In-flight move traffic stays peer-to-peer and is never blocked on

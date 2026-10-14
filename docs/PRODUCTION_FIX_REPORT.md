@@ -532,3 +532,41 @@ Re-ran everything instead of trusting the notes above:
 - Result: **no new bugs, no regressions, no code changes required.**
   Backend deployment remains blocked on operator action (§10/§11) —
   unchanged, and reported honestly rather than fabricated.
+
+---
+
+## 15. Sender auto-join, full-registry ladder, open hall of fame (2026-10-14)
+
+Three user-reported items, all reproduced first, then fixed and verified:
+
+1. **Sender stranded on the friends panel.** The recipient's accept went
+   straight to the board, but the sender — who is hosting the room — got no
+   signal and had to walk Friends → Online by hand. Root cause: `GET
+   /api/invites` returned only RECEIVED invites, nothing polled the sender's
+   pending invite, and the `invite-accepted` push was handled by re-pulling
+   received invites only. Fix: the response now carries `sent` (own invites
+   with live status + recipient name); the client watches them on every
+   poll/push/boot (`watchSentInvite`). On accept the sender is taken to the
+   live waiting room — or, if a reload killed the room, the SAME code is
+   re-hosted (same control) and then shown. Decline clears silently (the
+   server inbox note carries the news); expiry clears with an honest
+   message. Proven by new E2E test 11 (real UI: Invite → picker → send →
+   accept → sender on board; plus the decline case).
+2. **Ladder missing registered users who never synced.** The board was built
+   from the `users` collection only, so ~10 real Clerk accounts (Mohamed
+   Jebahi, Mossab Hallem, archie, …) were invisible. Fix: `clerkListUsers`
+   paginates the full Clerk registry (120 s cache, `{list, complete}`
+   honesty reporting); rank/hall union it under the users collection
+   (collection wins conflicts; ratings still replay from games). Verified
+   live against the real Clerk API: `scope=all`, all 10 accounts on the
+   ladder at 800. Ladder stranger privacy unchanged (first name, no
+   uid/photo).
+3. **Hall of fame hid names.** Per explicit owner decision the hall now
+   shows the FIRST 1000 accounts with FULL names + avatars, unblurred
+   (contract `naming: full`; no uid/email; signed-in-only). Client blur
+   removed in the hall only.
+
+Test deltas: `node --test` **61/61** (+4: Clerk pagination, incomplete
+reporting, registry union, sent-invite lifecycle); full Playwright suite
+**93 passed, 0 failed, 23 skipped** (Atlas-only skips); friends E2E
+**15/15** (+test 11). Asset re-keyed (`friends.js?v=7`).

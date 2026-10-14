@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { initDb, db, closeDb } from '../lib/db.mjs';
-import { createSocialStore, replayRating, resolveControl, TIME_CONTROLS, tierOf, START_RATING } from '../lib/social.mjs';
+import { createSocialStore, replayRating, resolveControl, TIME_CONTROLS, tierOf, START_RATING, HALL_CAP } from '../lib/social.mjs';
 
 // A temp data dir so the suite never touches server/.data.
 process.env.DOCHESS_DEV_FILE_STORE = '1';
@@ -434,22 +434,28 @@ test('a caller cannot unlock a stranger by claiming them as a friend', async () 
 
 /* ── the hall of fame ────────────────────────────────────────────── */
 
-// The user-facing requirement: the hall lists EVERY registered account from
-// the authoritative store, with their picture, not just this device's friends.
-test('the hall lists every registered account, with avatars', async () => {
+// The user-facing requirement: the hall lists the FIRST 1000 registered
+// accounts with FULL names and pictures, out in the open — no blurry
+// strangers. Explicit owner decision: a hall of fame you cannot read is no
+// hall of fame. No uid or email is included for anyone but self/friends.
+test('the hall lists every registered account, with full names and avatars', async () => {
     const withPhoto = await register('user_hallphoto001', 'Hall Photo');
     await db().updateUser(withPhoto, { s: { updatedAt: Date.now(), data: 1 } },
         { name: 'Hall Photo', image: 'https://img.example/hall.png' });
     const viewer = await register('user_hallviewer01', 'Hall Viewer');
 
     const hall = await SOC.hallPage({ cat: 'blitz', viewerUid: viewer, limit: 100, offset: 0 });
+    assert.equal(hall.naming, 'full', 'the hall contract is full names');
+    assert.equal(HALL_CAP, 1000, 'the hall covers the first 1000');
     assert.ok(hall.total >= 3, `hall should list every registered account, got ${hall.total}`);
-    assert.ok(hall.board.some((r) => r.name === 'Hall'), 'strangers appear by first name');
-    const photo = hall.board.find((r) => r.name === 'Hall');
+    assert.ok(hall.total <= HALL_CAP, 'the hall never exceeds the first 1000');
+    const photo = hall.board.find((r) => r.name === 'Hall Photo');
+    assert.ok(photo, 'strangers appear by FULL name');
     assert.equal(photo.img, 'https://img.example/hall.png', 'the hall carries a profile picture');
-    // Privacy is unchanged in the hall: still no uid, no full name for a stranger.
-    assert.equal('uid' in photo, false);
-    assert.ok(!JSON.stringify(hall.board).includes('Hall Photo'));
+    assert.equal('uid' in photo, false, 'still no uid for a stranger');
+    assert.equal('email' in photo, false, 'never an email');
+    const me = hall.board.find((r) => r.self);
+    assert.ok(me, 'the viewer is marked on the hall');
 
     // It is paginated, like the ladder.
     const seen = [];
@@ -458,6 +464,70 @@ test('the hall lists every registered account, with avatars', async () => {
         for (const row of page.board) seen.push(row.rank);
     }
     assert.equal(new Set(seen).size, hall.total);
+});
+
+// Never-synced Clerk accounts (extraIdentities) join the ladder and the
+// hall at the floor — with the users collection winning on conflicts — so a
+// registration is visible before its first sync. Ratings still replay from
+// recorded games, even for a Clerk-only uid.
+test('never-synced registered accounts appear on the ladder and the hall', async () => {
+    const clerkOnly = 'user_clerkonly0001';
+    const clash = 'user_clash00000002';
+    await register(clash, 'Collection Name');
+    await db().insertGame({ userId: clerkOnly, gameId: 'g-clerk-1', result: 'win', date: 1, plies: 40, control: { id: 'blitz', base: 180000, inc: 0 } });
+    SOC.invalidateRatings();
+
+    const extra = [
+        { uid: clerkOnly, name: 'Mohamed Jebahi', img: 'https://img.example/mj.png' },
+        { uid: clash, name: 'Clerk Says Otherwise', img: null },
+        { uid: 'junk!!!', name: 'Evil', img: null },
+    ];
+    async function allPages(pager) {
+        const first = await pager(0);
+        const rows = [...first.board];
+        for (let off = 100; off < first.total; off += 100) {
+            rows.push(...(await pager(off)).board);
+        }
+        return { total: first.total, rows };
+    }
+    const ladder = await allPages((off) => SOC.rankPage({ cat: 'blitz', viewerUid: clash, limit: 100, offset: off, extraIdentities: extra }));
+    const ours = ladder.rows.find((r) => r.name === 'Mohamed');
+    assert.ok(ours, 'the never-synced account is on the ladder');
+    assert.ok(ours.rating > START_RATING, 'its recorded win replays into a real rating');
+    assert.ok(!('uid' in ours), 'ladder stranger privacy is unchanged');
+    const mine = ladder.rows.find((r) => r.self);
+    assert.ok(mine, 'the viewer is on their own ladder');
+    assert.equal(mine.name, 'Collection Name', 'the users collection wins on conflicts');
+
+    const hallAll = await allPages((off) => SOC.hallPage({ cat: 'blitz', viewerUid: clash, limit: 100, offset: off, extraIdentities: extra }));
+    const him = hallAll.rows.find((r) => r.name === 'Mohamed Jebahi');
+    assert.ok(him, 'the never-synced account is in the hall by full name');
+    assert.equal(him.img, 'https://img.example/mj.png');
+});
+
+// The sender watches their own sent invites: pending → accepted/declined.
+// Nobody else ever sees them.
+test('sent invites are visible only to the sender, through resolution', async () => {
+    const x = 'user_aaaaaaaa7001', y = 'user_bbbbbbbb7002', z = 'user_cccccccc7003';
+    await SOC.requestFriend(x, { toUid: y });
+    await SOC.respondToRequest(y, x, true);
+    const { invite } = await SOC.createInvite(x, { toUid: y, minutes: 3, incSec: 0, code: 'SNAAAB' });
+
+    let sent = await SOC.listSentInvites(x);
+    assert.equal(sent.length, 1, 'the sender sees their pending invite');
+    assert.equal(sent[0].status, 'pending');
+    assert.equal((await SOC.listSentInvites(y)).length, 0, 'the recipient has no SENT invite');
+    assert.equal((await SOC.listSentInvites(z)).length, 0, 'a stranger sees nothing');
+
+    await SOC.respondToInvite(y, invite.matchId, true);
+    sent = await SOC.listSentInvites(x);
+    assert.equal(sent[0].status, 'accepted', 'the sender observes the accept');
+
+    const { invite: second } = await SOC.createInvite(x, { toUid: y, minutes: 1, incSec: 0, code: 'SNBBBC' });
+    await SOC.respondToInvite(y, second.matchId, false);
+    const after = await SOC.listSentInvites(x);
+    assert.equal(after.find((r) => r.matchId === second.matchId).status, 'declined',
+        'the sender observes the decline too');
 });
 
 // "You and your friends" must be complete no matter which ladder page is open.

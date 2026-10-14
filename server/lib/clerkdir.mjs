@@ -34,7 +34,55 @@ function cleanUid(v) {
     return null;
 }
 
-export function clearClerkCache() { cache.clear(); }
+export function clearClerkCache() { cache.clear(); listCache.at = 0; listCache.list = []; }
+
+/**
+ * List EVERY registered user from the Clerk Backend API (paginated), for the
+ * global ladder and the hall of fame. Accounts that registered but never
+ * synced have no `users` row yet — without this they would be invisible
+ * until their first save. Only id + display name + photo are kept: no
+ * emails, no phones, nothing private.
+ *
+ * Returns { list, complete }: `complete` is false when Clerk is unconfigured
+ * or any page failed, so callers can honestly label a partial board instead
+ * of presenting it as the full registry.
+ */
+const listCache = { at: 0, list: [], complete: false };
+const LIST_TTL_MS = 120000;
+const LIST_PAGE = 100;
+const LIST_MAX_PAGES = 50; // 5000 accounts — beyond that, paginate the API key, not this loop
+
+function parseUserList(body) {
+    const data = Array.isArray(body) ? body : (body && Array.isArray(body.data) ? body.data : []);
+    return data.map((u) => ({ uid: cleanUid(u && u.id), name: displayName(u), img: cleanImg(u && u.image_url) }))
+        .filter((r) => r.uid);
+}
+
+export async function clerkListUsers({ fetchImpl = fetch } = {}) {
+    if (!config.clerkSecretKey) return { list: [], complete: false };
+    if (Date.now() - listCache.at < LIST_TTL_MS && listCache.list.length) {
+        return { list: listCache.list, complete: listCache.complete };
+    }
+    const out = [];
+    let complete = true;
+    try {
+        for (let page = 0; page < LIST_MAX_PAGES; page++) {
+            const url = `https://api.clerk.com/v1/users?${new URLSearchParams({ limit: String(LIST_PAGE), offset: String(page * LIST_PAGE), order_by: '-created_at' })}`;
+            const res = await fetchImpl(url, {
+                headers: { Authorization: `Bearer ${config.clerkSecretKey}`, Accept: 'application/json' },
+                signal: AbortSignal.timeout(10000),
+            });
+            if (!res.ok) { complete = false; break; }
+            const rows = parseUserList(await res.json().catch(() => null));
+            out.push(...rows);
+            if (rows.length < LIST_PAGE) break;
+        }
+    } catch (_) {
+        complete = false;
+    }
+    if (out.length) { listCache.at = Date.now(); listCache.list = out; listCache.complete = complete; }
+    return { list: out, complete };
+}
 
 export async function clerkSearch(q, { fetchImpl = fetch } = {}) {
     q = typeof q === 'string' ? q.trim().toLowerCase() : '';

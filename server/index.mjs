@@ -50,7 +50,7 @@ import { sendJson, sendError, readJson, pathOf, query, cors, securityHeaders, he
 import { SECTION_MODES } from './lib/merge.mjs';
 import { createMatcher } from './lib/mm.mjs';
 import { createSocialStore, RANK_CATS } from './lib/social.mjs';
-import { clerkSearch, mergeDirectory } from './lib/clerkdir.mjs';
+import { clerkSearch, mergeDirectory, clerkListUsers } from './lib/clerkdir.mjs';
 import { createBus } from './lib/events.mjs';
 
 const STARTED = Date.now();
@@ -449,8 +449,20 @@ async function handleInviteCreate(req, res, userId) {
 
 async function handleInviteList(req, res, userId) {
     try {
-        const invites = await SOC.listInvites(userId);
-        sendJson(res, 200, { ok: true, invites });
+        const [invites, sentRows, friendRows] = await Promise.all([
+            SOC.listInvites(userId),
+            SOC.listSentInvites(userId),
+            SOC.listFriends(userId).catch(() => []),
+        ]);
+        // The sender already knows who they invited; resolving the
+        // recipient's friend-facing name server-side (from the friendship
+        // row, never from client input) lets the sender UI say "Mossab
+        // accepted" instead of "someone accepted".
+        const names = new Map((friendRows || []).map((f) => [f.uid, f.name]));
+        const sent = (sentRows || []).map((inv) => ({
+            ...publicInvite(inv), to: inv.to, toName: names.get(inv.to) || 'Friend',
+        }));
+        sendJson(res, 200, { ok: true, invites, sent });
     } catch (e) { fail(res, 'invites/list', e); }
 }
 
@@ -569,11 +581,11 @@ async function handleNotifyAck(req, res, userId) {
 /**
  * GET /api/hall?cat=&limit=&offset=
  *
- * The hall of fame: EVERY registered account with their avatar, paginated
- * and privacy-filtered exactly like the ladder. The previous implementation
- * returned every member's raw uid + full name to every caller and had no
- * server registry at all; this is the real thing, and the client labels its
- * offline fallback as device-local rather than pretending it is global.
+ * The hall of fame: the FIRST 1000 registered accounts by rating, with FULL
+ * display names and avatars, out in the open — an explicit product decision
+ * by the owner (see SOC.hallPage). No uid, email or internal id is included.
+ * The account universe is the users collection PLUS every Clerk-registered
+ * account (even never-synced ones); `scope` says honestly which it is.
  */
 async function handleHall(req, res, userId) {
     try {
@@ -582,7 +594,12 @@ async function handleHall(req, res, userId) {
         if (!LEADER_CATS.includes(cat)) { sendError(res, 400, 'bad-category'); return; }
         const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 50));
         const offset = Math.max(0, parseInt(q.offset, 10) || 0);
-        sendJson(res, 200, { ok: true, ...(await SOC.hallPage({ cat, viewerUid: userId, limit, offset })) });
+        const registry = await clerkListUsers().catch(() => ({ list: [], complete: false }));
+        sendJson(res, 200, {
+            ok: true,
+            scope: registry.complete && registry.list.length ? 'all' : 'synced',
+            ...(await SOC.hallPage({ cat, viewerUid: userId, limit, offset, extraIdentities: registry.list })),
+        });
     } catch (e) { fail(res, 'hall', e); }
 }
 
@@ -597,8 +614,12 @@ async function handleRank(req, res, userId) {
         // server derives the viewer's friends from its own graph, so a
         // caller cannot ask "reveal the full name of this uid" by passing
         // it in the query string.
-        const r = await SOC.rankPage({ cat: q.cat, viewerUid: userId, limit, offset });
-        sendJson(res, 200, { ok: true, ...r });
+        // The account universe is the users collection PLUS every
+        // Clerk-registered account (even never-synced ones); `scope` says
+        // honestly which it is.
+        const registry = await clerkListUsers().catch(() => ({ list: [], complete: false }));
+        const r = await SOC.rankPage({ cat: q.cat, viewerUid: userId, limit, offset, extraIdentities: registry.list });
+        sendJson(res, 200, { ok: true, scope: registry.complete && registry.list.length ? 'all' : 'synced', ...r });
     } catch (e) { fail(res, 'rank', e); }
 }
 

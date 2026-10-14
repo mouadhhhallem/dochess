@@ -992,6 +992,81 @@ let needSnapshot = false;
     // be told the moment the recipient accepts or declines.
     let pendingInvite = null;
     try { pendingInvite = JSON.parse(localStorage.getItem('cc_pending_invite') || 'null'); } catch (_) {}
+    function clearPendingInvite() {
+        pendingInvite = null;
+        try { localStorage.removeItem('cc_pending_invite'); } catch (_) {}
+    }
+    /**
+     * The SENDER side of the invitation lifecycle. While a sent invite is
+     * outstanding, every inbox tick (5 s), every invite-accepted/declined
+     * push, and every boot re-reads its server status:
+     *
+     * - accepted → clear the wait, announce it, and take the sender straight
+     *   to the board. If their waiting room is still live, just show it; if
+     *   the page reloaded and the room died, re-host the SAME code the
+     *   recipient is dialling (same control, so clocks agree) and show that.
+     *   Either way the sender never has to walk Friends → Online by hand.
+     * - declined → clear the wait silently: the server already queued an
+     *   "X declined" inbox note for the sender, so a second notice would nag.
+     * - expired (or vanished past its lifetime) → clear the wait and say so
+     *   honestly, so the sender is never stuck "waiting" on a dead invite.
+     */
+    async function watchSentInvite() {
+        try {
+            if (apiBase() === null || uidOf() === 'guest') return;
+            if (!pendingInvite || !pendingInvite.matchId) return;
+            let r = null;
+            try { r = await api('invites'); } catch (_) { return; }
+            const sent = (r && Array.isArray(r.sent)) ? r.sent : [];
+            const row = sent.find((s) => s && s.matchId === pendingInvite.matchId);
+            if (!row) {
+                // Unknown to the server. A fresh wait may just be racing the
+                // server write — keep waiting. An old one was swept long
+                // after it died: stop, and say so.
+                if (Date.now() - (pendingInvite.at || 0) > 24 * 3600 * 1000) clearPendingInvite();
+                return;
+            }
+            if (!row.status || row.status === 'pending') {
+                if (row.expiresAt && Date.now() > row.expiresAt) {
+                    clearPendingInvite();
+                    notifyLocal('note', 'Invite expired', 'They did not answer in time — send a fresh invite whenever you like.');
+                }
+                return;
+            }
+            if (row.status === 'accepted') {
+                const code = row.code || pendingInvite.code;
+                const name = row.toName || pendingInvite.toName || 'Your friend';
+                const control = pendingInvite.control;
+                clearPendingInvite();
+                notifyLocal('note', `${String(name).slice(0, 24)} accepted!`, 'Taking you to the board…');
+                joinAsSender(code, control);
+                return;
+            }
+            // declined (or anything else terminal): the server's inbox note
+            // already tells the sender — just stop watching.
+            clearPendingInvite();
+        } catch (_) {}
+    }
+    function joinAsSender(code, control) {
+        try {
+            if (!window.app || !code) return;
+            const cur = window.app.online;
+            if (cur && cur.phase === 'waiting' && cur.code === code && cur.net) {
+                window.app.showOnline();
+                return;
+            }
+            try {
+                const c = control || {};
+                if (Number.isFinite(c.minutes)) {
+                    try { localStorage.setItem('cc_control', JSON.stringify({ m: c.minutes, s: c.incSec || 0 })); } catch (_) {}
+                }
+                const hosted = window.app._onlineHost(code);
+                const go = () => { try { window.app.showOnline(); } catch (_) {} };
+                if (hosted && typeof hosted.then === 'function') hosted.then(() => setTimeout(go, 600));
+                else setTimeout(go, 900);
+            } catch (_) { try { window.app.showOnline(); } catch (_) {} }
+        } catch (_) {}
+    }
     function controlLabel(id) {
         const map = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical', correspondence: 'Correspondence' };
         return (id && map[id]) || id || 'chess';
@@ -1175,6 +1250,9 @@ let needSnapshot = false;
             // Invitations are their own entity, polled on the same cadence so
             // the popup appears within one cycle of the sender's POST.
             try { await pullInvites(); } catch (_) {}
+            // ...and invitations this account SENT, so the sender is taken
+            // to the board the moment the recipient accepts.
+            try { await watchSentInvite(); } catch (_) {}
             try { await pullSnapshot(); } catch (_) {}
             checkInvitePopup();
             // New actionable requests re-render the open Friends screen so
@@ -1231,6 +1309,9 @@ let needSnapshot = false;
                     });
                 } else if (msg.kind === 'invite-accepted' || msg.kind === 'invite-declined') {
                     pullInvites().then(() => checkInvitePopup());
+                    // The SENDER learns here: an accept must take them to
+                    // the board, a decline/expire must clear the wait.
+                    try { watchSentInvite(); } catch (_) {}
                 }
             };
             es.onerror = () => {
@@ -1246,6 +1327,10 @@ let needSnapshot = false;
     // Immediate check on boot (a refresh must restore a live invite without
     // waiting a full poll interval) + on every foreground.
     setTimeout(() => { try { watchInbox(); } catch (_) {} }, 1500);
+    // A reload while waiting must resume the wait: an accept that landed
+    // while the page was dead still takes the sender to the (re-hosted)
+    // board instead of stranding them on the friends panel.
+    setTimeout(() => { try { watchSentInvite(); } catch (_) {} }, 2500);
     // The P2P inbox is what pops invites on the static live site (no API):
     // open it shortly after boot and keep it held (cheap no-op when held).
     setTimeout(() => { try { ensureP2PInbox(); } catch (_) {} }, 6000);
@@ -1334,6 +1419,7 @@ let needSnapshot = false;
                 return {
                     server: true, total: r.total, offset: r.offset || 0,
                     hasMore: !!r.hasMore, myRank: r.myRank,
+                    scope: r.scope || 'synced',
                     myRating: (selfRow ? selfRow.rating : r.myRating),
                     friends: friendBoard,
                     board
@@ -1377,11 +1463,10 @@ let needSnapshot = false;
     /**
      * The hall of fame.
      *
-     * With a backend it is EVERY registered account from the authoritative
-     * store, with avatars, paginated and privacy-filtered exactly like the
-     * ladder (GET /api/hall). Without one it stays a clearly-labelled local
-     * list: the previous server endpoint leaked every member's raw uid and
-     * full name to every caller, and there is no registry to fall back on.
+     * With a backend it is the FIRST 1000 registered accounts from the
+     * authoritative store, with FULL names and avatars, paginated
+     * (GET /api/hall, contract `naming: 'full'`). Without one it stays a
+     * clearly-labelled local list.
      */
     async function hallList(opts) {
         const offset = opts && Number.isFinite(opts.offset) ? Math.max(0, opts.offset | 0) : 0;
@@ -1397,6 +1482,7 @@ let needSnapshot = false;
             if (r && Array.isArray(r.board) && r.total > 0) {
                 return {
                     server: true, total: r.total, offset: r.offset || 0, hasMore: !!r.hasMore,
+                    scope: r.scope || 'synced', naming: r.naming || 'private',
                     hall: r.board.map(shape),
                     friends: (Array.isArray(r.friends) ? r.friends : []).map(shape),
                 };
@@ -1814,7 +1900,7 @@ let needSnapshot = false;
             </div>
             ${podiumHTML(data)}` : `<p class="lobby-hint">Showing ranks ${offset + 1}–${offset + (data.board || []).length} of ${data.total}</p>`}
             <div class="fr-livebar">
-                <span class="fr-live" role="status">${data.server ? 'Live — refreshes every 30s, so a player who just registered shows up' : 'Local list only — sign in on DoChess to see every registered player'}</span>
+                <span class="fr-live" role="status">${data.server ? (data.scope === 'all' ? 'Live — refreshes every 30s, so a player who just registered shows up' : 'Live — refreshes every 30s · synced accounts only right now (full registry unreachable)') : 'Local list only — sign in on DoChess to see every registered player'}</span>
                 <button class="btn-secondary sm" data-faction="rank-refresh" type="button">Refresh now</button>
             </div>
             ${data.server
@@ -1843,17 +1929,21 @@ async function renderHall(box) {
             return;
         }
         const friendUids = new Set((data.friends || []).map((f) => f.uid).filter(Boolean));
+        // The hall of fame shows FULL names for everyone, by explicit owner
+        // decision (server contract `naming: 'full'`) — no blurry strangers
+        // here. That is what makes it a hall of fame.
         const hallRow = (h) => {
-            const blur = !h.self && !h.friend;
             const img = h.img || (h.uid && (S.friends[h.uid] || {}).img) || null;
-            return `<div class="fr-hof${h.self ? ' me' : ''}${blur ? ' blurry' : ''}">`
+            return `<div class="fr-hof${h.self ? ' me' : ''}">`
                 + avatarHTML(h.name, null, img)
                 + `<div class="fr-id"><strong>#${h.position} ${esc(h.name)}</strong>`
                 + `<span class="fr-sub">${h.rating != null ? h.rating : '–'}${h.rating != null ? ' · ' + tierOf(h.rating).name : ''}</span></div></div>`;
         };
         out.innerHTML = `
             ${data.server
-                ? `<p class="lobby-hint">Every registered DoChess account — <strong>${data.total}</strong> in total. Strangers show a first name only.</p>`
+                ? (data.scope === 'all'
+                    ? `<p class="lobby-hint">The first 1000 registered DoChess accounts — <strong>${data.total}</strong> in total. Full names, out in the open: that is what makes it a hall of fame.</p>`
+                    : `<p class="lobby-hint">Synced accounts so far — <strong>${data.total}</strong> in total (full registry unreachable right now).</p>`)
                 : `<p class="lobby-hint"><strong>This hall is local to this device.</strong> Connect to DoChess to see every registered player.</p>`}
             ${friendUids.size ? `<h3 class="fr-subhead">Your friends</h3><div class="fr-hall">${(data.friends || []).map(hallRow).join('')}</div>` : ''}
             <h3 class="fr-subhead">${friendUids.size ? 'Everyone else' : 'The hall'}</h3>
@@ -2034,7 +2124,7 @@ async function renderHall(box) {
                 if (r.ok && r.delivery === 'server') {
                     notifyLocal('note', `Invite sent to ${fr ? fr.name : 'friend'}`,
                         `${chosen.label} ${chosen.cat} — waiting room ${code}. They get a popup and join straight to the board.`);
-                    pendingInvite = { toUid, matchId: r.matchId, code, control: chosen, at: Date.now() };
+                    pendingInvite = { toUid, toName: (fr && fr.name) || 'Friend', matchId: r.matchId, code, control: chosen, at: Date.now() };
                     try { localStorage.setItem('cc_pending_invite', JSON.stringify(pendingInvite)); } catch (_) {}
                 } else if (r.ok) {
                     // Device-local fallback: delivered peer-to-peer, but there
@@ -2123,7 +2213,7 @@ async function renderHall(box) {
         // pullRequests / pullEdges are retained as aliases of the single
         // authoritative snapshot for any external caller.
         pullRequests, pullEdges, pullSnapshot, pullInbox, pullInvites,
-        sendGameInvite, checkInvitePopup, p2pEnsure: ensureP2PInbox, version: 5,
+        sendGameInvite, checkInvitePopup, watchSentInvite, clearPendingInvite, p2pEnsure: ensureP2PInbox, version: 5,
         // Exposed for tests and for the retry UI.
         explainFailure, FAILURES, isSignedOut,
     };

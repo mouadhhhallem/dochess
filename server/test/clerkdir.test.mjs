@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clerkSearch, mergeDirectory, clearClerkCache } from '../lib/clerkdir.mjs';
+import { clerkSearch, mergeDirectory, clerkListUsers, clearClerkCache } from '../lib/clerkdir.mjs';
 
 const CLERK_PAGE = {
     data: [
@@ -55,4 +55,44 @@ test('clerkdir: accepts the bare-array response shape too', async () => {
     const rows = await clerkSearch('mou', { fetchImpl: bare });
     assert.equal(rows.length, 2);
     assert.equal(rows[0].name, 'Mouadh H');
+});
+
+function clerkUser(id, first, last) {
+    return {
+        id, username: null, first_name: first, last_name: last,
+        image_url: 'https://x.test/p.png',
+        email_addresses: [{ email_address: `${id}@x.test` }],
+        phone_numbers: ['+10000000000'],
+    };
+}
+
+test('clerkdir: clerkListUsers paginates the whole registry, public fields only', async () => {
+    clearClerkCache();
+    const p1 = Array.from({ length: 100 }, (_, i) => clerkUser(`user_regp1_${String(i).padStart(3, '0')}`, 'Mohamed', `J${i}`));
+    const p2 = [clerkUser('user_regp2_000', 'Mossab', 'Hallem')];
+    const stub = async (url) => {
+        const u = new URL(url);
+        const off = Number(u.searchParams.get('offset')) || 0;
+        const rows = off === 0 ? p1 : off === 100 ? p2 : [];
+        return { ok: true, json: async () => ({ data: rows, total_count: 101 }) };
+    };
+    const { list, complete } = await clerkListUsers({ fetchImpl: stub });
+    assert.equal(complete, true, 'all pages fetched');
+    assert.equal(list.length, 101, 'every registered account is listed');
+    assert.deepEqual(Object.keys(list[0]).sort(), ['img', 'name', 'uid'], 'no emails, no phones, nothing private');
+    assert.equal(list[0].name, 'Mohamed J0');
+    assert.equal(list[100].name, 'Mossab Hallem');
+});
+
+test('clerkdir: clerkListUsers reports incomplete instead of a fake full board', async () => {
+    clearClerkCache();
+    let n = 0;
+    const flaky = async () => {
+        n++;
+        if (n === 1) return { ok: true, json: async () => ({ data: Array.from({ length: 100 }, (_, i) => clerkUser(`user_flk_${i}`, 'A', 'B')) }) };
+        throw new Error('clerk down');
+    };
+    const r = await clerkListUsers({ fetchImpl: flaky });
+    assert.equal(r.complete, false, 'a failed page is reported, not hidden');
+    assert.equal(r.list.length, 100, 'the pages that did arrive are kept');
 });

@@ -49,14 +49,18 @@
  *
  * PRIVACY
  * -------
- * Serialization is per-viewer and happens HERE, on the server. A stranger's
- * row never carries a uid, full name, photo, email or any internal id — the
- * field is not fetched-then-hidden, it is simply not selected.
+ * Serialization is per-viewer and happens HERE, on the server. On the LADDER
+ * a stranger's row never carries a uid, full name, photo, email or any
+ * internal id — the field is not fetched-then-hidden, it is simply not
+ * selected. The HALL OF FAME is the deliberate exception, by explicit owner
+ * decision: its rows carry full display names + public avatars for every
+ * signed-in viewer (no uid, no email). See hallRow.
  */
 
 import { randomBytes } from 'node:crypto';
 
 export const START_RATING = 800;
+export const HALL_CAP = 1000; // the hall of fame lists the first 1000 accounts by rating
 export const PRESENCE_TTL_MS = 90000;
 const INVITE_TTL_MS = 10 * 60 * 1000;   // server-side invitation lifetime
 const REQUEST_CAP = 50;
@@ -486,6 +490,26 @@ export function createSocialStore(getDb) {
         return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 20);
     }
 
+    /**
+     * Invitations THIS account sent, newest first — pending AND recently
+     * resolved. The sender polls these to learn the moment the recipient
+     * accepts, declines or lets the invite expire, so both players can land
+     * on the same board without the sender manually visiting the Online
+     * page. Only the sender's own rows are ever returned.
+     */
+    async function listSentInvites(uid, now = Date.now()) {
+        uid = cleanUid(uid);
+        if (!uid) return [];
+        const rows = await getDb().findDocs('invites', { from: uid });
+        const out = [];
+        for (const r of rows) {
+            if (!r || !r.matchId) continue;
+            const live = await getInvite(r.matchId, now);
+            if (live) out.push(live);
+        }
+        return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 20);
+    }
+
     /** Drop resolved/expired invitation rows older than a day. */
     async function sweepInvites(now = Date.now()) {
         const db = getDb();
@@ -573,6 +597,59 @@ export function createSocialStore(getDb) {
         return out;
     }
 
+    /**
+     * The ranked account universe, shared by the ladder and the hall.
+     *
+     * Source 1 — the `users` collection: every account that has synced at
+     * least once (authoritative profile + ratings from recorded games).
+     * Source 2 — `extraIdentities`: every registered account from the Clerk
+     * Backend API (accounts that exist but never synced yet). Collection
+     * rows win on uid conflicts; Clerk-only accounts enter at START_RATING
+     * (or their replayed rating if games were somehow recorded for them).
+     */
+    function cleanExtraIdentities(list) {
+        const out = [];
+        if (!Array.isArray(list)) return out;
+        for (const e of list) {
+            const uid = e && cleanUid(e.uid);
+            if (!uid) continue;
+            out.push({ uid, name: cleanName(e.name), img: cleanImg(e.img) });
+        }
+        return out;
+    }
+
+    async function buildRankedRows(cat, extraIdentities) {
+        const db = getDb();
+        const [identities, ratings] = await Promise.all([
+            db.listUserIdentities(),
+            ratingTable()
+        ]);
+        const byUid = new Map();
+        for (const id of identities) {
+            const uid = id && id._id;
+            if (!uid) continue;
+            const profile = (id && id.profile) || {};
+            byUid.set(uid, { uid, name: cleanName(profile.name), img: cleanImg(profile.image) });
+        }
+        for (const e of cleanExtraIdentities(extraIdentities)) {
+            if (!byUid.has(e.uid)) byUid.set(e.uid, e);
+        }
+        const rows = [];
+        for (const acc of byUid.values()) {
+            const perCat = ratings.get(acc.uid);
+            rows.push({
+                uid: acc.uid,
+                name: acc.name,
+                img: acc.img,
+                rating: (perCat && perCat.get(cat)) || START_RATING,
+                games: 0
+            });
+        }
+        rows.sort((a, b) => (b.rating - a.rating) || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
+        rows.forEach((r, i) => { r.rank = i + 1; });
+        return rows;
+    }
+
     /* ── the global ladder ───────────────────────────────────────── */
 
     /**
@@ -591,40 +668,24 @@ export function createSocialStore(getDb) {
      * @param {string} o.viewerUid     who is asking (always on the board)
      * @param {number} o.limit         page size (1..100)
      * @param {number} o.offset        page offset
+     * @param {Array}  o.extraIdentities accounts known to the identity
+     *      provider (Clerk) that never synced: {uid, name, img}. They enter
+     *      at START_RATING so a registration is visible before its first sync.
      *
      * There is deliberately NO client-supplied friend list parameter. The
      * viewer's friends are derived from the stored friendship rows, so a
      * caller cannot ask the API to reveal an arbitrary stranger's full name
      * by passing their uid in a query string.
      */
-    async function rankPage({ cat, viewerUid, limit = 50, offset = 0 } = {}) {
+    async function rankPage({ cat, viewerUid, limit = 50, offset = 0, extraIdentities = [] } = {}) {
         cat = cleanCat(cat);
         viewerUid = cleanUid(viewerUid);
 
-        const db = getDb();
-        const [identities, ratings, friendRows] = await Promise.all([
-            db.listUserIdentities(),
-            ratingTable(),
+        const [rows, friendRows] = await Promise.all([
+            buildRankedRows(cat, extraIdentities),
             viewerUid ? listFriends(viewerUid) : Promise.resolve([])
         ]);
         const friends = new Set(friendRows.map((f) => f.uid));
-
-        const rows = [];
-        for (const id of identities) {
-            const uid = id && id._id;
-            if (!uid) continue;
-            const profile = (id && id.profile) || {};
-            const perCat = ratings.get(uid);
-            rows.push({
-                uid,
-                name: cleanName(profile.name),
-                img: cleanImg(profile.image),
-                rating: (perCat && perCat.get(cat)) || START_RATING,
-                games: 0
-            });
-        }
-rows.sort((a, b) => (b.rating - a.rating) || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
-        rows.forEach((r, i) => { r.rank = i + 1; });
 
         const total = rows.length;
         const myIndex = viewerUid ? rows.findIndex((r) => r.uid === viewerUid) : -1;
@@ -654,50 +715,47 @@ rows.sort((a, b) => (b.rating - a.rating) || (a.uid < b.uid ? -1 : a.uid > b.uid
     }
 
     /**
-     * The hall of fame: every registered account, same ordering, same
-     * privacy rules and same pagination as the ladder, with the avatar
-     * included for every row.
-     *
-     * Including avatars discloses nothing new: `/api/directory` already
-     * serves a display name and avatar for any registered player to any
-     * signed-in account, and avatars are public profile imagery. Full names
-     * and uids still follow the per-viewer rule used everywhere else.
+     * The hall of fame: the FIRST 1000 registered accounts by rating, with
+     * FULL display names and avatars, out in the open for every signed-in
+     * player. This is a deliberate product decision by the owner (a hall of
+     * fame you cannot read is no hall of fame): unlike the ladder, hall rows
+     * are never blurred or first-named. No uid, email or internal id is
+     * included — names + public avatars only, which `/api/directory`
+     * already serves per search to any signed-in account.
      */
-    async function hallPage({ cat = 'blitz', viewerUid, limit = 50, offset = 0 } = {}) {
+    function hallRow(row, viewerUid, friends) {
+        const out = {
+            rank: row.rank, name: row.name,
+            img: row.img || null, rating: row.rating, tier: tierOf(row.rating),
+            self: !!(viewerUid && row.uid === viewerUid),
+            friend: friends.has(row.uid),
+        };
+        // Friends keep their uid so the hall can link to profiles/invites;
+        // everyone else is name + face only.
+        if (out.self || out.friend) out.uid = row.uid;
+        return out;
+    }
+    async function hallPage({ cat = 'blitz', viewerUid, limit = 50, offset = 0, extraIdentities = [] } = {}) {
         cat = cleanCat(cat);
         viewerUid = cleanUid(viewerUid);
-        const db = getDb();
-        const [identities, ratings, friendRows] = await Promise.all([
-            db.listUserIdentities(),
-            ratingTable(),
+        const [rows, friendRows] = await Promise.all([
+            buildRankedRows(cat, extraIdentities),
             viewerUid ? listFriends(viewerUid) : Promise.resolve([])
         ]);
         const friends = new Set(friendRows.map((f) => f.uid));
-        const rows = identities
-            .filter((id) => id && id._id)
-            .map((id) => {
-                const profile = (id.profile) || {};
-                const perCat = ratings.get(id._id);
-                return {
-                    uid: id._id,
-                    name: cleanName(profile.name),
-                    img: cleanImg(profile.image),
-                    rating: (perCat && perCat.get(cat)) || START_RATING,
-                };
-            });
-        rows.sort((a, b) => (b.rating - a.rating) || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0));
-        rows.forEach((r, i) => { r.rank = i + 1; });
+        const capped = rows.slice(0, HALL_CAP);
         const size = Math.max(1, Math.min(100, limit));
         const off = Math.max(0, offset);
         return {
             cat,
-            total: rows.length,
+            naming: 'full',
+            total: capped.length,
             offset: off,
             limit: size,
-            hasMore: off + size < rows.length,
+            hasMore: off + size < capped.length,
             myRank: viewerUid ? (rows.findIndex((r) => r.uid === viewerUid) + 1 || null) : null,
-            friends: rows.filter((r) => friends.has(r.uid)).map((r) => serializeRow(r, viewerUid, friends, true)),
-            board: rows.slice(off, off + size).map((r) => serializeRow(r, viewerUid, friends, true)),
+            friends: capped.filter((r) => friends.has(r.uid)).map((r) => hallRow(r, viewerUid, friends)),
+            board: capped.slice(off, off + size).map((r) => hallRow(r, viewerUid, friends)),
         };
     }
 
@@ -827,7 +885,7 @@ rows.sort((a, b) => (b.rating - a.rating) || (a.uid < b.uid ? -1 : a.uid > b.uid
         // requests
         requestFriend, respondToRequest, cancelRequest, listRequests,
         // invitations
-        createInvite, respondToInvite, listInvites, getInvite, sweepInvites,
+        createInvite, respondToInvite, listInvites, listSentInvites, getInvite, sweepInvites,
         // presence
         heartbeat, status, presenceCard, sweepPresence, searchDirectory,
         // inbox
