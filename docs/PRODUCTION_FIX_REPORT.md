@@ -171,10 +171,10 @@ added in the same visual language as the other 50.
 ### Corrupted UTF-8 in six source files
 
 `home.js`, `puzzles.js`, `study.js`, `js/learn.js`, `js/learn.bundle.js` and
-`server/lib/db.mjs` had been through a UTF-8 → cp1252 → UTF-8 round trip, so
-em dashes and arrows in comments became `â€”` / `â”€`. Caught by three
-Playwright assertions expecting `★` and receiving `â˜…`. Restored; no behaviour
-changed.
+`server/lib/db.mjs` had been through a UTF-8 → cp1252 → UTF-8 round trip, which
+mangled every em dash and arrow in their comments. Caught by three Playwright
+assertions that expected a literal star glyph in the Learn screen and received
+its mojibake equivalent. Restored; no behaviour changed.
 
 ### New guards, wired into `npm test`
 
