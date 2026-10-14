@@ -756,6 +756,16 @@ test('16: friend streaks survive refresh; XP pays per result; presence leave wor
     const blitz = await call('GET', '/api/rank?cat=blitz&limit=100&offset=0', undefined, ALICE);
     expect(blitz.body.myRating, 'blitz untouched by a rapid win').toBe(800);
 
+    // Neither side ever reads their own name on the other's row (the old
+    // mirror wrote the accepter's name under both keys). Presence is
+    // heartbeated first so the fallback chain is deterministic.
+    await call('POST', '/api/presence', { name: 'Alice Wonder', img: null }, ALICE);
+    await call('POST', '/api/presence', { name: 'Bob Builder', img: null }, BOB);
+    const snapA = await call('GET', '/api/friends/snapshot', undefined, ALICE);
+    expect(snapA.body.friends.find((f) => f.uid === BOB).name, 'Alice sees Bob').toBe('Bob Builder');
+    const snapB = await call('GET', '/api/friends/snapshot', undefined, BOB);
+    expect(snapB.body.friends.find((f) => f.uid === ALICE).name, 'Bob sees Alice, not himself').toBe('Alice Wonder');
+
     // Simulate the reported refresh: wipe the in-memory/local days on both
     // sides, re-pull the authoritative snapshot, and the flame must be 1 —
     // on BOTH devices — instead of resetting to 0.

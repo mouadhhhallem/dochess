@@ -55,3 +55,7 @@ lesson-screen.png
 # Local server run log (detached dev server)
 server.run.log
 
+
+# One-shot maintenance backup (test-junk purge)
+server/.data.bak-*/
+

@@ -1298,6 +1298,10 @@ let needSnapshot = false;
             try { await watchSentInvite(); } catch (_) {}
             // ...and the experience ledger, so the hero XP is live.
             try { await pullXp(); } catch (_) {}
+            // ...and presence itself: until the first heartbeat lands, this
+            // device looks offline to its friends. Retry every tick while it
+            // hasn't (Clerk sessions resolve seconds after boot).
+            try { if (!heartbeatOk) await heartbeat(); } catch (_) {}
             try { await pullSnapshot(); } catch (_) {}
             // Presence repaint: the friends screen shows live dots, so a
             // player who comes online (or leaves) flips within ~30 s.
@@ -1414,6 +1418,7 @@ let needSnapshot = false;
         } catch (_) {}
         return null;
     }
+    let heartbeatOk = false;
     async function heartbeat() {
         try {
             // No document.hidden skip: an open background tab is still an
@@ -1422,6 +1427,7 @@ let needSnapshot = false;
             // another tab).
             if (apiBase() === null || uidOf() === 'guest') return;
             await api('presence', { name: meName(), img: myAvatar() });
+            heartbeatOk = true;
         } catch (_) {}
     }
     setInterval(heartbeat, 45000);
@@ -1442,16 +1448,16 @@ let needSnapshot = false;
     function presenceLeaveBeacon() {
         try {
             if (apiBase() === null || uidOf() === 'guest') return;
-            const base = apiBase();
-            sessionToken().then((t) => {
-                try {
-                    fetch(`${base}/api/presence/leave`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: 'Bearer ' + t } : {}) },
-                        body: '{}',
-                        keepalive: true,
-                    }).catch(() => {});
-                } catch (_) {}
+            // Synchronous fire with the CACHED token only: pagehide cannot
+            // await a fresh token (the tab may die mid-promise and friends
+            // would see a ghost "online" for minutes). The token cache is
+            // 30 s fresh, so it is almost always present.
+            const t = tokenCache.token;
+            fetch(apiBase() + '/api/presence/leave', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: 'Bearer ' + t } : {}) },
+                body: '{}',
+                keepalive: true,
             }).catch(() => {});
         } catch (_) {}
     }

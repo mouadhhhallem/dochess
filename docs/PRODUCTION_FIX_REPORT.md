@@ -626,3 +626,45 @@ passed, 23 skipped, 1 flaky** (`quickmatch` P2P pairing failed once
 under full-suite load, green alone and green as a file — timing, not
 a regression). Assets re-keyed (`friends.js?v=8`, `app.js?v=54`,
 `puzzles.js?v=5`).
+
+---
+
+## 17. Names, test-junk purge, instant presence, XP on the card (2026-10-15)
+
+A third user batch from the live local server:
+
+1. **Friend list showed my own name.** Root cause, confirmed in the
+   production data: the accept path mirrored the requester's VIEW of
+   the accepter under BOTH friendship keys, so the accepter read
+   their own name (`names: {both: "Mouadh"}`). Fix: names are stored
+   self-keyed (accepter asserts their live name, requester's real name
+   is read from their profile/presence); `listFriends` resolves
+   `names[other] → profile → presence`, distrusts mirror-damaged rows
+   (identical value under both keys) in favour of profile/presence,
+   and never falls back to `names[self]`. The live row was repaired
+   from the account docs.
+2. **Test accounts on the hall of fame.** Oct 12–13 manual-test runs
+   left 10 junk accounts (Alice Wonder ×3, Bobby Tables ×2, Final
+   Alice/Bob, Rank Alice, devsmoke) plus their requests/inbox rows in
+   `server/.data`. Purged with a backup kept (`server/.data.bak-*`,
+   gitignored); real accounts, games, friendships, invites, streaks,
+   XP and presence untouched. Test spawns that could fall back to the
+   dev data dir now pin isolated temp dirs.
+3. **Email addresses as display names.** Clerk users whose only name
+   is an email username showed the full address on ladder/hall/
+   directory. Email-like usernames now resolve to `Player`.
+4. **Presence instantly both ways.** The tab-close beacon now fires
+   synchronously with the cached token (pagehide cannot await a fresh
+   one — that was the 5-minute ghost); sign-out awaits
+   `presence/leave`; the first heartbeat retries every poll until it
+   lands (Clerk sessions resolve seconds after boot), so "online now"
+   appears immediately too.
+5. **XP where play happens.** The game-over card now shows `+N XP`
+   beside the rating move (same ledger for friend games and
+   quick-match: win +20 / draw +10 / loss +5), and opening the Online
+   screen refreshes the ledger. Nothing is granted for merely sending
+   an invite — only finished games, streaks and puzzle solves pay.
+
+Test deltas: `node --test` **71/71** (+2 name-convention tests);
+E2E test 16 extended with both-sides snapshot-name assertions.
+Assets re-keyed (`friends.js?v=9`, `app.js?v=55`).

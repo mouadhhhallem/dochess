@@ -337,7 +337,10 @@ async function handleFriendRespond(req, res, userId) {
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
     try {
         const accept = body.accept === true || body.accept === 'true' || body.accept === 1;
-        const r = await SOC.respondToRequest(userId, body.fromUid, accept);
+        // The accepter's live self-name travels too, so the friendship row
+        // stores self-keyed names and neither side ever reads their own
+        // name on the other's row.
+        const r = await SOC.respondToRequest(userId, body.fromUid, accept, { name: body.myName, img: body.myImg });
         if (r.error) {
             const status = r.error === 'already-resolved' ? 409 : r.error === 'no-request' ? 404 : 400;
             sendError(res, status, r.error, r.status ? { status: r.status } : {});

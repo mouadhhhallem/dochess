@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MongoClient } from 'mongodb';
 
 // Account isolation for cloud sync: per-account device state, first-sign-in
@@ -39,6 +41,7 @@ const config = (() => {
 
 let apiProc = null;
 const testUsers = [];
+let E2E_DATA_DIR = null;
 
 function pw() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#';
@@ -90,9 +93,13 @@ test.beforeAll(async () => {
   let clerkOk = false;
   try { clerkOk = (await clerk('GET', '/users?limit=1')).status === 200; } catch (_) {}
   if (!clerkOk) return;
+  // Isolated data dir: a spawned server must NEVER fall back to the
+  // developer's server/.data (that is how stray test accounts once ended
+  // up on the real hall of fame).
+  E2E_DATA_DIR = mkdtempSync(join(tmpdir(), 'dochess-sync-e2e-'));
   apiProc = spawn('node', ['server/index.mjs'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(API_PORT), MONGODB_DB: E2E_DB },
+    env: { ...process.env, PORT: String(API_PORT), MONGODB_DB: E2E_DB, DOCHESS_DATA_DIR: E2E_DATA_DIR },
     stdio: 'ignore',
   });
   const deadline = Date.now() + 45000;
@@ -119,6 +126,7 @@ test.afterAll(async () => {
     try { await clerk('DELETE', '/users/' + id); } catch (_) {}
   }
   if (apiProc) { try { apiProc.kill(); } catch (_) {} apiProc = null; }
+  if (E2E_DATA_DIR) { try { rmSync(E2E_DATA_DIR, { recursive: true, force: true }); } catch (_) {} E2E_DATA_DIR = null; }
   if (config.mongoUri) {
     try {
       const c = new MongoClient(config.mongoUri, { serverSelectionTimeoutMS: 5000 });
@@ -329,7 +337,7 @@ test('S4: match records survive a server outage and land on retry', async ({ pag
   // the earlier state must still be in Mongo (restart durability).
   apiProc = spawn('node', ['server/index.mjs'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(API_PORT), MONGODB_DB: E2E_DB },
+    env: { ...process.env, PORT: String(API_PORT), MONGODB_DB: E2E_DB, ...(E2E_DATA_DIR ? { DOCHESS_DATA_DIR: E2E_DATA_DIR } : {}) },
     stdio: 'ignore',
   });
   const deadline = Date.now() + 45000;

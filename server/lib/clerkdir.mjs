@@ -20,7 +20,12 @@ function displayName(u) {
     if (!u || typeof u !== 'object') return 'Player';
     const full = [u.first_name, u.last_name].filter((x) => typeof x === 'string' && x.trim()).join(' ').trim();
     if (full) return full.slice(0, 24);
-    if (typeof u.username === 'string' && u.username.trim()) return u.username.trim().slice(0, 24);
+    if (typeof u.username === 'string' && u.username.trim()) {
+        // An email address is NOT a display name: showing it on the ladder
+        // or the hall would leak a private contact address to every player.
+        const name = u.username.trim();
+        if (!name.includes('@')) return name.slice(0, 24);
+    }
     return 'Player';
 }
 

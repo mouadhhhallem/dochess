@@ -561,6 +561,35 @@ test('tiers are derived from the rating', () => {
     assert.equal(tierOf(2000), 'diamond');
 });
 
+test('accept stores self-keyed names: neither side reads their own name', async () => {
+    const req = 'user_namesreq0001', acc = 'user_namesacc0002';
+    await db().updateUser(req, { s: { updatedAt: Date.now(), data: 1 } }, { name: 'Alice Wonder' });
+    await db().updateUser(acc, { s: { updatedAt: Date.now(), data: 1 } }, { name: 'Bobby Tables' });
+    // The requester names the TARGET from search; the accepter asserts
+    // their own live name on accept.
+    await SOC.requestFriend(req, { toUid: acc, name: 'Bobby Tables' });
+    await SOC.respondToRequest(acc, req, true, { name: 'Bobby Tables' });
+
+    const forReq = await SOC.listFriends(req);
+    assert.equal(forReq.find((f) => f.uid === acc).name, 'Bobby Tables', 'requester sees the friend');
+    const forAcc = await SOC.listFriends(acc);
+    assert.equal(forAcc.find((f) => f.uid === req).name, 'Alice Wonder', 'accepter sees the friend, not themselves');
+});
+
+test('legacy mirrored rows heal through profile and presence', async () => {
+    const req = 'user_legreq000001', acc = 'user_legacc000002';
+    await db().updateUser(req, { s: { updatedAt: Date.now(), data: 1 } }, { name: 'Alice Wonder' });
+    await db().updateUser(acc, { s: { updatedAt: Date.now(), data: 1 } }, { name: 'Bobby Tables' });
+    // The old mirror wrote the accepter's name under BOTH keys.
+    await db().putDoc('friends', 'f:' + req + '|' + acc, {
+        _id: 'f:' + req + '|' + acc, a: req, b: acc, since: Date.now(),
+        names: { [req]: 'Bobby Tables', [acc]: 'Bobby Tables' },
+    });
+    assert.equal((await SOC.listFriends(req)).find((f) => f.uid === acc).name, 'Bobby Tables');
+    assert.equal((await SOC.listFriends(acc)).find((f) => f.uid === req).name, 'Alice Wonder',
+        'the accepter no longer reads their own name');
+});
+
 test('exactly six time controls resolve, each appearing once', () => {
     const seen = new Set();
     for (const c of TIME_CONTROLS) {

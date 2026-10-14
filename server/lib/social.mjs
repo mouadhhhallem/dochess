@@ -230,10 +230,14 @@ export function createSocialStore(getDb) {
         const db = getDb();
         const key = friendKey(uid, friendUid);
         const prev = await db.getDoc('friends', key);
+        const nm = cleanName(name);
         const row = {
             _id: key, a: uid, b: friendUid,
             since: (prev && prev.since) || Date.now(),
-            names: { ...((prev && prev.names) || {}), [uid]: cleanName(name) }
+            // Self-keyed, and never the 'Player' fallback: an unknown name
+            // is an absent key, so resolution can fall through to fresher
+            // sources instead of locking in a placeholder.
+            names: { ...((prev && prev.names) || {}), ...((nm && nm !== 'Player') ? { [uid]: nm } : {}) }
         };
         await db.putDoc('friends', key, row);
         return row;
@@ -269,27 +273,55 @@ export function createSocialStore(getDb) {
             if (!r || !r.a || !r.b || seen.has(r._id)) continue;
             seen.add(r._id);
             const other = r.a === uid ? r.b : r.a;
-            out.push({
-                uid: other,
-                name: cleanName((r.names && r.names[uid]) || (r.names && r.names[other]) || ''),
-                since: r.since || 0
-            });
+            out.push({ uid: other, _names: (r.names && typeof r.names === 'object') ? r.names : {}, since: r.since || 0 });
         }
-        out.sort((x, y) => x.name.localeCompare(y.name));
         // Photos ride along from the account profile (kept fresh by every
         // heartbeat) with presence as fallback, so a friend's face survives
         // refreshes and shows on every screen without a second request.
         // Bounded: two indexed reads per friend.
+        //
+        // Names resolve through the same documents, in order, skipping the
+        // 'Player' placeholder everywhere:
+        //   1. names[other] — the friend's own asserted name (self-keyed),
+        //      UNLESS the row is mirror-damaged (see below);
+        //   2. the friend's account profile (heartbeat-kept);
+        //   3. the friend's live presence row.
+        // There is deliberately NO names[uid] fallback: no flow ever stored
+        // the requester's view there — the old mirror wrote the ACCEPTER's
+        // name under both keys, which is exactly the "my friend shows as
+        // me" bug. A damaged row is detectable (identical value under both
+        // keys) and is distrusted in favour of profile/presence, which heals
+        // it without a migration. Unknown names stay 'Player' instead of
+        // locking in a wrong one.
         const db = getDb();
+        const realName = (v) => {
+            const n = cleanName(v || '');
+            return (n && n !== 'Player') ? n : '';
+        };
         for (const f of out) {
+            const other = f.uid;
+            const legacy = f._names || {};
+            // Mirror damage is detectable: the old code wrote the accepter's
+            // name under BOTH keys, so one distinct value across 2+ keys
+            // means the map is untrustworthy (it shows each side their own
+            // name). New rows have distinct values (or a single self-keyed
+            // entry, which can only ever be read by the OTHER side).
+            const distinct = [...new Set(Object.values(legacy).map(realName).filter(Boolean))];
+            const damaged = Object.keys(legacy).length >= 2 && distinct.length <= 1;
+            const asserted = damaged ? '' : realName(legacy[other]);
             try {
                 const [u, p] = await Promise.all([
-                    db.getUser(f.uid).catch(() => null),
-                    db.getDoc('presence', f.uid).catch(() => null),
+                    db.getUser(other).catch(() => null),
+                    db.getDoc('presence', other).catch(() => null),
                 ]);
+                const fromProfile = realName(u && u.profile && u.profile.name);
+                const fromPresence = realName(p && p.name);
+                f.name = asserted || fromProfile || fromPresence || 'Player';
                 f.img = cleanImg((u && u.profile && u.profile.image) || (p && p.img)) || null;
-            } catch (_) { f.img = null; }
+            } catch (_) { f.name = asserted || 'Player'; f.img = null; }
+            delete f._names;
         }
+        out.sort((x, y) => (x.name || '').localeCompare(y.name || ''));
         // Durable streak state rides along so every device converges on the
         // same flame (the client unions the day map with its optimistic
         // stamps and takes max(local run, server count)). Bounded: the last
@@ -356,8 +388,14 @@ export function createSocialStore(getDb) {
      * Accept or decline. Only the RECIPIENT may resolve, and only a pending
      * row may transition — so a duplicate accept is a no-op that still
      * reports success, and a decline racing an accept cannot undo it.
+     *
+     * Names are stored SELF-keyed: names[X] is X's own display name. (An
+     * older build mirrored the requester's VIEW of the accepter under the
+     * requester's key, so the accepter's own list showed their own name —
+     * the "my friend shows as me" bug. listFriends resolves with a
+     * fallback chain that heals those rows without a migration.)
      */
-    async function respondToRequest(uid, fromUid, accept) {
+    async function respondToRequest(uid, fromUid, accept, self = {}) {
         uid = cleanUid(uid); fromUid = cleanUid(fromUid);
         if (!uid || !fromUid || uid === fromUid) return { error: 'bad-requester' };
         const db = getDb();
@@ -383,15 +421,28 @@ export function createSocialStore(getDb) {
             return { status: 'declined' };
         }
         await resolveRequest(fromUid, uid, 'accepted');
-        const row = await addFriend(uid, fromUid, (prev && prev.name) || '');
-        // Mirror the display name onto the requester's own row so both
-        // friends lists show a name rather than the 'Player' fallback.
-        const mirrorKey = friendKey(uid, fromUid);
-        const stored = await db.getDoc('friends', mirrorKey);
+        // Self-keyed names: the accepter's own name first (their live
+        // assertion wins, the requester's stale view is the fallback), then
+        // the requester's own name from their account profile or presence.
+        const accepterName = cleanName((self && self.name) || (prev && prev.name) || '');
+        let requesterName = '';
+        try {
+            const [udoc, pres] = await Promise.all([
+                db.getUser(fromUid).catch(() => null),
+                db.getDoc('presence', fromUid).catch(() => null),
+            ]);
+            requesterName = cleanName((udoc && udoc.profile && udoc.profile.name) || (pres && pres.name) || '');
+        } catch (_) {}
+        const names = {};
+        if (accepterName && accepterName !== 'Player') names[uid] = accepterName;
+        else if (prev && prev.name) names[uid] = cleanName(prev.name);
+        if (requesterName && requesterName !== 'Player') names[fromUid] = requesterName;
+        const row = await addFriend(uid, fromUid, '');
+        const stored = await db.getDoc('friends', friendKey(uid, fromUid));
         if (stored) {
-            await db.putDoc('friends', mirrorKey, {
+            await db.putDoc('friends', friendKey(uid, fromUid), {
                 ...stored,
-                names: { ...(stored.names || {}), [fromUid]: cleanName((prev && prev.name) || '') }
+                names: { ...((stored && stored.names) || {}), ...names }
             });
         }
         return { status: 'accepted', friend: row };

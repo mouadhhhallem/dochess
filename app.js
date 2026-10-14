@@ -1831,6 +1831,9 @@ class ChessCourseApp {
 
     showOnline() {
         this._go('online-screen');
+        // Entering a game refreshes the ledger view: level/XP movement is
+        // reported where play happens, not on unrelated screens.
+        try { if (window.DoChessFriends && window.DoChessFriends.pullXp) window.DoChessFriends.pullXp(); } catch (_) {}
         if (this.online && (this.online.phase === 'play' || this.online.phase === 'over')) this._renderOnlineGame();
         else {
             this._renderOnlineLobby();
@@ -3012,7 +3015,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             pendingPromo: null, result: null, reason: null,
             rematchMe: false, rematchOpp: false, peerGone: false,
             _overShown: false, short: false, oppV: null,
-            ratingDelta: null, ratingAfter: null,
+            ratingDelta: null, ratingAfter: null, xpGained: 0,
             appliedMids: new Set(), pendingIntent: null,
             rtt: s.rtt || 0,
             clock: { w: control.base, b: control.base, side: 'white', turnStarted: performance.now() }
@@ -3273,6 +3276,18 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                         ratingBefore: (rating === null || rating === undefined || delta === null || delta === undefined) ? undefined : rating - delta,
                         ratingAfter: (rating === null || rating === undefined) ? undefined : rating,
                         date: Date.now(), endedAt: Date.now()
+                    }).then((resp) => {
+                        // Server-ledgered XP lands with the record: show it
+                        // on the result card (win +20, draw +10, loss +5)
+                        // and refresh the hero ledger behind it.
+                        try {
+                            const gained = resp && resp.xp && Number(resp.xp.gained);
+                            if (gained > 0) {
+                                s.xpGained = gained;
+                                if (window.DoChessFriends && window.DoChessFriends.pullXp) window.DoChessFriends.pullXp();
+                                if (s.phase === 'over') this._renderOnlineGame();
+                            }
+                        } catch (_) {}
                     });
                 }
             } catch (_) {}
@@ -3326,6 +3341,11 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         const rateBit = (s.ratingDelta !== null && s.ratingDelta !== undefined)
             ? ` <span class="rate-count" data-from="${s.ratingAfter - s.ratingDelta}" data-to="${s.ratingAfter}">Rating ${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}</span>`
             : '';
+        // Server-ledgered experience for THIS game (win +20, draw +10,
+        // loss +5 — same ledger for friend games and quick-match). It lands
+        // with the stored record, moments after the card first paints, and
+        // the repaint above picks it up.
+        const xpBit = (over && s.xpGained > 0) ? ` <span class="xp-count">+${s.xpGained} XP</span>` : '';
         const guestBit = !this.userId || !s.opp?.id || s.opp.id === 'guest';
         const unratedBit = (over && s.unrated) ? `<div class="feedback info">${guestBit ? 'Guest game — not rated. Sign in to play rated games.' : 'Unrated game — you are playing yourself.'}</div>` : '';
         const shortBit = (over && s.short && !s.unrated) ? `<div class="feedback info">Unrated game — too short to rate.</div>` : '';
@@ -3336,10 +3356,10 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             ? `${mine} · ${s.ratingAfter - s.ratingDelta} → ${s.ratingAfter} (${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta})`
             : `${mine} · ${OnlineRatings.get(this.userId, s.control.id)}`;
         const resultLine = !over ? '' : s.result === 'win'
-            ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`
+            ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}${xpBit}</div>${unratedBit}${shortBit}`
             : s.result === 'loss'
-            ? `<div class="feedback error">You lose. ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`
-            : `<div class="feedback info">Draw. ${this._reasonText(s.reason)}${rateBit}</div>${unratedBit}${shortBit}`;
+            ? `<div class="feedback error">You lose. ${this._reasonText(s.reason)}${rateBit}${xpBit}</div>${unratedBit}${shortBit}`
+            : `<div class="feedback info">Draw. ${this._reasonText(s.reason)}${rateBit}${xpBit}</div>${unratedBit}${shortBit}`;
         box.innerHTML = `
             <div class="lesson-content">
                 <div class="arena">
