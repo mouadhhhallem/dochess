@@ -108,9 +108,10 @@ test('sse: ticket auth, live fan-out of a friend request', async () => {
         setTimeout(() => reject(new Error('stream never opened')), 8000);
     });
 
-    // BOB sends ALICE a friend request from a different account.
+    // BOB sends ALICE a friend request from a different account, the way
+    // the real client does (target name + the sender's live self-name).
     const req = await call('POST', '/api/friends/request',
-        { friendUid: ALICE, friendName: 'Bob Sender' }, BOB);
+        { friendUid: ALICE, friendName: 'Alice Wonder', myName: 'Bob Sender' }, BOB);
     assert.equal(req.status, 200);
     assert.equal(req.body.status, 'pending');
 
