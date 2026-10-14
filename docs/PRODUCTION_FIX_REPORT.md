@@ -69,6 +69,72 @@ Full detail with root causes and reproduction in `PRODUCTION_AUDIT.md`.
 
 ---
 
+## 2b. Follow-up round: the reported "Could not send request", the hall, and the ladder
+
+Reported after the first deploy: *"when I invite someone — Could not send
+request. The server refused the request?"*, plus *"the hall of fame should have
+all the people from the database with their picture"* and *"the ranking should
+have you and your friends and the rest from the database, but showing others
+with blurry effects, and it should always be reloading because someone new may
+have just registered"*.
+
+### The "Could not send request" bug
+
+Root cause, reproduced against a live API: **`POST /api/friends/request`
+returns 401 whenever there is no valid Clerk session token.** The client
+collapsed every failure into one message and — worse — **deleted the row the
+user had just created**. So a signed-out user (or a transient token failure)
+lost their action and was told a server that had merely refused a token had
+"refused the request".
+
+Four further defects surfaced while fixing it:
+
+| Defect | Fix |
+| --- | --- |
+| One generic message for every failure | `explainFailure()` classifies 401 → *Sign in to use friends*, transport → *Cannot reach DoChess*, 409 → *Already friends*, 400 → *That player is not reachable*, 5xx → offline. The phrase "the server refused the request" is gone |
+| A failed send **deleted the user's row** | The row is kept and flagged `unsent`, rendered as *"not delivered — nothing was sent"* with a **Retry** button; the authoritative snapshot preserves those rows instead of pruning them |
+| **`authState` latched to "signed-out" after one 401**, permanently blocking every later retry for a user who *was* signed in | `isSignedOut()` now returns false whenever a live Clerk identity exists; only 401 (not 403) marks a session gone |
+| An **inverted condition** in the snapshot cleared the `unsent` flag on every poll — found by the new test, not by review | The flag clears only once the server actually lists the request as pending |
+
+### Hall of fame
+
+Previously a **device-local list** titled "First 1000 through the door", and
+the removed server endpoint had leaked every member's uid + full name to every
+caller. Now `GET /api/hall` returns **every registered account** from the
+authoritative `users` collection, **with avatars**, paginated, filtered by the
+same per-viewer privacy rule as the ladder (strangers: first name only, no uid,
+no full name). Without a backend it stays local and says so.
+
+Avatars in the hall disclose nothing new: `/api/directory` already serves a
+display name and avatar for any registered player to any signed-in account.
+
+### Ladder
+
+- `GET /api/rank` now also returns **every friend with their real global rank**,
+  so a friend ranked outside the visible page is never lost (previously the
+  "you and your friends" view truncated silently).
+- One board in **true rank order**; friends show in full, strangers are
+  **blurred**. The blur is presentation only — the server has already reduced a
+  stranger to a first name, so nothing is hidden that was sent.
+- **Auto-refresh every 30 s** while the tab is visible, on tab focus, and on
+  demand via **Refresh now** — a player who just registered appears without a
+  reload.
+- A live backend that errors now reports *"unavailable"* instead of silently
+  degrading to the device board, which would have shown a two-player local list
+  as the global ladder.
+
+### Verification for this round
+
+- `npm test`: **92 passed, 0 failed, 23 skipped**. `node --test`: **57/57**.
+- `test-friends-e2e.spec.js` grew from 11 to **14** scenarios; the three new
+  ones cover exactly the reported symptoms (failed send kept + explained +
+  retried, hall from the database with pictures, ladder with you/friends/
+  blurred strangers in rank order and a new registration appearing on refresh).
+- `test-friends.spec.js`: two tests updated from "strangers are not blurred"
+  to the new contract.
+
+---
+
 ## 3. Files changed
 
 **Server**
