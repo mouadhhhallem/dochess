@@ -1833,15 +1833,21 @@ body[data-theme='day'] .nav { background: #ffffff; }
     gap: 1.25rem; align-items: center;
     padding: 1.5rem 1.75rem;
 }
-/* Knight watermark: the subject's own artwork, barely there. */
+/* Knight watermark: the subject's own artwork, barely there.
+   Piece files live inside a SET folder (pieces-main / pieces-second). These
+   base rules must name a real folder: a path that omits the folder silently
+   404s, which dropped this watermark and logged an error on every load.
+   tools/check-piece-paths.mjs guards against that regression. */
 .dc-id::after {
     content: ''; position: absolute; right: -30px; top: 50%;
     width: 230px; height: 230px; transform: translateY(-50%) rotate(-8deg);
-    background: url('assets/pieces/white-knight.svg') center / contain no-repeat;
+    background: url('assets/pieces/pieces-second/white-knight.svg') center / contain no-repeat;
     opacity: .05; pointer-events: none;
 }
-body[data-theme='day'] .dc-id::after { background-image: url('assets/pieces/black-knight.svg'); opacity: .05; }
+body[data-theme='day'] .dc-id::after { background-image: url('assets/pieces/pieces-second/black-knight.svg'); opacity: .05; }
 /* Follow the chosen piece set (js/pieces.js sets body[data-piece-set]). */
+body[data-piece-set='classic'] .dc-id::after { background-image: url('assets/pieces/pieces-main/white-knight.svg'); }
+body[data-piece-set='classic'][data-theme='day'] .dc-id::after { background-image: url('assets/pieces/pieces-main/black-knight.svg'); }
 body[data-piece-set='modern'] .dc-id::after { background-image: url('assets/pieces/pieces-second/white-knight.svg'); }
 body[data-piece-set='modern'][data-theme='day'] .dc-id::after { background-image: url('assets/pieces/pieces-second/black-knight.svg'); }
 .dc-id > * { position: relative; z-index: 1; }

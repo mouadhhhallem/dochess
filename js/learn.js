@@ -108,7 +108,7 @@ function setIconHtml(set) {
     if (letter) {
         const pieceChar = letter.toUpperCase();
         const src = (window.DoChessPieces && window.DoChessPieces.url(pieceChar, 'v24')) ||
-            `assets/pieces/white-${PIECE_FILE[letter]}.svg?v24`;
+            `assets/pieces/pieces-second/white-${PIECE_FILE[letter]}.svg?v24`;
         return `<img src="${src}" alt="" width="34" height="34" data-fallback-piece="${pieceChar}" draggable="false">`;
     }
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON_SVG[set.icon] || ICON_SVG.target}</svg>`;
@@ -643,7 +643,7 @@ function buildCapturedTray() {
             const img = document.createElement('img');
             const pc = p.color === 'w' ? p.type.toUpperCase() : p.type;
             img.src = (window.DoChessPieces && window.DoChessPieces.url(pc, 'v24')) ||
-                `assets/pieces/${p.color === 'w' ? 'white' : 'black'}-${PIECE_FILE[p.type]}.svg?v24`;
+                `assets/pieces/pieces-second/${p.color === 'w' ? 'white' : 'black'}-${PIECE_FILE[p.type]}.svg?v24`;
             img.dataset.fallbackPiece = pc;
             img.width = 20; img.height = 20;
             img.alt = `${p.color === 'w' ? 'White' : 'Black'} ${p.type} on ${sq}`;

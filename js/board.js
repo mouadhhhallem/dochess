@@ -51,7 +51,7 @@ export function pieceImageSrc(type, color, prefix = 'v1') {
     if (typeof window !== 'undefined' && window.DoChessPieces) {
         return window.DoChessPieces.url(white ? String(type).toUpperCase() : String(type), prefix);
     }
-    return `assets/pieces/${white ? 'white' : 'black'}-${PIECE_NAMES[type]}.svg?${prefix}`;
+    return `assets/pieces/pieces-second/${white ? 'white' : 'black'}-${PIECE_NAMES[type]}.svg?${prefix}`;
 }
 
 export function pieceLabel(type, color) {

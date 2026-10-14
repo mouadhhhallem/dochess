@@ -323,7 +323,7 @@ class ChessCourseApp {
         const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
         const white = piece === piece.toUpperCase();
         const kind = names[piece.toLowerCase()] || 'pawn';
-        return `assets/pieces/${white ? 'white' : 'black'}-${kind}.svg?${ChessCourseApp.assetV()}`;
+        return `assets/pieces/pieces-second/${white ? 'white' : 'black'}-${kind}.svg?${ChessCourseApp.assetV()}`;
     }
     _svg(piece) {
         const white = piece === piece.toUpperCase();

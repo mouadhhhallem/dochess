@@ -381,13 +381,13 @@ have been reused across many behavioural changes in the git history.
 The working tree contains a modified, uncommitted `index.html` that is:
 
 - **double-encoded** (UTF-8 bytes decoded as Windows-1252 and re-encoded): every
-  `—`, `→`, `─`, `•` in comments **and in the `<title>`** is now `â€”`,
-  `â†’`, `â•`, `â”€`;
+  `—`, `→`, `─`, `•` in comments **and in the `<title>`** is now `—`,
+  `â†’`, `•`, `→`;
 - prefixed with a **UTF-8 BOM** (`index.html` is 72319 bytes vs 69841 at HEAD);
 - converted to **CRLF** line endings (964 CRLF vs 0 at HEAD).
 
 Verified: `git show HEAD:index.html` → `DoChess — Master the Game of Kings`;
-the working tree → `DoChess â€” Master the Game of Kings`.
+the working tree → `DoChess — Master the Game of Kings`.
 
 437 lines differ; after undoing the double encode only **2 genuine edits**
 remain, both CSS mobile-overflow fixes (`calc(100dvw - 12px)` added to

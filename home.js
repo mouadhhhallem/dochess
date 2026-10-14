@@ -320,7 +320,7 @@ function heroPaint() {
         if (sq) {
             const P = sq.color === 'w' ? sq.type.toUpperCase() : sq.type;
             const src = (window.DoChessPieces && DoChessPieces.url(P, assetV())) ||
-                `assets/pieces/${sq.color === 'w' ? 'white' : 'black'}-${{ k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' }[sq.type]}.svg?${assetV()}`;
+                `assets/pieces/pieces-second/${sq.color === 'w' ? 'white' : 'black'}-${{ k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' }[sq.type]}.svg?${assetV()}`;
             d.innerHTML = `<img src="${src}" class="chess-piece" alt="" width="45" height="45" draggable="false" data-fallback-piece="${P}">`;
         }
         if (H.sel) {

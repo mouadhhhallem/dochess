@@ -83,7 +83,7 @@
         const kind = PIECE_NAMES[piece.toLowerCase()];
         if (!kind) return '';
         const src = (window.DoChessPieces && window.DoChessPieces.url(piece, assetV())) ||
-            `assets/pieces/${white ? 'white' : 'black'}-${kind}.svg?${assetV()}`;
+            `assets/pieces/pieces-second/${white ? 'white' : 'black'}-${kind}.svg?${assetV()}`;
         return `<img src="${src}" ` +
             `class="pz-piece" alt="" draggable="false" data-fallback-piece="${piece}">`;
     }

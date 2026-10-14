@@ -1,11 +1,11 @@
 /**
- * server/lib/db.mjs â€” the permanent store.
+ * server/lib/db.mjs — the permanent store.
  *
  * MongoDB is the source of truth (users, games). Two drivers share one
  * interface so the API runs identically in production and in local
  * development:
- *   MongoStore  â€” used when MONGODB_URI is set (production).
- *   FileStore   â€” a clearly-flagged dev fallback under server/.data/,
+ *   MongoStore  — used when MONGODB_URI is set (production).
+ *   FileStore   — a clearly-flagged dev fallback under server/.data/,
  *                 used ONLY when Mongo is missing and DOCHESS_DEV_FILE_STORE
  *                 is not disabled. /api/health reports which one is live.
  *
@@ -13,7 +13,7 @@
  *   users  { _id, createdAt, updatedAt, profile, sections: {<id>:{updatedAt,data}} }
  *   games  { _id, userId, gameId, control, opp, result, plies, delta, date }
  *   friends / requests / invites / presence
- *          { _id, ... } â€” the social graph. See lib/social.mjs: these are
+ *          { _id, ... } — the social graph. See lib/social.mjs: these are
  *          the AUTHORITATIVE friendship, request, invitation and presence
  *          records. They used to live in process memory (server/lib/friends.mjs)
  *          and were lost on every restart.
@@ -32,7 +32,7 @@ import { MongoClient } from 'mongodb';
 import { config, ROOT } from './env.mjs';
 import { mergeSections } from './merge.mjs';
 
-/* â”€â”€ shared helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* →→ shared helpers →→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→ */
 
 const now = () => Date.now();
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
@@ -79,7 +79,7 @@ export function sanitizeGameRecord(raw, userId) {
     if (typeof raw.delta === 'number' && Number.isFinite(raw.delta)) rec.delta = Math.max(-500, Math.min(500, Math.round(raw.delta)));
     if (typeof raw.opp === 'string') rec.opp = raw.opp.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 48);
     // Ordered move history (UCI strings), final position, termination and
-    // rating bookends â€” all optional, all bounded. Absent on legacy records.
+    // rating bookends — all optional, all bounded. Absent on legacy records.
     if (Array.isArray(raw.moves)) {
         rec.moves = raw.moves
             .filter((m) => typeof m === 'string')
@@ -100,7 +100,7 @@ export function sanitizeGameRecord(raw, userId) {
     return rec;
 }
 
-/* â”€â”€ Mongo driver â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* →→ Mongo driver →→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→ */
 
 class MongoStore {
     constructor(uri, dbName) {
@@ -128,7 +128,7 @@ class MongoStore {
         if (!this.indexesReady) {
             await this.games.createIndex({ userId: 1, date: -1 });
             // Per-user game history: both players hold their own copy of a
-            // shared game id, so uniqueness is (userId, gameId) â€” retries stay
+            // shared game id, so uniqueness is (userId, gameId) — retries stay
             // idempotent per user without dropping the other player's copy.
             await this.games.createIndex({ userId: 1, gameId: 1 }, { unique: true });
             await this.games.createIndex({ date: -1 });
@@ -198,7 +198,7 @@ class MongoStore {
         for (let round = 0; round < 3; round++) {
             try {
                 const doc = await this.getUser(userId) || { _id: userId, createdAt: now(), sections: {} };
-                // Snapshot BEFORE mergeSections mutates doc.sections in place â€”
+                // Snapshot BEFORE mergeSections mutates doc.sections in place —
                 // a live reference would compare equal to itself and skip
                 // every write.
                 const before = { ...((doc && isObj(doc.sections)) ? doc.sections : {}) };
@@ -210,7 +210,7 @@ class MongoStore {
                         // Section ids are server-known ([a-z]); never let a client
                         // key become a dotted Mongo field path.
                         if (!/^[a-z]+$/.test(id)) continue;
-                        if (sections[id] === before[id]) continue; // nothing won â€” leave it
+                        if (sections[id] === before[id]) continue; // nothing won — leave it
                         const upd = sections[id] && Number.isFinite(sections[id].updatedAt) ? sections[id].updatedAt : -1;
                         set['sections.' + id] = sections[id];
                         guards.push({ $or: [
@@ -232,11 +232,11 @@ class MongoStore {
                 const won = ((res && res.modifiedCount) || 0) > 0 || ((res && res.upsertedCount) || 0) > 0 ||
                     ((res && res.matchedCount) || 0) > 0 || !guards.length;
                 // Lost a same-section race on at least one section: loop
-                // re-reads â€” the fresh document already holds the winner, and
+                // re-reads — the fresh document already holds the winner, and
                 // our remaining sections merge against it instead of vanishing.
                 if (won) return await this.getUser(userId);
             } catch (e) {
-                // Upsert/insert race from a concurrent writer â€” retry while
+                // Upsert/insert race from a concurrent writer — retry while
                 // rounds remain, then fail loudly (never silently drop).
                 if (e && (e.code === 11000 || e.code === 11600) && round < 2) continue;
                 throw e;
@@ -269,7 +269,7 @@ class MongoStore {
     /** Every recorded game (rating derivation reads this). */
     async listAllGames() { return this.games.find({}).toArray(); }
 
-    /* â”€â”€ generic document access (used by lib/social.mjs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* →→ generic document access (used by lib/social.mjs) →→→→→→→→→→→→→ */
 
     _coll(name) {
         const c = this.social && this.social[name];
@@ -323,7 +323,7 @@ class MongoStore {
     }
 }
 
-/* â”€â”€ File driver (development only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* →→ File driver (development only) →→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→ */
 
 // Resolved lazily on every call (not at module load) so a test suite can
 // point the dev store at a temp directory after the module graph has
@@ -430,7 +430,7 @@ class FileStore {
         return out.sort((a, b) => b.rating - a.rating).slice(0, 50);
     }
 
-    /* â”€â”€ generic document access (dev parity with MongoStore) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* →→ generic document access (dev parity with MongoStore) →→→→→→→→→→→ */
 
     _collFile(name) { return 'coll_' + name.replace(/[^\w-]/g, '_') + '.json'; }
 
@@ -518,7 +518,7 @@ class FileStore {
     }
 }
 
-/* â”€â”€ lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* →→ lifecycle →→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→ */
 
 let store = null;
 let storeError = null;
@@ -546,7 +546,7 @@ export async function initDb() {
 }
 
 export function db() {
-    if (!store) throw new Error('database not initialised â€” call initDb() first');
+    if (!store) throw new Error('database not initialised — call initDb() first');
     return store;
 }
 

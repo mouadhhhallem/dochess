@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#0d1526">
     <link rel="icon" type="image/png" href="assets/favicon-32.png?v=28">
     <link rel="preload" href="assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="styles.css?v=57">
+    <link rel="stylesheet" href="styles.css?v=58">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' https://*.clerk.accounts.dev https://0.peerjs.com wss://0.peerjs.com https://chess.mauriulloa.com https://api.chess.com https://*.up.railway.app https://*.onrender.com http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; worker-src 'self' blob:; upgrade-insecure-requests">
     <style>
     /* ══ Learn screen ══════════════════════════════════════════════════════
@@ -941,22 +941,22 @@
     <script defer src="clerk-config.js?v=18"></script>
 <script defer src="online.js?v=33"></script>
 <script defer src="achievements.js?v=1"></script>
-    <script defer src="app.js?v=52"></script>
+    <script defer src="app.js?v=53"></script>
     <!-- Vendored chess.js (UMD global `Chess`) for the Learn curriculum -->
     <script defer src="js/vendor/chess.js?v=1"></script>
     <!-- Learn curriculum as ONE classic script: ES modules are blocked by the
          meta-CSP (inline) and by file:// (CORS), which is why levels never
          loaded. Classic + external is allowed in both. Built from js/*.js by
          tools/build-learn.mjs — edit the sources, then rebuild. -->
-    <script defer src="js/learn.bundle.js?v=12"></script>
+    <script defer src="js/learn.bundle.js?v=13"></script>
     <!-- Study workspace: analysis board, library, engine client (classic script, file:// compatible) -->
-    <script defer src="study.js?v=5"></script>
+    <script defer src="study.js?v=6"></script>
     <!-- Home page: hero board + progress-driven regions (classic script) -->
-    <script defer src="home.js?v=6"></script>
+    <script defer src="home.js?v=7"></script>
     <!-- Progress page: completion ring + lesson journey (classic script) -->
     <script defer src="progress.js?v=1"></script>
     <!-- Puzzles: tactic trainer backed by chess-puzzle-api (classic script) -->
-    <script defer src="puzzles.js?v=3"></script>
+    <script defer src="puzzles.js?v=4"></script>
     <!-- Friends: friend graph, streaks, notifications, ranking, hall of fame (classic script) -->
     <script defer src="friends.js?v=6"></script>
     <!-- Cloud chess engine assist (chess-api shapes) + chess.com data client (classic script) -->
