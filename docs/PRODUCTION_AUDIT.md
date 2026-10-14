@@ -508,7 +508,34 @@ the 15 required scenarios, running against the local API.
 
 ---
 
-## 6. What this audit does *not* claim
+## 7. Re-verification 2026-10-14 (commit `88fa863`, `master`)
+
+The full mission was re-executed against the current tree instead of trusting
+the 2026-10-13 notes:
+
+- `node tools/build-learn.mjs --check` PASS; curriculum gate 94/94;
+  `test-elo.js` 14/14; `test-draws.js` 14/14; `perft.js` 5/5;
+  `node --test server/test/*.test.mjs` **57/57**.
+- `npx playwright test` (full suite): **92 passed, 0 failed, 23 skipped**
+  (the 23 skips are the Atlas+Clerk suites, still unreachable — TLS
+  `tlsv1 alert internal error` — and they skip with the reason printed).
+- `test-friends-e2e.spec.js` alone: **14/14**, covering every required
+  scenario (request → decline persists → re-request → accept persists →
+  remove persists incl. re-auth, restart durability, global ladder incl.
+  new 800-rated accounts, privacy, all six time controls, cross-page
+  invites, same-board accept, expiry/decline/duplicate/unauthorized,
+  rollback on 503, stale-snapshot safety, honest offline mode, presence
+  gating, inbox gating).
+- Asset guards: piece paths resolve, badge art complete, no mojibake/BOM.
+- Tracked-file secret scan: no hits (only `.env.example` placeholders).
+- Live site `https://mouadhhhallem.github.io/dochess/` serves 200; Pages
+  build `status: built` at commit `88fa863`.
+- **No new defects found.** Every defect in §2 remains fixed; no code
+  changes were required by this re-verification. The one standing blocker
+  is unchanged: no backend host credential exists here, so the API still
+  cannot be deployed from this environment (see the fix report §10/§11).
+
+## 8. What this audit does *not* claim
 
 - It does not claim the production site was fixed. The live site is GitHub
   Pages and can only be updated with static files; the backend-dependent

@@ -507,5 +507,28 @@ To make the platform genuinely global, in order:
 | `6aa617f` | `docs/PRODUCTION_FIX_REPORT.md` |
 | `5fcf95d` | Live-check fixes: sync health probe, device-board copy |
 | `0145388` | Pluralisation fix (caught live, not by the unit suite) |
+| `9817820`–`63f70e0` | Failed-send honesty + retry, global hall/ladder, device-board copy |
+| `1f64b88`–`88fa863` | Piece-artwork, badge, mojibake repairs + guards + live sweep |
 
-Deployed: `0145388`.
+Deployed: `88fa863` (Pages build `built` at this commit, verified
+2026-10-14).
+
+---
+
+## 14. Re-verification 2026-10-14 (this mission)
+
+Re-ran everything instead of trusting the notes above:
+
+- Unit/integration gates: bundle fresh, curriculum 94/94, elo 14/14,
+  draws 14/14, perft 5/5, `node --test` **57/57**.
+- Full Playwright suite: **92 passed, 0 failed, 23 skipped**
+  (Atlas+Clerk unreachable, suites skip with reason — not counted green).
+- Friends E2E (two independent contexts): **14/14**.
+- Live site: 200, Pages `built` at `88fa863`, frontend in sync with
+  `origin/master`, working tree clean — **no deployment was needed and
+  none was performed** (pushing an empty commit would only churn the
+  build).
+- Secret scan of tracked files: clean. `.env` stays gitignored.
+- Result: **no new bugs, no regressions, no code changes required.**
+  Backend deployment remains blocked on operator action (§10/§11) —
+  unchanged, and reported honestly rather than fabricated.
