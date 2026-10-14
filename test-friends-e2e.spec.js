@@ -631,7 +631,10 @@ test('15: with no backend the app says so and shows no fake global ladder', asyn
     await page.waitForTimeout(3600);
     await page.evaluate(() => window.app.showFriends('ranking'));
     await expect(page.locator('#fr-rankout')).toContainText(/Device board/i, { timeout: 20000 });
+    // It must never claim a global board it does not have.
     await expect(page.locator('#fr-rankout')).not.toContainText('Global ladder');
+    await expect(page.locator('#fr-rankout')).not.toContainText(/global ladder/i);
+    await expect(page.locator('#fr-rankout')).toContainText('not connected to the ranking service');
     // And it must not present other players as a global leaderboard.
     await expect(page.locator('#fr-rankout')).toContainText('Other');
     await ctx.close();

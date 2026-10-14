@@ -1814,7 +1814,7 @@ let needSnapshot = false;
             </div>
             ${podiumHTML(data)}` : `<p class="lobby-hint">Showing ranks ${offset + 1}–${offset + (data.board || []).length} of ${data.total}</p>`}
             <div class="fr-livebar">
-                <span class="fr-live" role="status">${data.server ? 'Live — refreshes every 30s, so a player who just registered shows up' : 'Local list — connect DoChess for the global ladder'}</span>
+                <span class="fr-live" role="status">${data.server ? 'Live — refreshes every 30s, so a player who just registered shows up' : 'Local list only — sign in on DoChess to see every registered player'}</span>
                 <button class="btn-secondary sm" data-faction="rank-refresh" type="button">Refresh now</button>
             </div>
             ${data.server
