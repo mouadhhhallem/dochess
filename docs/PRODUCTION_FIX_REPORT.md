@@ -135,6 +135,80 @@ display name and avatar for any registered player to any signed-in account.
 
 ---
 
+## 2c. Asset and encoding round ("still a lot of things are not working")
+
+Rather than guess, every screen of the **deployed** site was driven in a real
+browser (desktop 1280×860 and phone 390×844), clicking the real navigation and
+recording console errors, page errors, HTTP failures, broken images and layout
+overflow. That sweep found three genuine defects.
+
+### Dead piece artwork — the biggest one
+
+The chess artwork lives inside a **set folder**:
+
+```
+assets/pieces/pieces-main/white-knight.svg   ← real file
+assets/pieces/pieces-second/white-knight.svg ← real file
+assets/pieces/white-knight.svg              ← does NOT exist
+```
+
+Eight code sites built the third form:
+
+| Where | Consequence when it fired |
+| --- | --- |
+| `styles.css` (profile knight watermark) | **404 on every single page load**, and the watermark was simply absent |
+| `app.js`, `home.js`, `puzzles.js`, `study.js`, `js/board.js`, `js/learn.js` (×2) | Only ran when `window.DoChessPieces` failed to load — invisible in normal use, but when it happened **every board on that screen lost its pieces** |
+
+All eight now name a real folder, and the CSS follows both the classic and
+modern piece sets.
+
+### Missing Grandmaster badge
+
+`achievements.js` declares a `grandmaster` tier (2100+) with no SVG. The badge
+would have 404'd at the exact moment a player earned it. `badge-grandmaster.svg`
+added in the same visual language as the other 50.
+
+### Corrupted UTF-8 in six source files
+
+`home.js`, `puzzles.js`, `study.js`, `js/learn.js`, `js/learn.bundle.js` and
+`server/lib/db.mjs` had been through a UTF-8 → cp1252 → UTF-8 round trip, so
+em dashes and arrows in comments became `â€”` / `â”€`. Caught by three
+Playwright assertions expecting `★` and receiving `â˜…`. Restored; no behaviour
+changed.
+
+### New guards, wired into `npm test`
+
+| Guard | Prevents |
+| --- | --- |
+| `tools/check-piece-paths.mjs` | any piece path that does not resolve on disk, or that omits the set folder |
+| `tools/check-badge-art.mjs` | any tier/badge id without its SVG |
+| `tools/check-encoding.mjs` | mojibake or a BOM in any tracked text file |
+
+`tools/fix-piece-paths.mjs` and `tools/repair-mojibake.mjs` are kept as the
+documented, repeatable form of both repairs.
+
+### Verification
+
+`npm test`: **92 passed, 0 failed**, 23 skipped. `node --test`: **57/57**.
+
+Post-deploy sweep of the live site: **0 problems** across every screen, both
+viewports. Functional check on the live site:
+
+```
+OK  home board pieces load — 32/32
+OK  profile knight watermark loads — loaded
+OK  learn picker populated
+OK  a level opens with squares — 64 squares
+OK  board responds to a click — move log 45 chars
+OK  online lobby renders — presets=6
+OK  adding a friend works offline (no false error) — 1 row, 0 undelivered
+OK  ranking renders offline
+OK  hall renders offline
+console/page errors: 0
+```
+
+---
+
 ## 3. Files changed
 
 **Server**
