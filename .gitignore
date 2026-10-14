@@ -51,3 +51,7 @@ after.png
 home.png
 board.png
 lesson-screen.png
+
+# Local server run log (detached dev server)
+server.run.log
+
