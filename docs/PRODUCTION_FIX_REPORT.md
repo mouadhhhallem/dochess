@@ -695,3 +695,42 @@ on the friends screen; A comes online → B reads "online now" with no
 reload; A leaves → B reads "last seen …" with no reload; firing
 pagehide clears A's server row far inside the ~90 s TTL. Assets
 re-keyed (`friends.js?v=10`).
+
+---
+
+## 19. Search faces, request names, re-add names (2026-10-15)
+
+One family — "each has its name, don't mix things": every string
+about a counterpart is now resolved to the right person.
+
+1. **Search showed names without pdp.** The directory merge was
+   first-win, so a local `{name:'', img:null}` friend placeholder
+   shadowed the presence/Clerk rows carrying the real face. The merge
+   now UNIONS fields per uid (first real name wins, first real photo
+   wins, friends surface first, still capped at 20), and the client
+   backfills server photos into the shelf plus overlays them on
+   search rows that lack one.
+2. **"MY name wants to be your friend".** The request inbox note and
+   the recipient's request row used the request row's stored name —
+   which is the requester's VIEW of the target, i.e. the recipient's
+   own name back at them (plus a null photo). Now the request row
+   stores the requester's SELF-assertion (`fromName`/`fromImg`,
+   alongside the target view kept for the sender's Sent list);
+   inbox titles, recipient rows and the invite-decline note resolve
+   requester → `myName` → stored self-assertion → live profile →
+   presence (the invite-decline note previously read `undefined` as
+   "Player"). Email-like usernames resolve to `Player`, never the
+   address.
+3. **Remove → re-add → accept showed my name until refresh.** Same
+   root as (2): the accepter's local row was built from the wrongly
+   named request. Fixed at the root — new E2E test 18 drives remove
+   (real click + confirm), re-add and accept with NO refresh and
+   asserts each side reads the other person's name.
+
+Also purged earlier in this round: 10 Oct 12–13 manual-test accounts
+removed from the live dev store (backup kept, gitignored); test
+spawns that could fall back to the dev data dir now pin isolated
+temp dirs.
+
+Test deltas: `node --test` **74/74**; friends E2E **18/18** (+18).
+Assets re-keyed (`friends.js?v=11`).

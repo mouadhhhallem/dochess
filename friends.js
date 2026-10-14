@@ -1974,8 +1974,25 @@ let needSnapshot = false;
         // discard a half-typed search and leave the results pane empty, so
         // the query is kept in module state and re-applied on every render.
         if (currentSearchQ) input.value = currentSearchQ;
-        const renderFound = (found, extra) => {
-            const all = found.concat(extra || []);
+        const renderFound = (found, extra, pool) => {
+            // Server photos backfill the shelf (existing friends only — never
+            // created here) and overlay rows that lack one, so search always
+            // shows faces, not just names. `pool` is the FULL server answer
+            // (including uids already listed locally); `extra` is only the
+            // genuinely new rows appended below.
+            const byUid = {};
+            let touched = false;
+            try {
+                for (const p of (pool || extra || [])) {
+                    if (!p || !p.uid) continue;
+                    if (p.img && !byUid[p.uid]) byUid[p.uid] = p.img;
+                    const f = S.friends[p.uid];
+                    if (f && !f.img && p.img) { const ci = cleanImg(p.img); if (ci) { f.img = ci; touched = true; } }
+                }
+                if (touched) save();
+            } catch (_) {}
+            const all = found.map((p) => ((!p.img && byUid[p.uid])
+                ? { ...p, img: byUid[p.uid] } : p)).concat(extra || []);
             out.innerHTML = all.length ? '<div class="fr-grid">' + all.map((p) => {
                 const tag = p.pending ? 'requested' : (p.friend ? (p.outbound ? 'requested' : 'friend') : (p.fromServer ? 'DoChess' : 'met over the board'));
                 const hideAdd = p.friend || p.uid === uidOf() || p.outbound;
@@ -1997,7 +2014,7 @@ let needSnapshot = false;
                 if (!document.body.contains(out) || input.value !== q) return;
                 const have = new Set(search(q).rows.map((x) => x.uid));
                 const extra = r.players.filter((p) => p && p.uid && !have.has(p.uid)).map((p) => ({ uid: p.uid, name: p.name, friend: !!(p.friend || S.friends[p.uid]), rating: null, img: p.img || null, fromServer: true }));
-                if (extra.length) renderFound(search(q).rows, extra);
+                if (extra.length || (r.players || []).length) renderFound(search(q).rows, extra, r.players);
             } catch (_) {}
         };
         const runSearch = (q) => {

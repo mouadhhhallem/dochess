@@ -827,3 +827,43 @@ test('17: presence flips on the friend screen within seconds, no reload', async 
 
     await b.ctx.close(); await a.ctx.close();
 });
+
+test('18: remove, re-add and accept keeps every name on its owner', async ({ browser }) => {
+    const a = await newAccount(browser, ALICE, 'Alice Wonder');
+    const b = await newAccount(browser, BOB, 'Bob Builder');
+    // Profiles make name resolution deterministic (no heartbeat timing).
+    await call('PUT', '/api/state', { sections: {}, profile: { name: 'Alice Wonder' } }, ALICE);
+    await call('PUT', '/api/state', { sections: {}, profile: { name: 'Bob Builder' } }, BOB);
+    // Friend them the way the real client does (target name + live self-name).
+    await call('POST', '/api/friends/request', { friendUid: BOB, friendName: 'Bob Builder', myName: 'Alice Wonder' }, ALICE);
+    await call('POST', '/api/friends/respond', { fromUid: ALICE, accept: true, myName: 'Bob Builder' }, BOB);
+
+    // The reported flow: A removes B, re-adds, B accepts — all in the app,
+    // with NO refresh anywhere before the assertions.
+    await a.page.evaluate(() => window.app.showFriends('friends'));
+    await expect.poll(() => relist(a.page), { timeout: 25000 }).toContain(BOB);
+    a.page.once('dialog', (d) => d.accept());
+    await a.page.locator(`[data-faction="remove"][data-uid="${BOB}"]`).click();
+    await expect.poll(() => relist(a.page), { timeout: 25000 }).not.toContain(BOB);
+    // Server-confirmed (not just optimistic) before re-adding, or the
+    // re-request 409s as already-friends and no accept button ever appears.
+    await expect.poll(async () => (await call('GET', '/api/friends/snapshot', undefined, ALICE))
+        .body.friends.map((f) => f.uid), { timeout: 25000 }).not.toContain(BOB);
+    await call('POST', '/api/friends/request', { friendUid: BOB, friendName: 'Bob Builder', myName: 'Alice Wonder' }, ALICE);
+    // B accepts with a real click, exercising the local accept path.
+    await b.page.evaluate(() => window.app.showFriends('friends'));
+    await b.page.evaluate(() => window.DoChessFriends.pollNow());
+    const acceptBtn = b.page.locator(`[data-faction="accept"][data-uid="${ALICE}"]`);
+    await expect(acceptBtn, 'request visible with sender identity').toBeVisible({ timeout: 25000 });
+    await expect(b.page.locator('#friends-screen')).toContainText('Alice Wonder');
+    await acceptBtn.click();
+    // Both shelves, no refresh: each side reads the OTHER person's name.
+    await expect.poll(async () => a.page.evaluate((u) =>
+        (window.DoChessFriends.list().find((x) => x.uid === u) || {}).name, BOB),
+        { timeout: 25000 }).toBe('Bob Builder');
+    await expect.poll(async () => b.page.evaluate((u) =>
+        (window.DoChessFriends.list().find((x) => x.uid === u) || {}).name, ALICE),
+        { timeout: 25000 }).toBe('Alice Wonder');
+
+    await a.ctx.close(); await b.ctx.close();
+});

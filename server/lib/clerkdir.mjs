@@ -115,15 +115,35 @@ export async function clerkSearch(q, { fetchImpl = fetch } = {}) {
     return rows;
 }
 
-/** Merge local + Clerk rows: local wins on uid conflicts, friends first. */
+/**
+ * Merge local + Clerk rows: UNION fields per uid instead of first-win.
+ * First-win dropped real photos and names: the local placeholder for a
+ * friend is {name:'', img:null}, so it used to shadow the presence/Clerk
+ * rows carrying the actual face — search showed the name with no pdp.
+ * Order is still local-first (friends surface first), capped at 20.
+ */
 export function mergeDirectory(localRows, clerkRows, friendUids = []) {
     const friends = new Set(Array.isArray(friendUids) ? friendUids : []);
-    const seen = new Set();
-    const out = [];
+    const byUid = new Map();
+    const goodName = (n) => (typeof n === 'string' && n.trim() && n.trim() !== 'Player') ? n.trim().slice(0, 24) : '';
+    const goodImg = (v) => (typeof v === 'string' && /^https:/.test(v)) ? v.slice(0, 2048) : '';
     for (const r of [...(localRows || []), ...(clerkRows || [])]) {
-        if (!r || !r.uid || seen.has(r.uid)) continue;
-        seen.add(r.uid);
-        out.push({ uid: r.uid, name: r.name || 'Player', img: r.img || null, friend: friends.has(r.uid) });
+        if (!r || !r.uid || typeof r.uid !== 'string') continue;
+        let cur = byUid.get(r.uid);
+        if (!cur) { cur = { uid: r.uid, name: '', img: '' }; byUid.set(r.uid, cur); }
+        const nm = goodName(r.name);
+        if (nm && (!cur.name || cur.name === 'Player')) cur.name = nm;
+        const im = goodImg(r.img);
+        if (im && !cur.img) cur.img = im;
+    }
+    const out = [];
+    for (const cur of byUid.values()) {
+        out.push({
+            uid: cur.uid,
+            name: cur.name || 'Player',
+            img: cur.img || null,
+            friend: friends.has(cur.uid),
+        });
         if (out.length >= 20) break;
     }
     return out;

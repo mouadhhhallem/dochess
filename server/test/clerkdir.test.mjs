@@ -96,3 +96,34 @@ test('clerkdir: clerkListUsers reports incomplete instead of a fake full board',
     assert.equal(r.complete, false, 'a failed page is reported, not hidden');
     assert.equal(r.list.length, 100, 'the pages that did arrive are kept');
 });
+
+test('clerkdir: merge unions names and photos instead of first-win', () => {
+    // The old first-win merge let a local {name:'', img:null} placeholder
+    // shadow the presence row carrying the real face: search showed the
+    // name with no pdp.
+    const out = mergeDirectory(
+        [{ uid: 'user_u1', name: '', img: null }],
+        [
+            { uid: 'user_u1', name: 'Uma', img: 'https://x.test/uma.png' },
+            { uid: 'user_u2', name: 'Victor', img: null },
+        ],
+        ['user_u1']
+    );
+    assert.equal(out.length, 2);
+    assert.deepEqual(out[0], { uid: 'user_u1', name: 'Uma', img: 'https://x.test/uma.png', friend: true });
+    assert.deepEqual(out[1], { uid: 'user_u2', name: 'Victor', img: null, friend: false });
+});
+
+test('clerkdir: email usernames never become display names', async () => {
+    clearClerkCache();
+    const mailUser = {
+        id: 'user_mail1', username: 'someone@example.com', first_name: '', last_name: '',
+        image_url: 'https://x.test/m.png', email_addresses: [], phone_numbers: [],
+    };
+    const stub = async () => ({ ok: true, json: async () => ({ data: [mailUser] }) });
+    const { list } = await clerkListUsers({ fetchImpl: stub });
+    const hit = list.find((r) => r.uid === 'user_mail1');
+    assert.ok(hit, 'the account is still listed in the registry');
+    assert.equal(hit.name, 'Player', 'never the email address');
+    assert.ok(!JSON.stringify(list).includes('someone@example.com'), 'the address appears nowhere');
+});

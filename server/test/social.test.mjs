@@ -590,8 +590,7 @@ test('legacy mirrored rows heal through profile and presence', async () => {
         'the accepter no longer reads their own name');
 });
 
-test('exactly six time controls resolve, each appearing once', () => {
-    const seen = new Set();
+test('exactly six time controls resolve, each appearing once', () => {    const seen = new Set();
     for (const c of TIME_CONTROLS) {
         const r = resolveControl(c.base, c.inc);
         assert.ok(r, `${c.label} must resolve`);
@@ -743,3 +742,27 @@ test('ladder rows carry photos for self and friends, never strangers', async () 
     assert.ok(ot, 'a stranger row exists');
     assert.ok(!('img' in ot) && !('uid' in ot), 'strangers still get no photo and no uid');
 });
+/* -- request identity (never your own name) --------------------- */
+
+test('inbound requests name the requester live, with their photo', async () => {
+    const req = 'user_inbreq00001', acc = 'user_inbacc00002';
+    await db().updateUser(req, { s: { updatedAt: Date.now(), data: 1 } }, { name: 'Rita Requester', image: 'https://img.example/rita.png' });
+    await db().updateUser(acc, { s: { updatedAt: Date.now(), data: 1 } }, { name: 'Adam Accepter' });
+    // The request row carries the requester's VIEW of the target � the
+    // classic trap: showing it to the target reads as their own name.
+    await SOC.requestFriend(req, { toUid: acc, name: 'Adam Accepter' });
+    const forAcc = await SOC.listRequests(acc);
+    assert.equal(forAcc.inbound.length, 1);
+    assert.equal(forAcc.inbound[0].name, 'Rita Requester', 'recipient sees the sender, never themselves');
+    assert.equal(forAcc.inbound[0].img, 'https://img.example/rita.png', 'with the sender photo');
+    const forReq = await SOC.listRequests(req);
+    assert.equal(forReq.outbound[0].name, 'Adam Accepter', 'sender Sent list still names the target');
+    // No profile, no presence, but the sender asserted their own name on
+    // the row: the recipient still sees a person, never themselves, never
+    // the target name the sender typed.
+    const req2 = 'user_inbreq00003', acc2 = 'user_inbacc00004';
+    await SOC.requestFriend(req2, { toUid: acc2, name: 'Target Name', fromName: 'Sam Sender' });
+    const forAcc2 = await SOC.listRequests(acc2);
+    assert.equal(forAcc2.inbound[0].name, 'Sam Sender', 'self-assertion beats the stored target view');
+});
+

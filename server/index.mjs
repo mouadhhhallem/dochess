@@ -319,13 +319,24 @@ async function handleFriendRequest(req, res, userId) {
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
     try {
         await SOC.heartbeat(userId, body.myName, body.myImg || null);
-        const r = await SOC.requestFriend(userId, { toUid: body.friendUid, name: body.friendName, img: body.friendImg });
+        const r = await SOC.requestFriend(userId, {
+            toUid: body.friendUid, name: body.friendName, img: body.friendImg,
+            fromName: body.myName, fromImg: body.myImg,
+        });
         if (r.error) { sendError(res, r.error === 'already-friends' ? 409 : 400, r.error); return; }
         // The inbox item is COMPOSED BY THE SERVER from the stored request,
         // so the recipient never receives a message whose text was chosen by
-        // the sender's client.
+        // the sender's client. The title names the REQUESTER as they assert
+        // themselves (their live name, then their stored self-assertion) —
+        // never r.request.name, which is the requester's VIEW of the target
+        // and would read as the recipient's own name.
         try {
-            const item = await SOC.notifyFriendEvent(r.request.to, 'friend-request', r.request.name);
+            const live = (typeof body.myName === 'string' && body.myName.trim()
+                && body.myName.trim() !== 'Player') ? body.myName.trim().slice(0, 24) : '';
+            const stored = r.request.fromName && r.request.fromName !== 'Player' ? r.request.fromName : '';
+            const me = live || stored || (await SOC.counterpartyProfile(userId).catch(() => ({ name: 'Player' }))).name;
+            const who = (me && me !== 'Player') ? me : 'A player';
+            const item = await SOC.notifyFriendEvent(r.request.to, 'friend-request', who);
             try { EV.publish(r.request.to, { kind: 'friend-request', id: item && item._id }); } catch (_) {}
         } catch (_) {}
         sendJson(res, 200, { ok: true, status: 'pending', created: !!r.created });
@@ -497,7 +508,10 @@ async function handleInviteRespond(req, res, userId) {
         const other = accept ? inv.from : inv.to;
         if (!accept) {
             try {
-                const item = await SOC.notifyFriendEvent(inv.from, 'invite-declined', inv.fromName);
+                // Name the DECLINER (the recipient), resolved live — the
+                // invite row carries no sender display fields at all.
+                const who = await SOC.counterpartyProfile(userId).catch(() => ({ name: 'Player' }));
+                const item = await SOC.notifyFriendEvent(inv.from, 'invite-declined', who.name);
                 try { EV.publish(other, { kind: 'invite-declined', id: item && item._id }); } catch (_) {}
             } catch (_) {}
         } else {

@@ -346,23 +346,57 @@ export function createSocialStore(getDb) {
     /* ── requests (explicit lifecycle, terminal decline) ──────────── */
 
     /**
+     * Who is this account, right now? Account profile (heartbeat-kept)
+     * first, live presence second. Every user-facing string about a
+     * counterpart — request inboxes, lifecycle notes, invite titles — is
+     * resolved through here, NEVER from a name the other side typed about
+     * them (that is the whole "I see my own name" family: request rows
+     * carry the requester's VIEW of the target, which is the wrong person
+     * to show the target).
+     */
+    async function counterpartyProfile(uid) {
+        uid = cleanUid(uid);
+        if (!uid) return { name: 'Player', img: null };
+        try {
+            const [u, p] = await Promise.all([
+                getDb().getUser(uid).catch(() => null),
+                getDb().getDoc('presence', uid).catch(() => null),
+            ]);
+            const nm = cleanName((u && u.profile && u.profile.name) || (p && p.name) || '');
+            return {
+                name: (nm && nm !== 'Player') ? nm : 'Player',
+                img: cleanImg((u && u.profile && u.profile.image) || (p && p.img)) || null,
+            };
+        } catch (_) { return { name: 'Player', img: null }; }
+    }
+
+    /**
      * Send (or re-send) a friend request. Idempotent while pending: a
      * duplicate send updates the display name instead of creating a second
      * row. A previously declined/cancelled request becomes pending again
      * ONLY through this explicit call, and the new row keeps its history.
+     *
+     * Two names travel: `name`/`img` is the requester's VIEW of the target
+     * (for the sender's own Sent list only); `fromName`/`fromImg` is the
+     * requester's SELF-assertion (for the recipient's inbox — showing the
+     * target's view to the target would read as their own name).
      */
-    async function requestFriend(from, { toUid, name = '', img = null } = {}) {
+    async function requestFriend(from, { toUid, name = '', img = null, fromName = '', fromImg = null } = {}) {
         from = cleanUid(from); toUid = cleanUid(toUid);
         if (!from || !toUid || from === toUid) return { error: 'bad-recipient' };
         const db = getDb();
         if (await areFriends(from, toUid)) return { error: 'already-friends' };
         const key = requestKey(from, toUid);
         const prev = await db.getDoc('requests', key);
+        const selfName = cleanName(fromName);
         const row = {
             _id: key, from, to: toUid,
             status: 'pending',
             name: cleanName(name),
             img: cleanImg(img) || (prev && prev.img) || null,
+            fromName: (selfName && selfName !== 'Player') ? selfName
+                : ((prev && prev.fromName) || ''),
+            fromImg: cleanImg(fromImg) || (prev && prev.fromImg) || null,
             at: Date.now(),
             updatedAt: Date.now(),
             resolvedAt: null
@@ -423,20 +457,13 @@ export function createSocialStore(getDb) {
         await resolveRequest(fromUid, uid, 'accepted');
         // Self-keyed names: the accepter's own name first (their live
         // assertion wins, the requester's stale view is the fallback), then
-        // the requester's own name from their account profile or presence.
+        // the requester's own live identity.
         const accepterName = cleanName((self && self.name) || (prev && prev.name) || '');
-        let requesterName = '';
-        try {
-            const [udoc, pres] = await Promise.all([
-                db.getUser(fromUid).catch(() => null),
-                db.getDoc('presence', fromUid).catch(() => null),
-            ]);
-            requesterName = cleanName((udoc && udoc.profile && udoc.profile.name) || (pres && pres.name) || '');
-        } catch (_) {}
+        const requester = await counterpartyProfile(fromUid);
         const names = {};
         if (accepterName && accepterName !== 'Player') names[uid] = accepterName;
         else if (prev && prev.name) names[uid] = cleanName(prev.name);
-        if (requesterName && requesterName !== 'Player') names[fromUid] = requesterName;
+        if (requester.name && requester.name !== 'Player') names[fromUid] = requester.name;
         const row = await addFriend(uid, fromUid, '');
         const stored = await db.getDoc('friends', friendKey(uid, fromUid));
         if (stored) {
@@ -458,6 +485,12 @@ export function createSocialStore(getDb) {
      * inbound pending, outbound pending, and recently resolved requests.
      * `resolved` is what makes a decline stick — the client is told
      * explicitly, instead of rediscovering it from a graph edge.
+     *
+     * Identity rule: every row names the COUNTERPART as they are right
+     * now (profile → presence), never the request row's stored `name`
+     * (which is the requester's VIEW of the target — showing it to the
+     * target reads as their own name). The stored name survives only as
+     * a last-resort fallback for the sender's own Sent list.
      */
     async function listRequests(uid) {
         uid = cleanUid(uid);
@@ -471,10 +504,24 @@ export function createSocialStore(getDb) {
             if (!r || !r.from || !r.to) continue;
             const mine = r.to === uid, theirs = r.from === uid;
             if (!mine && !theirs) continue;
+            const other = mine ? r.from : r.to;
+            const live = await counterpartyProfile(other).catch(() => ({ name: 'Player', img: null }));
+            const asserted = cleanName((mine && r.fromName) || '');
+            // Inbound: the sender's self-assertion, then their live
+            // identity — the stored `name` is NEVER shown here (it is the
+            // sender's view of the recipient: their own name back at them).
+            // Outbound: the live target first, the sender's own view kept
+            // as the fallback for rows that predate live resolution.
             const row = {
-                uid: mine ? r.from : r.to,
-                name: cleanName(r.name),
-                img: cleanImg(r.img),
+                uid: other,
+                name: mine
+                    ? ((asserted && asserted !== 'Player') ? asserted
+                        : (live.name !== 'Player' ? live.name : 'Player'))
+                    : (live.name !== 'Player' ? live.name
+                        : (cleanName(r.name) || 'Player')),
+                img: mine
+                    ? (cleanImg(r.fromImg) || live.img)
+                    : (live.img || cleanImg(r.img)),
                 at: r.at || 0,
                 status: r.status
             };
@@ -1230,7 +1277,7 @@ export function createSocialStore(getDb) {
         // friendships
         areFriends, addFriend, removeFriend, listFriends,
         // requests
-        requestFriend, respondToRequest, cancelRequest, listRequests, touchProfile,        // invitations
+        requestFriend, respondToRequest, cancelRequest, listRequests, touchProfile, counterpartyProfile,        // invitations
         createInvite, respondToInvite, listInvites, listSentInvites, getInvite, sweepInvites,
         // friend streaks + experience
         stampStreakDay, pairStreak, getXp, addXp, onGameRecorded, solvePuzzle,
