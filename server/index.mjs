@@ -38,6 +38,7 @@
  */
 
 import http from 'node:http';
+import { execSync } from 'node:child_process';
 import { createReadStream, statSync, existsSync } from 'node:fs';
 import { join, normalize, extname, resolve, sep } from 'node:path';
 
@@ -54,6 +55,13 @@ import { createBus } from './lib/events.mjs';
 
 const STARTED = Date.now();
 const VERSION = 'api-1';
+// The exact code this process booted from. A stale long-running server is
+// otherwise indistinguishable from a fresh one until routes 404 — this makes
+// it visible in the boot log and in GET /api/health.
+let COMMIT = 'unknown';
+try {
+    COMMIT = execSync('git rev-parse --short HEAD', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || 'unknown';
+} catch (_) { /* not a git checkout (release tarball): stay 'unknown' */ }
 
 /* ── static files ───────────────────────────────────────────────────── */
 
@@ -126,6 +134,7 @@ async function handleHealth(req, res) {
     sendJson(res, 200, {
         ok: true,
         version: VERSION,
+        commit: COMMIT,
         uptimeMs: Date.now() - STARTED,
         productionReady: isProductionReady(),
         missing: missingConfig(),
@@ -686,7 +695,7 @@ async function main() {
     }
     await initDb();
     server.listen(config.port, config.host, () => {
-        console.log(`[doches api] ${VERSION} listening on http://${config.host}:${config.port}`);
+        console.log(`[doches api] ${VERSION} commit=${COMMIT} listening on http://${config.host}:${config.port}`);
         console.log(`[doches api] auth=${authMode()} db=${dbStatus().kind} redis=${redisStatus().configured ? 'configured' : 'off'}`);
         const missing = missingConfig();
         if (missing.length) console.log(`[doches api] not production-ready, still missing: ${missing.join(', ')}`);
