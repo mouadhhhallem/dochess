@@ -33,11 +33,21 @@
     function ago(ts) {
         if (!ts) return 'never';
         const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-        if (s < 60) return 'just now';
-        if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-        if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-        const d = Math.floor(s / 86400);
-        return d === 1 ? 'yesterday' : `${d}d ago`;
+        if (s < 5) return 'just now';
+        if (s < 60) return `${s}s ago`;
+        const m = Math.floor(s / 60);
+        if (m < 60) return m === 1 ? '1 min ago' : `${m} min ago`;
+        const h = Math.floor(m / 60);
+        if (h < 24) return h === 1 ? '1 hour ago' : `${h} hours ago`;
+        const d = Math.floor(h / 24);
+        if (d === 1) return 'yesterday';
+        if (d < 7) return `${d} days ago`;
+        const w = Math.floor(d / 7);
+        if (w < 5) return w === 1 ? '1 week ago' : `${w} weeks ago`;
+        const mo = Math.floor(d / 30);
+        if (mo < 12) return mo === 1 ? '1 month ago' : `${mo} months ago`;
+        const y = Math.floor(d / 365);
+        return y === 1 ? '1 year ago' : `${y} years ago`;
     }
     const uidOf = () => { try { return (window.app && window.app.userId) || 'guest'; } catch (_) { return 'guest'; } };
     const myAvatar = () => { try {
@@ -457,12 +467,26 @@
                     f = S.friends[e.uid] = {
                         uid: e.uid, name: String(e.name || 'Player').slice(0, 24),
                         since: e.since || Date.now(), confirmed: true, source: 'server',
-                        img: cleanImg(e.img), days: {}, best: 0, lastSeen: 0, outbound: false,
+                        img: cleanImg(e.img), days: cleanDayMap(e.days), best: 0,
+                        streakCount: Number(e.streakCount) || 0, streakBest: Number(e.streakBest) || 0,
+                        lastSeen: 0, outbound: false,
                     };
                     changed = true;
                 } else {
                     if (e.name) f.name = String(e.name).slice(0, 24);
                     if (e.img) { const ci = cleanImg(e.img); if (ci) f.img = ci; }
+                    // Durable streak union: the server's day map merges into
+                    // the local one (per-day max — a day both sides saw is
+                    // still one day), so a flame earned on any device, or
+                    // healed from the server after a refresh, never resets.
+                    if (e.days && typeof e.days === 'object') {
+                        f.days = f.days || {};
+                        for (const [k, v] of Object.entries(cleanDayMap(e.days))) {
+                            f.days[k] = Math.max(f.days[k] || 0, v);
+                        }
+                    }
+                    if (Number.isFinite(e.streakCount)) f.streakCount = e.streakCount;
+                    if (Number.isFinite(e.streakBest)) f.streakBest = Math.max(f.streakBest || 0, f.best || 0, e.streakBest);
                     if (!f.confirmed || f.outbound) { f.confirmed = true; f.outbound = false; changed = true; }
                 }
                 const po = S.pendingOut.indexOf(e.uid);
@@ -625,7 +649,14 @@
     }
 
     /* ── streaks (TikTok rules) ─────────────────────────────── */
-    function streakOf(f) {
+    /**
+     * The flame over local + durable state. The local day map carries this
+     * device's optimistic stamps; `streakCount` is the server's exact run
+     * (exact even past the day-map window). max() of the two is right in
+     * every case: a stamp this device made but hasn't synced yet, or a stamp
+     * another device made that this one hasn't seen.
+     */
+    function localRun(f) {
         if (!f || !f.days) return 0;
         let n = 0;
         let cursor = f.days[TODAY()] ? 0 : (f.days[keyDaysAgo(1)] ? 1 : -1);
@@ -635,6 +666,18 @@
             else break;
         }
         return n;
+    }
+    function streakOf(f) {
+        if (!f) return 0;
+        return Math.max(localRun(f), Number(f.streakCount) || 0);
+    }
+    function cleanDayMap(days) {
+        const out = {};
+        if (!days || typeof days !== 'object') return out;
+        for (const [k, v] of Object.entries(days)) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Number.isFinite(v)) out[k] = v;
+        }
+        return out;
     }
     function stampGame(uid) {
         const f = S.friends[uid];
@@ -646,7 +689,7 @@
         const keys = Object.keys(f.days).sort();
         while (keys.length > 400) delete f.days[keys.shift()];
         const st = streakOf(f);
-        if (st > (f.best || 0)) f.best = st;
+        if (st > Math.max(f.best || 0, f.streakBest || 0)) f.best = st;
         f.lastSeen = Date.now();
         save();
         if (st > 0 && (st === 7 || st === 30 || st === 100)) {
@@ -1253,7 +1296,18 @@ let needSnapshot = false;
             // ...and invitations this account SENT, so the sender is taken
             // to the board the moment the recipient accepts.
             try { await watchSentInvite(); } catch (_) {}
+            // ...and the experience ledger, so the hero XP is live.
+            try { await pullXp(); } catch (_) {}
             try { await pullSnapshot(); } catch (_) {}
+            // Presence repaint: the friends screen shows live dots, so a
+            // player who comes online (or leaves) flips within ~30 s.
+            try {
+                if (gridRepaint && Date.now() - lastGridPaint > 30000
+                    && document.getElementById('friends-screen')?.classList.contains('active')) {
+                    await gridRepaint();
+                    lastGridPaint = Date.now();
+                }
+            } catch (_) {}
             checkInvitePopup();
             // New actionable requests re-render the open Friends screen so
             // Accept/Decline appear instantly for both users.
@@ -1331,17 +1385,21 @@ let needSnapshot = false;
     // while the page was dead still takes the sender to the (re-hosted)
     // board instead of stranding them on the friends panel.
     setTimeout(() => { try { watchSentInvite(); } catch (_) {} }, 2500);
+    // The hero XP should be live on first paint, not one poll behind.
+    setTimeout(() => { try { pullXp().then((ch) => { if (ch) { try { renderBell(); } catch (_) {} } }); } catch (_) {} }, 2500);
     // The P2P inbox is what pops invites on the static live site (no API):
     // open it shortly after boot and keep it held (cheap no-op when held).
     setTimeout(() => { try { ensureP2PInbox(); } catch (_) {} }, 6000);
     setInterval(() => { try { ensureP2PInbox(); } catch (_) {} }, 30000);
     document.addEventListener('visibilitychange', () => {
         try {
-            if (!document.hidden) { closeStream(); watchStream(); watchInbox(); ensureP2PInbox(); }
+            if (!document.hidden) { closeStream(); watchStream(); watchInbox(); ensureP2PInbox(); heartbeat(); }
             else closeStream();
         } catch (_) {}
     });
     let presenceCache = { at: 0, map: {} };
+    let gridRepaint = null;
+    let lastGridPaint = 0;
     let tokenCache = { at: 0, token: null };
     // 'signed-in' | 'signed-out' | 'unknown' — drives search UI states.
     let authState = 'unknown';
@@ -1358,14 +1416,51 @@ let needSnapshot = false;
     }
     async function heartbeat() {
         try {
-            if (apiBase() === null || document.hidden || uidOf() === 'guest') return;
+            // No document.hidden skip: an open background tab is still an
+            // online player. Skipping it was one half of the online/offline
+            // inversion (friends showing "offline" for someone mid-game in
+            // another tab).
+            if (apiBase() === null || uidOf() === 'guest') return;
             await api('presence', { name: meName(), img: myAvatar() });
         } catch (_) {}
     }
     setInterval(heartbeat, 45000);
+    /**
+     * Explicit goodbye: sign-out or tab close deletes the presence row at
+     * once instead of leaving a ghost "online now" for the rest of the TTL
+     * — the other half of the inversion. Best-effort by design (a missed
+     * beacon still decays within 90 s); the sign-out path awaits it while
+     * the tab-close path fires a keepalive fetch it never waits for.
+     */
+    async function presenceLeave() {
+        try {
+            if (apiBase() === null || uidOf() === 'guest') return false;
+            await api('presence/leave', {});
+            return true;
+        } catch (_) { return false; }
+    }
+    function presenceLeaveBeacon() {
+        try {
+            if (apiBase() === null || uidOf() === 'guest') return;
+            const base = apiBase();
+            sessionToken().then((t) => {
+                try {
+                    fetch(`${base}/api/presence/leave`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: 'Bearer ' + t } : {}) },
+                        body: '{}',
+                        keepalive: true,
+                    }).catch(() => {});
+                } catch (_) {}
+            }).catch(() => {});
+        } catch (_) {}
+    }
+    document.addEventListener('pagehide', () => { try { presenceLeaveBeacon(); } catch (_) {} });
 
     /* ── rank + hall ────────────────────────────────────────── */
-    const RATING_CATS = ['blitz', 'rapid', 'bullet'];
+    // Rapid is the game's main rating and leads everywhere; bullet and
+    // blitz are one tap away, never mixed into each other's boards.
+    const RATING_CATS = ['rapid', 'blitz', 'bullet'];
     function tierOf(rating) {
         if (rating >= 2000) return { name: 'Diamond', cls: 't-dia' };
         if (rating >= 1600) return { name: 'Platinum', cls: 't-pla' };
@@ -1399,12 +1494,13 @@ let needSnapshot = false;
         rankPageOffset = offset;
         try {
             if (apiBase() === null) throw new Error('no-api');
-            const r = await api(`rank?cat=${encodeURIComponent(cat)}&limit=50&offset=${offset}`);
+            const r = await api(`rank?cat=${encodeURIComponent(cat)}&limit=100&offset=${offset}`);
             if (r && Array.isArray(r.board) && (r.total || 0) > 0) {
                 const shape = (row) => ({
                     rank: row.rank,
                     uid: row.uid || null,          // strangers arrive WITHOUT a uid
                     name: row.name,
+                    img: row.img || null,          // self + friends arrive WITH a photo
                     rating: row.rating,
                     tier: row.tier,
                     self: !!row.self,
@@ -1478,7 +1574,7 @@ let needSnapshot = false;
         });
         try {
             if (apiBase() === null) throw new Error('no-api');
-            const r = await api(`hall?cat=${encodeURIComponent(currentCat)}&limit=50&offset=${offset}`);
+            const r = await api(`hall?cat=${encodeURIComponent(currentCat)}&limit=100&offset=${offset}`);
             if (r && Array.isArray(r.board) && r.total > 0) {
                 return {
                     server: true, total: r.total, offset: r.offset || 0, hasMore: !!r.hasMore,
@@ -1569,22 +1665,103 @@ let needSnapshot = false;
     }
     function heroHTML() {
         const d = dailyStats();
-        const st = d ? d.streak : 0;
-        const xp = d ? d.xp : 0;
-        const lvl = d ? d.level : 1;
+        const learnXp = d ? d.xp : 0;
+        // Experience is one number from four honest sources: Learn lessons
+        // (this device, synced) + server-ledgered games, puzzles and streaks
+        // (fixed amounts, same on every device). Level uses Learn's own rule.
+        const sxp = (typeof serverXp === 'object' && serverXp) || { total: 0, games: 0, puzzles: 0, streaks: 0 };
+        const xp = learnXp + (sxp.total || 0);
+        const lvl = 1 + Math.floor(xp / 150);
         const pct = Math.min(100, Math.round(((xp % 150) / 150) * 100));
+        const st = Math.max(d ? d.streak : 0, loginDayStreak());
         const week = [];
         for (let back = 6; back >= 0; back--) week.push(d && d.heat[localDayKey(back)] ? 1 : 0);
-        const me = myRating('blitz');
+        // Rapid is the game's main rating and leads the hero; bullet and
+        // blitz live one tap away on the ranking tabs, never mixed in.
+        const me = myRating('rapid');
+        const parts = [`Lessons ${learnXp}`, `Games ${sxp.games || 0}`, `Puzzles ${sxp.puzzles || 0}`, `Streaks ${sxp.streaks || 0}`];
         return '<section class="fr-hero">'
             + '<div class="fr-hero-flame"><span class="fr-flame big">' + FLAME + '</span>'
             + '<div><strong>' + st + '</strong><span>day streak</span></div>'
             + '<span class="fr-week">' + week.map((x) => '<i class="' + (x ? 'on' : '') + '"></i>').join('') + '</span></div>'
             + '<div class="fr-hero-xp"><div class="fr-xp-top"><strong>LVL ' + lvl + '</strong><span>' + xp + ' XP</span></div>'
             + '<div class="fr-xpbar"><i style="width:' + pct + '%"></i></div>'
-            + '<span class="fr-sub">' + (150 - (xp % 150)) + ' XP to level ' + (lvl + 1) + '</span></div>'
-            + '<div class="fr-hero-rate"><strong>' + me + '</strong>' + tierChip(me) + '<span class="fr-sub">blitz · you</span></div>'
+            + '<span class="fr-sub">' + (150 - (xp % 150)) + ' XP to level ' + (lvl + 1) + ' · ' + esc(parts.join(' · ')) + '</span></div>'
+            + '<div class="fr-hero-rate"><strong>' + me + '</strong>' + tierChip(me) + '<span class="fr-sub">rapid · you</span></div>'
             + '</section>';
+    }
+    /**
+     * Login/activity day streak over EVERYTHING this device knows: Learn
+     * heatmap, achievements play-days (games push a day on every finish),
+     * and the local game history. The hero used to read Learn's streak
+     * only, so game-only players stared at a permanent 0.
+     */
+    function loginDayStreak() {
+        try {
+            const set = new Set();
+            const uid = uidOf();
+            try {
+                const raw = localStorage.getItem('dochess:v1');
+                const st = raw ? JSON.parse(raw) : null;
+                if (st && st.heatmap && typeof st.heatmap === 'object') {
+                    for (const k of Object.keys(st.heatmap)) if (/^\d{4}-\d{2}-\d{2}$/.test(k)) set.add(k);
+                }
+            } catch (_) {}
+            try {
+                const raw = localStorage.getItem('cca_v1_' + uid);
+                const a = raw ? JSON.parse(raw) : null;
+                if (a && Array.isArray(a.days)) for (const k of a.days) if (/^\d{4}-\d{2}-\d{2}$/.test(k)) set.add(k);
+            } catch (_) {}
+            try {
+                const raw = localStorage.getItem('ccgh_' + uid);
+                const h = raw ? JSON.parse(raw) : null;
+                if (Array.isArray(h)) for (const g of h) {
+                    if (g && Number.isFinite(g.date)) {
+                        const t = new Date(g.date);
+                        const p = (n) => String(n).padStart(2, '0');
+                        set.add(`${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`);
+                    }
+                }
+            } catch (_) {}
+            const has = (back) => set.has(localDayKey(back));
+            const cursor = has(0) ? 0 : (has(1) ? 1 : -1);
+            if (cursor < 0) return 0;
+            let n = 0;
+            for (let back = cursor; ; back++) { if (has(back)) n++; else break; }
+            return n;
+        } catch (_) { return 0; }
+    }
+    // Server-ledgered experience (games/puzzles/streaks at fixed amounts).
+    let serverXp = { total: 0, games: 0, puzzles: 0, streaks: 0 };
+    async function pullXp() {
+        try {
+            if (apiBase() === null || uidOf() === 'guest') return false;
+            const r = await api('xp');
+            if (r && r.xp && typeof r.xp === 'object') {
+                serverXp = {
+                    total: Math.max(0, r.xp.total | 0), games: Math.max(0, r.xp.games | 0),
+                    puzzles: Math.max(0, r.xp.puzzles | 0), streaks: Math.max(0, r.xp.streaks | 0),
+                };
+                return true;
+            }
+        } catch (_) {}
+        return false;
+    }
+    /**
+     * Report a solved puzzle for +10 XP (first solve per puzzle, ever). The
+     * client names the EVENT, never a number — the amount is fixed
+     * server-side, so there is nothing to forge.
+     */
+    async function reportPuzzleSolve(puzzleId) {
+        try {
+            if (apiBase() === null || uidOf() === 'guest' || !puzzleId) return null;
+            const r = await api('puzzles/solve', { puzzleId: String(puzzleId).slice(0, 64) });
+            if (r && r.ok && r.awarded) {
+                await pullXp();
+                try { if (document.getElementById('friends-screen')?.classList.contains('active')) open(currentTab); } catch (_) {}
+            }
+            return r;
+        } catch (_) { return null; }
     }
 
     /* ── versus (head-to-head from real history) ────────────── */
@@ -1637,7 +1814,7 @@ let needSnapshot = false;
 
     /* ── UI ─────────────────────────────────────────────────── */
     let currentTab = 'friends';
-    let currentCat = 'blitz';
+    let currentCat = 'rapid';
     let currentSearchQ = '';
     const FLAME = `<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="flm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F5C978"/><stop offset="1" stop-color="#D4722E"/></linearGradient></defs><path fill="url(#flm)" d="M12.9 1.5c.3 3.2-1.2 5.3-3.2 7C7.9 10 6.5 11.6 6.5 14a5.5 5.5 0 0011 0c0-1.2-.3-2.3-.9-3.3-.4 1-1 1.7-2 2.2.4-2.9-.5-6.4-1.7-8.6-.4 1-1 1.9-1.9 2.6.3-1.9.1-3.6-.1-5.4z"/><path fill="#FBE3B0" d="M12 21.5a3.2 3.2 0 01-3.2-3.2c0-1.5 1-2.4 1.9-3.3.7-.7 1.4-1.4 1.6-2.4 1 1.2 2.9 2.7 2.9 4.7a3.2 3.2 0 01-3.2 4.2z"/></svg>`;
     const SARCASTIC = [
@@ -1675,7 +1852,13 @@ let needSnapshot = false;
         // probes reachability at send time and says honestly when they look
         // offline. With an API, presence gates the button as before.
         const canInvite = online || apiBase() === null;
-        const seenTxt = online ? 'online now' : (f.lastSeen ? 'last seen ' + ago(f.lastSeen) : (st > 0 ? 'streak alive' : 'all quiet'));
+        // "Last seen" prefers the server's heartbeat timestamp (the other
+        // device's truth) over this device's local sightings, so offline
+        // durations read 1 min / 30 min / 1 hour / 1 day / 1 week correctly
+        // instead of freezing on a stale local guess.
+        const srvSeen = presence && presence[f.uid] && presence[f.uid].lastSeen;
+        const seenAt = srvSeen || f.lastSeen;
+        const seenTxt = online ? 'online now' : (seenAt ? 'last seen ' + ago(seenAt) : (st > 0 ? 'streak alive' : 'all quiet'));
         const dotCls = online ? 'on' : (st > 0 ? 'warm' : '');
         const joke = SARCASTIC[f.uid.length % SARCASTIC.length];
         const gamesTxt = v.games ? `${v.w}W · ${v.l}L · ${v.d}D` : 'no games yet';
@@ -1737,6 +1920,10 @@ let needSnapshot = false;
             grid.innerHTML = rows.length ? rows.map((f) => friendRow(f, pres)).join('') : `<div class="fr-onboard"><h3>Grow your first flame</h3><ol><li><strong>Copy your invite link</strong> — anyone, anywhere.</li><li><strong>Play one game together</strong> — any day, any control.</li><li><strong>+1 every day</strong> you both play. Miss a day and it resets.</li></ol><div class="fr-acts"><button class="btn-primary sm" data-faction="copy-link" type="button">Copy invite link</button><button class="btn-secondary sm" data-faction="goto-search" type="button">Search DoChess players</button></div></div>`;
         };
         paint();
+        // Keep presence truthful while the screen sits open: re-paint the
+        // grid (status dots + last-seen) at most every 30 s without touching
+        // the search box, which lives outside the grid.
+        gridRepaint = paint; lastGridPaint = Date.now();
         const input = box.querySelector('#fr-search');
         const out = box.querySelector('#fr-results');
         // The screen re-renders whenever the authoritative snapshot changes
@@ -1818,7 +2005,10 @@ let needSnapshot = false;
      */
     function boardRow(r) {
         const blur = !r.self && !r.friend;
-        const img = r.self ? myAvatar() : ((r.uid && (S.friends[r.uid] || {}).img) || null);
+        // Photos come from the server row first (self + friends), then the
+        // local shelf — a friend's face must show even before this device
+        // has met them peer-to-peer.
+        const img = r.img || (r.self ? myAvatar() : ((r.uid && (S.friends[r.uid] || {}).img) || null));
         return `<div class="fr-brow${r.self ? ' me' : ''}${blur ? ' blurry' : ''}">`
             + `<span class="fr-rank">${r.rank}</span>`
             + (r.name ? avatarHTML(r.name, null, img) : '<span class="fr-ava ghost" aria-hidden="true">?</span>')
@@ -1834,18 +2024,20 @@ let needSnapshot = false;
         try { if (rankTimer) { clearInterval(rankTimer); rankTimer = null; } } catch (_) {}
     }
     /**
-     * Keep the ladder fresh on its own: someone registers, or finishes a
-     * game, at any moment. Polls every 30 s while the tab is visible, and
-     * immediately when the user comes back to it.
+     * Keep the ladder AND the hall fresh on their own: someone registers, or
+     * finishes a game, at any moment — so the total player count is always
+     * live. Polls every 30 s while the tab is visible, and immediately when
+     * the user comes back to it.
      */
-    function startRankAutoRefresh(box) {
+    function startRankAutoRefresh(box, render) {
+        render = render || renderRanking;
         stopRankAutoRefresh();
         rankTimer = setInterval(() => {
             try {
                 if (rankLoading || document.hidden) return;
                 if (!document.body.contains(box)) { stopRankAutoRefresh(); return; }
                 if (!document.getElementById('friends-screen')?.classList.contains('active')) return;
-                renderRanking(box);
+                render(box);
             } catch (_) {}
         }, 30000);
         try {
@@ -1853,7 +2045,7 @@ let needSnapshot = false;
             rankResumeHandler = () => {
                 try {
                     if (document.hidden) return;
-                    if (document.getElementById('friends-screen')?.classList.contains('active')) renderRanking(box);
+                    if (document.getElementById('friends-screen')?.classList.contains('active')) render(box);
                 } catch (_) {}
             };
             document.addEventListener('visibilitychange', rankResumeHandler);
@@ -1911,9 +2103,9 @@ let needSnapshot = false;
                 || `<p class="fr-empty">${data.server ? 'No other players on the board yet.' : 'No players on this device board yet — finish an online game to appear.'}</p>`}</div>
             ${data.server && data.total > (data.board || []).length ? `
             <div class="fr-pager">
-                ${data.offset > 0 ? `<button class="btn-secondary sm" data-faction="rank-page" data-offset="${Math.max(0, data.offset - 50)}" type="button">Previous</button>` : ''}
+                ${data.offset > 0 ? `<button class="btn-secondary sm" data-faction="rank-page" data-offset="${Math.max(0, data.offset - 100)}" type="button">Previous</button>` : ''}
                 <span class="fr-sub">${data.offset + 1}–${data.offset + (data.board || []).length} of ${data.total}</span>
-                ${data.hasMore ? `<button class="btn-secondary sm" data-faction="rank-page" data-offset="${data.offset + 50}" type="button">Next</button>` : ''}
+                ${data.hasMore ? `<button class="btn-secondary sm" data-faction="rank-page" data-offset="${data.offset + 100}" type="button">Next</button>` : ''}
             </div>` : ''}`;
         startRankAutoRefresh(box);
     }
@@ -1951,10 +2143,11 @@ async function renderHall(box) {
                 || `<p class="fr-empty">${data.server ? 'Nobody else is registered yet.' : 'Be early — your friends appear here.'}</p>`}</div>
             ${data.server && data.total > (data.hall || []).length ? `
             <div class="fr-pager">
-                ${data.offset > 0 ? `<button class="btn-secondary sm" data-faction="hall-page" data-offset="${Math.max(0, data.offset - 50)}" type="button">Previous</button>` : ''}
+                ${data.offset > 0 ? `<button class="btn-secondary sm" data-faction="hall-page" data-offset="${Math.max(0, data.offset - 100)}" type="button">Previous</button>` : ''}
                 <span class="fr-sub">${data.offset + 1}–${data.offset + (data.hall || []).length} of ${data.total}</span>
-                ${data.hasMore ? `<button class="btn-secondary sm" data-faction="hall-page" data-offset="${data.offset + 50}" type="button">Next</button>` : ''}
+                ${data.hasMore ? `<button class="btn-secondary sm" data-faction="hall-page" data-offset="${data.offset + 100}" type="button">Next</button>` : ''}
             </div>` : ''}`;
+        startRankAutoRefresh(box, renderHall);
     }
 
     function renderActivity(box) {
@@ -2054,7 +2247,7 @@ async function renderHall(box) {
         const a = el.dataset.faction;
         const uid = el.dataset.uid;
         if (a === 'tab') { open(el.dataset.tab); return; }
-        if (a === 'cat') { currentCat = el.dataset.cat || 'blitz'; rankPageOffset = 0; open('ranking'); return; }
+        if (a === 'cat') { currentCat = el.dataset.cat || 'rapid'; rankPageOffset = 0; open('ranking'); return; }
         if (a === 'rank-page') { rankPageOffset = Math.max(0, parseInt(el.dataset.offset, 10) || 0); open('ranking'); return; }
         if (a === 'rank-refresh') { open('ranking'); return; }
         if (a === 'hall-page') { hallOffset = Math.max(0, parseInt(el.dataset.offset, 10) || 0); open('hall'); return; }
@@ -2202,7 +2395,7 @@ async function renderHall(box) {
 
     window.DoChessFriends = {
         open, renderBell, metPeer, onGameEnd, profileLink, inboundLink,
-        requestFriend, acceptFriend, declineFriend, removeFriend, search, streakOf, versus,
+        requestFriend, acceptFriend, declineFriend, removeFriend, search, streakOf, versus, ago,
         // Backwards-compatible alias: adding is sending a request.
         addFriend: requestFriend,
         list: () => Object.values(S.friends),
@@ -2213,7 +2406,7 @@ async function renderHall(box) {
         // pullRequests / pullEdges are retained as aliases of the single
         // authoritative snapshot for any external caller.
         pullRequests, pullEdges, pullSnapshot, pullInbox, pullInvites,
-        sendGameInvite, checkInvitePopup, watchSentInvite, clearPendingInvite, p2pEnsure: ensureP2PInbox, version: 5,
+        sendGameInvite, checkInvitePopup, watchSentInvite, clearPendingInvite, presenceLeave, pullXp, reportPuzzleSolve, p2pEnsure: ensureP2PInbox, version: 6,
         // Exposed for tests and for the retry UI.
         explainFailure, FAILURES, isSignedOut,
     };

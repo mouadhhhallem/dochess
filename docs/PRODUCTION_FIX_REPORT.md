@@ -570,3 +570,59 @@ Test deltas: `node --test` **61/61** (+4: Clerk pagination, incomplete
 reporting, registry union, sent-invite lifecycle); full Playwright suite
 **93 passed, 0 failed, 23 skipped** (Atlas-only skips); friends E2E
 **15/15** (+test 11). Asset re-keyed (`friends.js?v=7`).
+
+---
+
+## 16. Streaks that survive, true presence, photos, 100/page, rapid-first, XP (2026-10-15)
+
+A second user batch, each reproduced before fixing:
+
+1. **Friend streak reset to 0 after refresh.** Day stamps lived only in
+   the browser shelf. Now `POST /api/games` carries `oppUid` and the
+   server stamps the shared day for BOTH players from EITHER copy (new
+   `streaks` collection, one shared day per calendar day); the snapshot
+   carries the day map + exact count back and the client unions
+   (per-day max, `max(local run, server count)`). Same-game-same-day
+   never double-counts. The daily/login streak in the hero now unions
+   Learn activity + achievements play-days + game history instead of
+   Learn-only (game-only players stared at 0).
+2. **Presence inversions + no durations.** Background tabs skipped the
+   heartbeat (shown offline mid-game); tab close left a ~2 min ghost
+   "online". Now: heartbeat runs in hidden tabs, `pagehide` fires a
+   keepalive goodbye, sign-out awaits `presence/leave`, the row is
+   deleted at once, and "last seen" prefers the server timestamp with
+   full granularity (seconds → minutes → hours → days → weeks →
+   months). The friends grid repaints presence every 30 s while open.
+3. **Missing avatars on the ladder.** Two root causes: the ladder
+   serializer never sent photos for self/friends, and the account
+   profile photo went stale while presence photos stayed fresh. Now the
+   ladder carries self/friend photos (strangers: still none), every
+   heartbeat refreshes the account photo, and board rows prefer the
+   server photo.
+4. **100 per page + live totals.** Ladder and hall request 100-row
+   pages (server max), pagers step 100, and the hall auto-refreshes on
+   the same 30 s cadence as the ladder. New signups appear via the
+   Clerk-registry union (120 s cache) with `scope` honesty.
+5. **Rapid-first Elo.** Rapid is now the default category server-side
+   (`cleanCat`), in the ranking tabs (Rapid/Blitz/Bullet), in the hero
+   and first in the profile. Per-control separation was verified
+   end to end (rapid win moves rapid only; new E2E asserts blitz
+   untouched). Game records carry per-game control ids as before.
+6. **Experience with fixed amounts.** Server ledger (`GET /api/xp`):
+   games 20/10/5, friend-streak milestones 50/150/400/1000, win-streak
+   milestones 15/40/100/250, first puzzle solve +10 (`POST
+   /api/puzzles/solve`). Duplicates/retries never double-pay. The hero
+   shows the combined total (Learn + server) with a per-source
+   breakdown and Learn's level rule.
+
+Test deltas: `node --test` **69/69** (+8: streak stamp/both-sides,
+no-pay cases, win-streak milestones, 7-day milestone once-per-run,
+puzzle idempotency, touchProfile, presence leave, ladder photos);
+friends unit spec covers server-count healing + the full last-seen
+scale; new E2E test 16 (record on both sides → wipe local days →
+snapshot heals to 1 on both browsers; XP totals; rapid/blitz
+separation; leave clears instantly). Full Playwright suite: **94
+passed, 23 skipped, 1 flaky** (`quickmatch` P2P pairing failed once
+under full-suite load, green alone and green as a file — timing, not
+a regression). Assets re-keyed (`friends.js?v=8`, `app.js?v=54`,
+`puzzles.js?v=5`).

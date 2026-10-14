@@ -78,6 +78,10 @@ export function sanitizeGameRecord(raw, userId) {
     }
     if (typeof raw.delta === 'number' && Number.isFinite(raw.delta)) rec.delta = Math.max(-500, Math.min(500, Math.round(raw.delta)));
     if (typeof raw.opp === 'string') rec.opp = raw.opp.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 48);
+    // Opponent account id, so the server can stamp the shared friend streak
+    // for BOTH players from either player's record. Validated as a uid and
+    // only honoured when the two accounts are actually friends.
+    if (typeof raw.oppUid === 'string' && /^[\w-]{1,64}$/.test(raw.oppUid)) rec.oppUid = raw.oppUid;
     // Ordered move history (UCI strings), final position, termination and
     // rating bookends — all optional, all bounded. Absent on legacy records.
     if (Array.isArray(raw.moves)) {
@@ -117,7 +121,9 @@ class MongoStore {
             requests: this.db.collection('requests'),
             invites: this.db.collection('invites'),
             presence: this.db.collection('presence'),
-            notify: this.db.collection('notify')
+            notify: this.db.collection('notify'),
+            streaks: this.db.collection('streaks'),
+            xp: this.db.collection('xp')
         };
         this.indexesReady = false;
     }
@@ -142,6 +148,8 @@ class MongoStore {
             await this.social.invites.createIndex({ to: 1 });
             await this.social.invites.createIndex({ expiresAt: 1 });
             await this.social.notify.createIndex({ to: 1, at: -1 });
+            await this.social.streaks.createIndex({ a: 1 });
+            await this.social.streaks.createIndex({ b: 1 });
             // Legacy global gameId uniqueness (pre per-user history): drop it
             // once so cross-player copies of one game id can coexist.
             try { await this.games.dropIndex('gameId_1'); } catch (_) { /* already gone */ }

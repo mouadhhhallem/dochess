@@ -20,6 +20,9 @@
  *   POST /api/friends/remove      remove a friendship in BOTH directions
  *   GET  /api/friends/snapshot    friends + inbound + outbound + resolved (authoritative)
  *   POST /api/presence            presence heartbeat (90 s TTL)
+ *   POST /api/presence/leave      explicit goodbye (tab closed / signed out)
+ *   GET  /api/xp                  experience ledger (games/puzzles/streaks)
+ *   POST /api/puzzles/solve       first-solve puzzle XP (+10, once per puzzle)
  *   GET  /api/friends/status?uids=presence, restricted to known counterparties
  *   GET  /api/directory?q=        player directory search (name + photo only)
  *   POST /api/invites             create a match invitation (friends only)
@@ -200,7 +203,11 @@ async function handlePostGames(req, res, userId) {
     // be dropped before the response — the next /api/rank must already show
     // the new rating.
     SOC.invalidateRatings();
-    sendJson(res, 200, { ok: true, ...r, gameId: rec.gameId });
+    // Friend streaks + experience pay out from the stored record (idempotent:
+    // a retried POST is a duplicate and pays nothing twice).
+    let meta = null;
+    try { meta = await SOC.onGameRecorded(userId, rec, r.ok && !r.duplicate); } catch (_) {}
+    sendJson(res, 200, { ok: true, ...r, gameId: rec.gameId, xp: meta && meta.xpGained ? { gained: meta.xpGained, streak: meta.streak, winStreak: meta.winStreak } : undefined });
 }
 
 async function handleGetGames(req, res, userId) {
@@ -227,11 +234,12 @@ const LEADER_CATS = RANK_CATS;
  */
 async function handleLeaderboard(req, res, userId) {
     const q = query(req);
-    const cat = (q.cat || 'blitz').slice(0, 24);
+    // Rapid is the default category everywhere; explicit cats pass through.
+    const cat = typeof q.cat === 'string' && q.cat ? q.cat.slice(0, 24) : 'rapid';
     // Validate BEFORE touching the cache: a cached payload must never
     // satisfy a bad-category request, and a bad cat must never poison it.
     if (!LEADER_CATS.includes(cat)) { sendError(res, 400, 'bad-category'); return; }
-    const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 50));
+    const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 100));
     const offset = Math.max(0, parseInt(q.offset, 10) || 0);
 
     let friends = [];
@@ -239,7 +247,10 @@ async function handleLeaderboard(req, res, userId) {
 
     let payload;
     try {
-        payload = await SOC.rankPage({ cat, viewerUid: userId, friendUids: friends, limit, offset });
+        // Same full registry as /api/rank (users + every Clerk account).
+        const registry = await clerkListUsers().catch(() => ({ list: [], complete: false }));
+        payload = await SOC.rankPage({ cat, viewerUid: userId, friendUids: friends, limit, offset, extraIdentities: registry.list });
+        payload = { scope: registry.complete && registry.list.length ? 'all' : 'synced', ...payload };
     } catch (e) {
         // Never serve a stale or empty ladder as if it were the real one.
         console.error('[doches api] leaderboard failed', e);
@@ -514,8 +525,50 @@ async function handlePresence(req, res, userId) {
     if (body === null) { sendError(res, 400, 'bad-json'); return; }
     try {
         await SOC.heartbeat(userId, body.name, body.img);
+        // Keep the ladder photo fresh (durable before we answer).
+        try { await SOC.touchProfile(userId, body.name, body.img); } catch (_) {}
         sendJson(res, 200, { ok: true });
     } catch (e) { fail(res, 'presence', e); }
+}
+
+/**
+ * POST /api/presence/leave — explicit goodbye (tab closed, signed out).
+ * The row is deleted at once instead of lingering for the TTL, so friends
+ * stop seeing a ghost "online now". Fire-and-forget safe: missing rows are
+ * fine, and a later heartbeat simply re-creates the row.
+ */
+async function handlePresenceLeave(req, res, userId) {
+    try {
+        await SOC.leavePresence(userId);
+        sendJson(res, 200, { ok: true });
+    } catch (e) { fail(res, 'presence/leave', e); }
+}
+
+/**
+ * GET /api/xp — this account's experience ledger. Fixed server-side
+ * amounts: rated game win +20 / draw +10 / loss +5, friend-streak
+ * milestones (7d +50, 30d +150, 100d +400, 365d +1000), win-streak
+ * milestones (3 +15, 5 +40, 10 +100, 20 +250), first puzzle solve +10.
+ */
+async function handleGetXp(req, res, userId) {
+    try {
+        sendJson(res, 200, { ok: true, xp: await SOC.getXp(userId) });
+    } catch (e) { fail(res, 'xp', e); }
+}
+
+/**
+ * POST /api/puzzles/solve {puzzleId} — +10 XP for a first solve, ever.
+ * The client reports the EVENT, never a number; duplicates and unknown ids
+ * pay nothing.
+ */
+async function handlePuzzleSolve(req, res, userId) {
+    const body = await readBody(req);
+    if (body === null) { sendError(res, 400, 'bad-json'); return; }
+    try {
+        const r = await SOC.solvePuzzle(userId, body.puzzleId);
+        if (r.error) { sendError(res, 400, r.error); return; }
+        sendJson(res, 200, { ok: true, ...r });
+    } catch (e) { fail(res, 'puzzles/solve', e); }
 }
 
 /**
@@ -590,9 +643,9 @@ async function handleNotifyAck(req, res, userId) {
 async function handleHall(req, res, userId) {
     try {
         const q = query(req);
-        const cat = (q.cat || 'blitz').slice(0, 24);
+        const cat = typeof q.cat === 'string' && q.cat ? q.cat.slice(0, 24) : 'rapid';
         if (!LEADER_CATS.includes(cat)) { sendError(res, 400, 'bad-category'); return; }
-        const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 50));
+        const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 100));
         const offset = Math.max(0, parseInt(q.offset, 10) || 0);
         const registry = await clerkListUsers().catch(() => ({ list: [], complete: false }));
         sendJson(res, 200, {
@@ -608,7 +661,9 @@ async function handleHall(req, res, userId) {
 async function handleRank(req, res, userId) {
     try {
         const q = query(req);
-        const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 50));
+        // Pages of 100: a full registry must never be dumped in one
+        // response (client memory, server memory, database load).
+        const limit = Math.max(1, Math.min(100, parseInt(q.limit, 10) || 100));
         const offset = Math.max(0, parseInt(q.offset, 10) || 0);
         // The `friends=` hint is IGNORED for authorization purposes: the
         // server derives the viewer's friends from its own graph, so a
@@ -674,6 +729,9 @@ async function handleApi(req, res) {
     if (p === '/api/friends/snapshot' && req.method === 'GET') { await handleFriendsSnapshot(req, res, id.userId); return; }
     if (p === '/api/directory' && req.method === 'GET') { await handleDirectory(req, res, id.userId); return; }
     if (p === '/api/presence' && req.method === 'POST') { await handlePresence(req, res, id.userId); return; }
+    if (p === '/api/presence/leave' && req.method === 'POST') { await handlePresenceLeave(req, res, id.userId); return; }
+    if (p === '/api/xp' && req.method === 'GET') { await handleGetXp(req, res, id.userId); return; }
+    if (p === '/api/puzzles/solve' && req.method === 'POST') { await handlePuzzleSolve(req, res, id.userId); return; }
     if (p === '/api/friends/status' && req.method === 'GET') { await handleFriendStatus(req, res, id.userId); return; }
     if (p === '/api/notify' && req.method === 'POST') { await handleNotify(req, res, id.userId); return; }
     if (p === '/api/notify' && req.method === 'GET') { await handleNotifyGet(req, res, id.userId); return; }

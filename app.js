@@ -3265,6 +3265,10 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                             : '').filter(Boolean),
                         control: { id: s.control.id, base: s.control.base, inc: s.control.inc },
                         opp: (s.opp && s.opp.name) || 'Opponent',
+                        // The opponent's account id lets the server stamp the
+                        // shared friend streak for BOTH players from either
+                        // player's record (honoured only between friends).
+                        oppUid: (s.opp && s.opp.id) || undefined,
                         delta: (delta === null || delta === undefined) ? undefined : delta,
                         ratingBefore: (rating === null || rating === undefined || delta === null || delta === undefined) ? undefined : rating - delta,
                         ratingAfter: (rating === null || rating === undefined) ? undefined : rating,
@@ -4158,6 +4162,9 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         this._fb('Sign in first to manage your account.', 'error');
     }
     async signOut() {
+        // Goodbye first, while the session token still works: friends stop
+        // seeing a ghost "online now" the moment this lands.
+        try { if (window.DoChessFriends) await window.DoChessFriends.presenceLeave(); } catch (_) {}
         if (this._clerk) { try { await this._clerk.signOut(); } catch (_) {} }
     }
 
@@ -4170,7 +4177,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         if (!key || typeof key !== 'string' || !key.startsWith('pk_')) return; // no accounts configured
         document.getElementById('auth-slot')?.removeAttribute('hidden');
         document.getElementById('auth-btn')?.addEventListener('click', () => this._authSignIn());
-        document.getElementById('logout-btn')?.addEventListener('click', async () => { try { await this._clerk?.signOut(); } catch (_) {} });
+        document.getElementById('logout-btn')?.addEventListener('click', async () => { try { if (window.DoChessFriends) await window.DoChessFriends.presenceLeave(); } catch (_) {} try { await this._clerk?.signOut(); } catch (_) {} });
         // Returning session? Restore silently so the avatar is already there.
         let returning = false;
         try {
@@ -4675,7 +4682,11 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
 
     /* Ratings rail: one honest row per time control. */
     _profileRatingsHTML() {
-        const rows = ChessCourseApp.onlineControls().map(c => {
+        // Rapid leads: it is the game's main rating. Each control keeps its
+        // own Elo — a bullet win never touches the rapid number.
+        const ordered = ChessCourseApp.onlineControls().slice().sort((a, b) =>
+            (a.id === 'rapid' ? 0 : a.id === 'blitz' ? 1 : 2) - (b.id === 'rapid' ? 0 : b.id === 'blitz' ? 1 : 2));
+        const rows = ordered.map(c => {
             const r = OnlineRatings.get(this.userId, c.id);
             let gms = 0;
             try { gms = OnlineRatings.record(this.userId, c.id).games || 0; } catch (_) {}

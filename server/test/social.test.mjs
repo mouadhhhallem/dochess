@@ -574,3 +574,143 @@ test('exactly six time controls resolve, each appearing once', () => {
     assert.equal(resolveControl(7, 3), null, 'unsupported controls are rejected');
     assert.equal(resolveControl('x', null), null);
 });
+
+/* ── friend streaks (durable) + experience ─────────────────────── */
+
+// One recorded game stamps the shared day for BOTH players from EITHER
+// player's copy — and the snapshot carries it back, so a refresh can never
+// reset a flame to 0.
+test('a recorded friend game stamps the shared streak for both sides', async () => {
+    const x = 'user_aaaaaaaa8001', y = 'user_bbbbbbbb8002';
+    await SOC.requestFriend(x, { toUid: y });
+    await SOC.respondToRequest(y, x, true);
+    const rec = { gameId: 'gstreak1', result: 'win', date: Date.now(), plies: 40, control: { id: 'rapid' }, oppUid: y };
+    await db().insertGame({ ...rec, userId: x });
+    const meta = await SOC.onGameRecorded(x, { ...rec, userId: x }, true);
+    assert.equal(meta.streak && meta.streak.count, 1, 'day one stamped');
+    assert.equal(meta.xpGained, 20, 'a win pays 20 XP');
+
+    // Either copy stamps both: y's own record for the same shared game id
+    // lands the same day without double-counting the day.
+    await db().insertGame({ ...rec, userId: y, result: 'loss', oppUid: x });
+    const metaY = await SOC.onGameRecorded(y, { ...rec, userId: y, result: 'loss', oppUid: x }, true);
+    assert.equal(metaY.streak && metaY.streak.count, 1, 'same day, still streak 1');
+    assert.equal(metaY.xpGained, 5, 'a loss pays 5 XP');
+
+    // The snapshot carries the durable days back to every device.
+    const snap = await SOC.listFriends(x);
+    const row = snap.find((f) => f.uid === y);
+    assert.ok(row && row.days && Object.keys(row.days).length === 1, 'snapshot carries the stamped day');
+    assert.equal(row.streakCount, 1);
+
+    // A retried POST is a duplicate and pays nothing twice.
+    const again = await SOC.onGameRecorded(x, { ...rec, userId: x }, false);
+    assert.equal(again.xpGained, 0, 'duplicates never double-pay');
+    assert.equal((await SOC.getXp(x)).games, 20, 'only the first win counted');
+});
+
+test('no streak or XP without friendship, and none for aborted games', async () => {
+    const x = 'user_aaaaaaaa8011', y = 'user_bbbbbbbb8012';
+    // Strangers: no stamp, but the recorder still earns game XP.
+    const rec = { gameId: 'gstranger1', result: 'win', date: Date.now(), control: { id: 'blitz' }, oppUid: y };
+    await db().insertGame({ ...rec, userId: x });
+    const meta = await SOC.onGameRecorded(x, { ...rec, userId: x }, true);
+    assert.equal(meta.streak, null, 'strangers share no flame');
+    assert.equal(meta.xpGained, 20);
+
+    const aborted = await SOC.onGameRecorded(x, { gameId: 'gabort1', result: 'aborted', date: Date.now(), control: { id: 'blitz' } }, true);
+    assert.equal(aborted.xpGained, 0, 'aborted games pay nothing');
+    assert.equal(aborted.streak, null);
+});
+
+test('win streaks pay milestones once per run', async () => {
+    const u = 'user_winstreak0001';
+    let total = 0;
+    for (let i = 1; i <= 5; i++) {
+        const rec = { gameId: `gw${i}`, result: 'win', date: i, plies: 30, control: { id: 'bullet' } };
+        await db().insertGame({ ...rec, userId: u });
+        const m = await SOC.onGameRecorded(u, { ...rec, userId: u }, true);
+        total = (await SOC.getXp(u)).total;
+        if (i < 3) assert.equal(m.winStreak, i);
+    }
+    // 5 wins: 5×20 game XP + 3-win (+15) + 5-win (+40) milestone XP.
+    assert.equal(total, 5 * 20 + 15 + 40, `five straight wins pay milestones, got ${total}`);
+    // A loss resets the run AND the paid milestones, so the next run earns again.
+    const loss = { gameId: 'gl1', result: 'loss', date: 6, plies: 30, control: { id: 'bullet' } };
+    await db().insertGame({ ...loss, userId: u });
+    const ml = await SOC.onGameRecorded(u, { ...loss, userId: u }, true);
+    assert.equal(ml.winStreak, 0);
+    assert.equal(ml.xpGained, 5, 'only the loss XP');
+});
+
+test('friend streak milestones pay XP at 7 days', async () => {
+    const x = 'user_aaaaaaaa8021', y = 'user_bbbbbbbb8022';
+    await SOC.requestFriend(x, { toUid: y });
+    await SOC.respondToRequest(y, x, true);
+    // Seven consecutive days, one game each, stamped directly.
+    const now = Date.now();
+    for (let back = 6; back >= 0; back--) {
+        const st = await SOC.stampStreakDay(x, y, now - back * 86400000);
+        if (back === 0) {
+            assert.equal(st.count, 7, 'seven daily games = streak 7');
+            assert.ok(st.crossed.some((c) => c.miles === 7 && c.amount === 50), 'the 7-day milestone crosses with +50');
+        }
+    }
+    const pair = await SOC.pairStreak(x, y);
+    assert.equal(pair.count, 7);
+    assert.equal(pair.best, 7);
+    // Milestones pay once per streak: stamping again today adds no second +50.
+    const again = await SOC.stampStreakDay(x, y, now);
+    assert.equal(again.crossed.length, 0, 'milestones pay once per run');
+    assert.equal(again.count, 7, 'same day, still 7');
+});
+
+test('puzzle XP pays once per puzzle, rejects junk', async () => {
+    const u = 'user_puzzlexp00001';
+    const first = await SOC.solvePuzzle(u, 'api:abc123');
+    assert.equal(first.awarded, 10, 'first solve pays +10');
+    assert.equal(first.total, 10);
+    const dup = await SOC.solvePuzzle(u, 'api:abc123');
+    assert.equal(dup.duplicate, true, 'second solve pays nothing');
+    assert.equal((await SOC.getXp(u)).puzzles, 10);
+    assert.equal((await SOC.solvePuzzle(u, '')).error, 'bad-puzzle');
+    assert.equal((await SOC.solvePuzzle(u, null)).error, 'bad-puzzle');
+});
+
+test('touchProfile refreshes photos without creating accounts', async () => {
+    // No account row: heartbeat must never invent one.
+    assert.equal(await SOC.touchProfile('user_ghostprof001', 'Ghost', 'https://img.example/g.png'), false);
+    assert.equal(await db().getUser('user_ghostprof001'), null);
+
+    const u = 'user_realprof00002';
+    await db().updateUser(u, { s: { updatedAt: Date.now(), data: 1 } }, { name: 'Real' });
+    assert.equal(await SOC.touchProfile(u, 'Real Name', 'https://img.example/r.png'), true);
+    const doc = await db().getUser(u);
+    assert.equal(doc.profile.image, 'https://img.example/r.png', 'the ladder photo updates from the heartbeat');
+    assert.equal(doc.profile.name, 'Real Name');
+});
+
+test('presence leave deletes the row at once', async () => {
+    const u = 'user_leave000001';
+    await SOC.heartbeat(u, 'Leaver', null);
+    assert.equal((await SOC.status([u]))[u].online, true);
+    await SOC.leavePresence(u);
+    assert.equal((await SOC.status([u]))[u].online, false, 'no ghost online after goodbye');
+    assert.equal((await SOC.status([u]))[u].lastSeen, 0);
+});
+
+test('ladder rows carry photos for self and friends, never strangers', async () => {
+    const me = 'user_viewerpriv031', friend = 'user_friendpriv032', other = 'user_otherpriv033';
+    for (const [uid, nm] of [[me, 'Me Myself'], [friend, 'Friend Fay'], [other, 'Other Otto']]) {
+        await db().updateUser(uid, { s: { updatedAt: Date.now(), data: 1 } }, { name: nm, image: `https://img.example/${uid}.png` });
+    }
+    await SOC.requestFriend(me, { toUid: friend, name: 'Friend Fay' });
+    await SOC.respondToRequest(friend, me, true);
+    const board = await SOC.rankPage({ cat: 'rapid', viewerUid: me, limit: 100, offset: 0 });
+    const fr = board.board.find((r) => r.friend);
+    assert.ok(fr, 'friend row present');
+    assert.equal(fr.img, `https://img.example/${friend}.png`, 'friend photo arrives on the ladder');
+    const ot = board.board.find((r) => !r.self && !r.friend);
+    assert.ok(ot, 'a stranger row exists');
+    assert.ok(!('img' in ot) && !('uid' in ot), 'strangers still get no photo and no uid');
+});

@@ -367,6 +367,12 @@
         setFeedback(S.mistakes === 0 ? 'Solved - perfect!' : 'Solved!', 'success');
         renderSolution();
         try { if (window.app && window.app.snd) window.app.snd.playSuccess(); } catch (_) {}
+        // Server-ledgered puzzle XP (+10, first solve per puzzle ever). The
+        // key names the EVENT, never a number; signed-in backend only.
+        try {
+            const key = (S.fromApi ? 'api:' : 'bin:') + String((S.puzzle && S.puzzle.id) || (S.puzzle && S.puzzle.positionFen) || '').slice(0, 48);
+            if (window.DoChessFriends && window.DoChessFriends.reportPuzzleSolve) window.DoChessFriends.reportPuzzleSolve(key);
+        } catch (_) {}
     }
 
     function flashWrong(alg) {

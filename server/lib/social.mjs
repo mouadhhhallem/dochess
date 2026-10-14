@@ -127,7 +127,9 @@ export function firstName(v) {
 }
 
 function cleanCat(v) {
-    return RANK_CATS.includes(v) ? v : 'blitz';
+    // Rapid is the game's main rating: the default ladder, hall and profile
+    // category everywhere. Bullet and blitz are one tap away, never mixed in.
+    return RANK_CATS.includes(v) ? v : 'rapid';
 }
 
 function cleanCode(v) {
@@ -273,7 +275,40 @@ export function createSocialStore(getDb) {
                 since: r.since || 0
             });
         }
-        return out.sort((x, y) => x.name.localeCompare(y.name));
+        out.sort((x, y) => x.name.localeCompare(y.name));
+        // Photos ride along from the account profile (kept fresh by every
+        // heartbeat) with presence as fallback, so a friend's face survives
+        // refreshes and shows on every screen without a second request.
+        // Bounded: two indexed reads per friend.
+        const db = getDb();
+        for (const f of out) {
+            try {
+                const [u, p] = await Promise.all([
+                    db.getUser(f.uid).catch(() => null),
+                    db.getDoc('presence', f.uid).catch(() => null),
+                ]);
+                f.img = cleanImg((u && u.profile && u.profile.image) || (p && p.img)) || null;
+            } catch (_) { f.img = null; }
+        }
+        // Durable streak state rides along so every device converges on the
+        // same flame (the client unions the day map with its optimistic
+        // stamps and takes max(local run, server count)). Bounded: the last
+        // 120 days per friend for the week dots; the exact count covers runs
+        // longer than the window.
+        const cutoff = dayKeyUTC(Date.now() - 120 * 86400000);
+        for (const f of out) {
+            try {
+                const st = await pairStreak(uid, f.uid);
+                if (st) {
+                    const days = {};
+                    for (const [k, v] of Object.entries(st.days || {})) {
+                        if (k >= cutoff) days[k] = v;
+                    }
+                    f.days = days; f.streakCount = st.count; f.streakBest = st.best;
+                }
+            } catch (_) {}
+        }
+        return out;
     }
 
     /* ── requests (explicit lifecycle, terminal decline) ──────────── */
@@ -528,12 +563,256 @@ export function createSocialStore(getDb) {
         return n;
     }
 
+    /* ── friend streaks (durable, shared) ─────────────────────────── */
+
+    /**
+     * WHY SERVER-SIDE: day stamps used to live only in each browser's shelf.
+     * A refresh before the shelf reloaded, an account shelf swap, or a second
+     * device meant "played yesterday, streak 0 today". The server now stamps
+     * every recorded friend game for BOTH players from EITHER player's game
+     * record, and the snapshot carries the day map back, so all devices
+     * converge on the same flame.
+     *
+     * streaks: { _id: 's:min|max', a, b, days: { 'YYYY-MM-DD': games }, best }
+     * One game together in a calendar day (UTC) = one streak day. A second
+     * game the same day does not add a day — the streak can only ever grow
+     * by one per day, which is what makes "1 game, still streak 1" hold.
+     */
+    const STREAK_XP = [[365, 1000], [100, 400], [30, 150], [7, 50]];
+    const GAME_XP = { win: 20, draw: 10, loss: 5 };
+    const WINSTREAK_XP = [[20, 250], [10, 100], [5, 40], [3, 15]];
+    const PUZZLE_XP = 10;
+    const PUZZLE_ID_CAP = 2000;
+
+    function dayKeyUTC(t) {
+        const d = new Date(t);
+        const p = (n) => String(n).padStart(2, '0');
+        return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+    }
+
+    /** Current run length over a {dayKey: count} map (UTC, today-anchored). */
+    function streakRun(days, now = Date.now()) {
+        if (!days || typeof days !== 'object') return 0;
+        const has = (back) => !!days[dayKeyUTC(now - back * 86400000)];
+        let cursor = has(0) ? 0 : (has(1) ? 1 : -1);
+        if (cursor < 0) return 0;
+        let n = 0;
+        for (let back = cursor; ; back++) {
+            if (has(back)) n++;
+            else break;
+        }
+        return n;
+    }
+
+    const streakKey = (a, b) => 's:' + (a < b ? a + '|' + b : b + '|' + a);
+
+    /**
+     * Stamp one shared day for a friend pair. Returns the new {count, best}
+     * plus any milestone just crossed (each milestone pays once per streak:
+     * `paid` tracks the highest milestone already awarded for the live run
+     * and resets when the run breaks).
+     */
+    async function stampStreakDay(a, b, at = Date.now()) {
+        a = cleanUid(a); b = cleanUid(b);
+        if (!a || !b || a === b) return null;
+        const db = getDb();
+        const key = streakKey(a, b);
+        const prev = (await db.getDoc('streaks', key)) || { _id: key, a, b, days: {}, best: 0, paid: 0 };
+        const days = { ...(prev.days || {}) };
+        const dk = dayKeyUTC(at);
+        days[dk] = (days[dk] || 0) + 1;
+        // Prune ancient days; the streak math only looks backwards day by day.
+        const keys = Object.keys(days).sort();
+        while (keys.length > 400) delete days[keys.shift()];
+        let count = streakRun(days, at);
+        // A stamp for an OLD day (late-arriving record) must not resurrect a
+        // dead run: if the run ending today is 0 but history says otherwise,
+        // keep the stored best, don't invent.
+        const best = Math.max(prev.best || 0, count);
+        let crossed = [];
+        let paid = prev.paid || 0;
+        if (count === 0) {
+            paid = 0;
+        } else {
+            for (const [miles, amount] of STREAK_XP.slice().reverse()) {
+                if (count >= miles && miles > paid) {
+                    crossed.push({ miles, amount });
+                    paid = Math.max(paid, miles);
+                }
+            }
+        }
+        await db.putDoc('streaks', key, { _id: key, a, b, days, best, paid, updatedAt: Date.now() });
+        return { count, best, crossed };
+    }
+
+    async function pairStreak(a, b) {
+        a = cleanUid(a); b = cleanUid(b);
+        if (!a || !b) return null;
+        const row = await getDb().getDoc('streaks', streakKey(a, b));
+        if (!row) return null;
+        return { days: row.days || {}, best: row.best || 0, count: streakRun(row.days || {}) };
+    }
+
+    /* ── experience points (one ledger, fixed amounts) ─────────────── */
+
+    /**
+     * xp: { _id: uid, total, games, puzzles, streaks }
+     * Every amount is fixed server-side. Clients report EVENTS (a finished
+     * game, a solved puzzle id), never numbers — so there is no knob to turn
+     * for free XP. Game XP is granted only when the record is first stored
+     * (retries are idempotent and pay nothing twice).
+     */
+    async function getXp(uid) {
+        uid = cleanUid(uid);
+        if (!uid) return { total: 0, games: 0, puzzles: 0, streaks: 0 };
+        const row = await getDb().getDoc('xp', uid);
+        if (!row) return { total: 0, games: 0, puzzles: 0, streaks: 0 };
+        return {
+            total: row.total || 0, games: row.games || 0,
+            puzzles: row.puzzles || 0, streaks: row.streaks || 0,
+        };
+    }
+
+    async function addXp(uid, bucket, amount) {
+        uid = cleanUid(uid);
+        amount = Math.max(0, Math.min(10000, Math.round(Number(amount) || 0)));
+        if (!uid || !amount || !['games', 'puzzles', 'streaks'].includes(bucket)) return null;
+        const db = getDb();
+        const prev = (await db.getDoc('xp', uid)) || { _id: uid, total: 0, games: 0, puzzles: 0, streaks: 0 };
+        const next = {
+            ...prev, _id: uid,
+            total: (prev.total || 0) + amount,
+            [bucket]: (prev[bucket] || 0) + amount,
+            updatedAt: Date.now(),
+        };
+        await db.putDoc('xp', uid, next);
+        return { gained: amount, total: next.total };
+    }
+
+    /**
+     * The single entry point for a freshly STORED game record. Stamps the
+     * shared friend streak (either player's copy stamps both sides), pays
+     * per-result game XP, and advances the winner's win streak with its own
+     * milestones. Never pays twice: callers pass the insert result and only
+     * fresh (non-duplicate) rated records reach the ledger.
+     */
+    async function onGameRecorded(userId, rec, inserted) {
+        userId = cleanUid(userId);
+        const out = { xpGained: 0, streak: null, winStreak: 0 };
+        if (!userId || !rec || inserted === false) return out;
+        const result = String(rec.result || '').toLowerCase();
+        if (result !== 'win' && result !== 'loss' && result !== 'draw') return out;
+
+        const g = await addXp(userId, 'games', GAME_XP[result] || 0);
+        if (g) out.xpGained += g.gained;
+
+        // Win streak: consecutive wins at the head of date-ordered history.
+        // Paid milestones reset with the streak, so every new run can earn.
+        try {
+            const db = getDb();
+            const xpd = (await db.getDoc('xp', userId)) || {};
+            const hist = await db.listGames(userId, { limit: 200 });
+            let run = 0;
+            for (const h of hist) {
+                const r = String((h && h.result) || '').toLowerCase();
+                if (r === 'win') run++;
+                else if (r === 'loss' || r === 'draw') break;
+            }
+            out.winStreak = run;
+            const paid = xpd.winStreakPaid || 0;
+            let payTo = paid;
+            for (const [miles, amount] of WINSTREAK_XP.slice().reverse()) {
+                if (run >= miles && miles > payTo) {
+                    const a = await addXp(userId, 'streaks', amount);
+                    if (a) { out.xpGained += a.gained; payTo = Math.max(payTo, miles); }
+                }
+            }
+            await db.putDoc('xp', userId, {
+                ...((await db.getDoc('xp', userId)) || { _id: userId, total: 0, games: 0, puzzles: 0, streaks: 0 }),
+                winStreak: run, winStreakPaid: run === 0 ? 0 : payTo, updatedAt: Date.now(),
+            });
+        } catch (_) { /* XP must never fail a game record */ }
+
+        // Shared friend streak, stamped from either player's copy.
+        const opp = rec.oppUid && cleanUid(rec.oppUid);
+        if (opp && opp !== userId && await areFriends(userId, opp)) {
+            try {
+                const st = await stampStreakDay(userId, opp, rec.date || Date.now());
+                if (st) {
+                    out.streak = { count: st.count, best: st.best };
+                    for (const c of st.crossed) {
+                        const a = await addXp(userId, 'streaks', c.amount);
+                        if (a) out.xpGained += a.gained;
+                    }
+                }
+            } catch (_) { /* streaks must never fail a game record */ }
+        }
+        return out;
+    }
+
+    /**
+     * First-solve puzzle XP: +10 once per puzzle id, ever. Unknown or
+     * over-long ids are rejected; past the id cap no more is paid (honest
+     * stop, not silent growth).
+     */
+    async function solvePuzzle(uid, puzzleId) {
+        uid = cleanUid(uid);
+        const pid = typeof puzzleId === 'string' ? puzzleId.replace(/[^\w-]/g, '').slice(0, 64) : '';
+        if (!uid || !pid) return { error: 'bad-puzzle' };
+        const db = getDb();
+        const prev = (await db.getDoc('xp', uid)) || { _id: uid, total: 0, games: 0, puzzles: 0, streaks: 0, solved: [] };
+        const solved = Array.isArray(prev.solved) ? prev.solved : [];
+        if (solved.includes(pid)) return { ok: true, duplicate: true, total: prev.total || 0 };
+        if (solved.length >= PUZZLE_ID_CAP) return { ok: true, capped: true, total: prev.total || 0 };
+        solved.push(pid);
+        await db.putDoc('xp', uid, { ...prev, _id: uid, solved, updatedAt: Date.now() });
+        const a = await addXp(uid, 'puzzles', PUZZLE_XP);
+        return { ok: true, awarded: PUZZLE_XP, total: a ? a.total : prev.total || 0 };
+    }
+
     /* ── presence ────────────────────────────────────────────────── */
 
     async function heartbeat(uid, name, img) {
         uid = cleanUid(uid);
         if (!uid) return false;
         await getDb().putDoc('presence', uid, { uid, name: cleanName(name), img: cleanImg(img), at: Date.now() });
+        return true;
+    }
+
+    /**
+     * Explicit goodbye: tab closed, signed out, or connection lost on
+     * purpose. Without this a presence row lingers for the full TTL and
+     * friends see a ghost "online now" for up to ~2 minutes after someone
+     * leaves — the "offline but shows online" inversion.
+     */
+    async function leavePresence(uid) {
+        uid = cleanUid(uid);
+        if (!uid) return false;
+        try { await getDb().delDoc('presence', uid); } catch (_) {}
+        return true;
+    }
+
+    /**
+     * Keep the account's display name + photo fresh from the heartbeat.
+     * Presence rows carry the live Clerk photo every 45 s, but the ladder
+     * reads the `users` profile — without this refresh a changed (or
+     * first-synced) photo never reaches the ranking and friends see a
+     * letter avatar instead of a face. Never CREATES an account from a
+     * heartbeat: registration stays an explicit sync.
+     */
+    async function touchProfile(uid, name, img) {
+        uid = cleanUid(uid);
+        if (!uid) return false;
+        const doc = await getDb().getUser(uid);
+        if (!doc) return false;
+        const profile = { ...(doc.profile || {}) };
+        const n = typeof name === 'string' ? name.replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 64) : '';
+        const im = cleanImg(img);
+        let changed = false;
+        if (n && n !== 'Player' && n !== profile.name) { profile.name = n; changed = true; }
+        if (im && im !== profile.image) { profile.image = im; changed = true; }
+        if (!changed) return true;
+        await getDb().updateUser(uid, {}, profile);
         return true;
     }
 
@@ -762,19 +1041,29 @@ export function createSocialStore(getDb) {
     /**
      * Per-viewer SERIALIZATION — the privacy boundary.
      *
-     * self   : rank, own uid, own display name, rating, tier
+     * self   : rank, own uid, own display name + photo, rating, tier
      * friend : rank, uid (friends already need it to invite each other),
      *          friend-facing display name + photo, rating, tier
-     * stranger: rank, FIRST name, rating, tier. No uid, no full name, no
-     *          photo, no email, no internal id — the field is never selected
-     *          into the response, so it cannot leak through devtools either.
+     * stranger (ladder): rank, FIRST name, rating, tier. No uid, no full
+     *          name, no photo, no email, no internal id — the field is never
+     *          selected into the response, so it cannot leak through devtools
+     *          either. (Photos of friends not showing on the ladder was a
+     *          real bug: the photo never left the server. Friends' photos are
+     *          already shared with each other everywhere else.)
+     * stranger (hall, includeImg): full name + photo, still no uid/email —
+     *          the explicit owner decision documented on hallPage.
      */
     function serializeRow(row, viewerUid, friends, includeImg) {
         const base = { rank: row.rank, rating: row.rating, tier: tierOf(row.rating) };
-        if (includeImg && row.img) base.img = row.img;
-        if (viewerUid && row.uid === viewerUid) return { ...base, uid: row.uid, name: row.name, self: true, friend: false };
-        if (friends.has(row.uid)) return { ...base, uid: row.uid, name: row.name, img: row.img || base.img || null, self: false, friend: true };
-        return { ...base, name: firstName(row.name), self: false, friend: false };
+        if (viewerUid && row.uid === viewerUid) {
+            return { ...base, uid: row.uid, name: row.name, img: row.img || null, self: true, friend: false };
+        }
+        if (friends.has(row.uid)) {
+            return { ...base, uid: row.uid, name: row.name, img: row.img || null, self: false, friend: true };
+        }
+        const out = { ...base, name: firstName(row.name), self: false, friend: false };
+        if (includeImg && row.img) out.img = row.img;
+        return out;
     }
 
     /* ── the activity inbox ─────────────────────────────────────── */
@@ -883,11 +1172,12 @@ export function createSocialStore(getDb) {
         // friendships
         areFriends, addFriend, removeFriend, listFriends,
         // requests
-        requestFriend, respondToRequest, cancelRequest, listRequests,
-        // invitations
+        requestFriend, respondToRequest, cancelRequest, listRequests, touchProfile,        // invitations
         createInvite, respondToInvite, listInvites, listSentInvites, getInvite, sweepInvites,
+        // friend streaks + experience
+        stampStreakDay, pairStreak, getXp, addXp, onGameRecorded, solvePuzzle,
         // presence
-        heartbeat, status, presenceCard, sweepPresence, searchDirectory,
+        heartbeat, leavePresence, status, presenceCard, sweepPresence, searchDirectory,
         // inbox
         notify, notifyFriendEvent, inbox, ackInbox,
         // ranking

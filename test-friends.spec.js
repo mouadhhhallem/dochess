@@ -175,13 +175,47 @@ test('streaks grow per day, warnings fire, versus counts real games', async ({ b
     await page.close();
 });
 
+test('server streak counts survive locally, last-seen reads seconds to months', async ({ browser }) => {
+    const page = await freshPage(browser, { width: 1280, height: 800 });
+    const r = await page.evaluate(() => {
+        const F = window.DoChessFriends;
+        return {
+            // A flame the server healed (or another device earned) counts
+            // even with an empty local day map — the refresh-to-0 bug.
+            healed: F.streakOf({ days: {}, streakCount: 4, streakBest: 9 }),
+            local: F.streakOf({ days: {}, streakCount: 0 }),
+            s: F.ago(Date.now() - 5000),
+            min1: F.ago(Date.now() - 60 * 1000),
+            min30: F.ago(Date.now() - 30 * 60 * 1000),
+            h1: F.ago(Date.now() - 3600 * 1000),
+            d1: F.ago(Date.now() - 86400 * 1000),
+            d3: F.ago(Date.now() - 3 * 86400 * 1000),
+            w1: F.ago(Date.now() - 7 * 86400 * 1000),
+            w3: F.ago(Date.now() - 21 * 86400 * 1000),
+            mo: F.ago(Date.now() - 60 * 86400 * 1000),
+        };
+    });
+    expect(r.healed).toBe(4);
+    expect(r.local).toBe(0);
+    expect(r.s).toBe('5s ago');
+    expect(r.min1).toBe('1 min ago');
+    expect(r.min30).toBe('30 min ago');
+    expect(r.h1).toBe('1 hour ago');
+    expect(r.d1).toBe('yesterday');
+    expect(r.d3).toBe('3 days ago');
+    expect(r.w1).toBe('1 week ago');
+    expect(r.w3).toBe('3 weeks ago');
+    expect(r.mo).toBe('2 months ago');
+    await page.close();
+});
+
 test('ranking is global: friends full names, strangers first names; hall lists join order', async ({ browser }) => {
     const page = await freshPage(browser, { width: 1280, height: 800 });
     await page.evaluate(() => {
         localStorage.setItem('ccr_board', JSON.stringify({
-            fr_u1: { name: 'FriendOne', cats: { blitz: 900 }, seen: Date.now() },
-            u2: { name: 'Bobby', cats: { blitz: 1200 }, seen: Date.now() },
-            ux: { name: 'Xenia Wilkinson', cats: { blitz: 1500 }, seen: Date.now() },
+            fr_u1: { name: 'FriendOne', cats: { rapid: 900 }, seen: Date.now() },
+            u2: { name: 'Bobby', cats: { rapid: 1200 }, seen: Date.now() },
+            ux: { name: 'Xenia Wilkinson', cats: { rapid: 1500 }, seen: Date.now() },
         }));
         window.DoChessFriends.addFriend('u2', 'Bobby', 'link');
         window.DoChessFriends.acceptFriend('u2');
@@ -345,11 +379,11 @@ test('ranking privacy: everyone visible, friends full names, strangers first nam
     const page = await freshPage(browser, { width: 1280, height: 800 });
     await page.evaluate(() => {
         localStorage.setItem('ccr_board', JSON.stringify({
-            fr_u1: { name: 'FriendOne', cats: { blitz: 1000 }, seen: Date.now() },
-            a: { name: 'Amy Anderson', cats: { blitz: 1600 }, seen: Date.now() },
-            b: { name: 'Ben', cats: { blitz: 1100 }, seen: Date.now() },
-            c: { name: 'Cat', cats: { blitz: 900 }, seen: Date.now() },
-            d: { name: 'Dan Doe', cats: { blitz: 500 }, seen: Date.now() },
+            fr_u1: { name: 'FriendOne', cats: { rapid: 1000 }, seen: Date.now() },
+            a: { name: 'Amy Anderson', cats: { rapid: 1600 }, seen: Date.now() },
+            b: { name: 'Ben', cats: { rapid: 1100 }, seen: Date.now() },
+            c: { name: 'Cat', cats: { rapid: 900 }, seen: Date.now() },
+            d: { name: 'Dan Doe', cats: { rapid: 500 }, seen: Date.now() },
         }));
         window.DoChessFriends.addFriend('b', 'Ben', 'link');
         window.DoChessFriends.acceptFriend('b');

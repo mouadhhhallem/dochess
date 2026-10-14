@@ -727,3 +727,57 @@ test('a stranger cannot use the inbox or the directory to reach anyone', async (
     const box = await call('GET', '/api/notify', undefined, 'user_e2estranger0099');
     expect(box.body.items.length).toBe(0);
 });
+
+test('16: friend streaks survive refresh; XP pays per result; presence leave works', async ({ browser }) => {
+    const a = await newAccount(browser, ALICE, 'Alice Wonder');
+    const b = await newAccount(browser, BOB, 'Bob Builder');
+    await call('POST', '/api/friends/request', { friendUid: BOB, friendName: 'Bob Builder' }, ALICE);
+    await call('POST', '/api/friends/respond', { fromUid: ALICE, accept: true }, BOB);
+    await expect.poll(() => relist(a.page), { timeout: 25000 }).toContain(BOB);
+
+    // Both players record the same shared rapid game, exactly like the app
+    // does on game end (result + control + opponent id).
+    const now = Date.now();
+    const ra = await call('POST', '/api/games', {
+        gameId: 'gstreak-e2e-1', result: 'win', date: now, plies: 40,
+        control: { id: 'rapid' }, opp: 'Bob Builder', oppUid: BOB,
+    }, ALICE);
+    expect(ra.body.xp && ra.body.xp.gained, 'the record pays XP inline').toBe(20);
+    await call('POST', '/api/games', {
+        gameId: 'gstreak-e2e-1', result: 'loss', date: now, plies: 40,
+        control: { id: 'rapid' }, opp: 'Alice Wonder', oppUid: ALICE,
+    }, BOB);
+    expect((await call('GET', '/api/xp', undefined, ALICE)).body.xp).toMatchObject({ total: 20, games: 20 });
+    expect((await call('GET', '/api/xp', undefined, BOB)).body.xp).toMatchObject({ total: 5, games: 5 });
+
+    // Per-category separation: rapid moved, blitz and bullet did not.
+    const rapid = await call('GET', '/api/rank?cat=rapid&limit=100&offset=0', undefined, ALICE);
+    expect(rapid.body.myRating, 'the rapid win replays into rapid').toBeGreaterThan(800);
+    const blitz = await call('GET', '/api/rank?cat=blitz&limit=100&offset=0', undefined, ALICE);
+    expect(blitz.body.myRating, 'blitz untouched by a rapid win').toBe(800);
+
+    // Simulate the reported refresh: wipe the in-memory/local days on both
+    // sides, re-pull the authoritative snapshot, and the flame must be 1 —
+    // on BOTH devices — instead of resetting to 0.
+    const streakOf = (page, uid) => page.evaluate((u) => {
+        const F = window.DoChessFriends;
+        const all = F.list().map((x) => x.uid);
+        const f = F.list().find((x) => x.uid === u);
+        if (!f) return 'MISSING:' + JSON.stringify(all);
+        delete f.days; delete f.streakCount; delete f.streakBest;
+        return F.pollNow().then(() => F.streakOf(F.list().find((x) => x.uid === u)));
+    }, uid);
+    await expect.poll(() => streakOf(a.page, BOB), { timeout: 25000 }).toBe(1);
+    await expect.poll(() => streakOf(b.page, ALICE), { timeout: 25000 }).toBe(1);
+
+    // Presence: heartbeat shows online; an explicit leave clears at once
+    // (no ghost "online now"), with last-seen back to zero.
+    await call('POST', '/api/presence', { name: 'Alice Wonder', img: null }, ALICE);
+    let st = await call('GET', `/api/friends/status?uids=${ALICE}`, undefined, BOB);
+    expect(st.body.status[ALICE].online, 'heartbeat means online').toBe(true);
+    await call('POST', '/api/presence/leave', {}, ALICE);
+    st = await call('GET', `/api/friends/status?uids=${ALICE}`, undefined, BOB);
+    expect(st.body.status[ALICE].online, 'leave means offline at once').toBe(false);
+
+    await a.ctx.close(); await b.ctx.close();
+});

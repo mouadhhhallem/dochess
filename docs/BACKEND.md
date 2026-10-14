@@ -42,7 +42,10 @@ One Node process serves **both** the static site and the API on `PORT`
 | `POST /api/friends/cancel` | Clerk session | cancel a request this account sent |
 | `POST /api/friends/remove` | Clerk session | remove a friendship in **both** directions |
 | `GET /api/friends/snapshot` | Clerk session | authoritative `{friends, requests:{inbound,outbound,resolved}}` — the client reconciles its whole shelf from this |
-| `POST /api/presence` | Clerk session | heartbeat (90 s TTL) |
+| `POST /api/presence` | Clerk session | heartbeat (90 s TTL); also refreshes the account's ladder photo |
+| `POST /api/presence/leave` | Clerk session | explicit goodbye (tab closed / signed out) — deletes the row at once, no ghost "online" |
+| `GET /api/xp` | Clerk session | experience ledger: `{total, games, puzzles, streaks}` at fixed server-side amounts |
+| `POST /api/puzzles/solve` | Clerk session | +10 XP for a first solve per puzzle id, ever; duplicates pay nothing |
 | `GET /api/friends/status?uids=` | Clerk session | presence for **known counterparties only** (arbitrary uids are withheld) |
 | `GET /api/directory?q=` | Clerk session | player search: friends + known players + Clerk, 3+ letters, max 20, names+photos only |
 | `POST /api/notify` | Clerk session | queue a **plain note** for a known counterpart. Actionable kinds are NOT caller-selectable |
@@ -78,6 +81,18 @@ MongoDB collections (see `server/lib/db.mjs`, `server/lib/social.mjs`):
 - `invites` — `{_id: matchId, matchId, code, control, minutes, incSec, from, to, status: pending|accepted|declined|expired, createdAt, expiresAt, respondedAt}`
 - `presence` — `{_id: uid, uid, name, img, at}` with a 90 s TTL read
 - `notify` — `{_id, to, from, kind, title, body, at, read}`
+- `streaks` — **shared friend streaks**, one row per pair:
+  `{_id: 's:<a>|<b>', a, b, days: {'YYYY-MM-DD': games}, best, paid}`.
+  Stamped from EITHER player's recorded game (the record carries `oppUid`,
+  honoured only between friends); one shared day per calendar day, so a
+  refresh or a second device can never reset a flame. The snapshot carries
+  the day map back and the client unions it with its optimistic stamps.
+- `xp` — **experience ledger** per account:
+  `{_id: uid, total, games, puzzles, streaks, winStreak, winStreakPaid, solved: [...]}`.
+  Fixed server-side amounts, paid once: rated game win +20 / draw +10 /
+  loss +5; friend-streak milestones 7d +50, 30d +150, 100d +400, 365d +1000;
+  win-streak milestones 3 +15, 5 +40, 10 +100, 20 +250; first puzzle solve
+  +10. Clients report EVENTS (results, puzzle ids), never numbers.
 
 Everything above is written **before** the HTTP response is sent, so an
 acknowledged mutation is durable.
