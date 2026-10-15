@@ -684,6 +684,7 @@ class ChessCourseApp {
         // Game story: the dialogue system remembers what happened, so later
         // lines can callback ("again", "second gift", "still no castle").
         this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 };
+        this._botLastPlayerDelta = null;
         this._botEvalBefore = null; this._botSnapBefore = null;
         this._botMoveInfo = null; this._botLastMove = null;
         this._botSfPrev = null; this._botSfPrevStamp = ''; this._botSfBusy = false;
@@ -830,9 +831,9 @@ class ChessCourseApp {
             const g = this.game;
             const names = ChessCourseApp.BOT_PIECE_NAMES;
             const before = (typeof this._botEvalBefore === 'number') ? this._botEvalBefore : null;
-            const after = this._evaluate(g); // black-minus-white
-            // White (the player) gained when Black's score drops.
-            const delta = (before === null) ? 0 : (before - after);
+            const after = this._botSearchWhite(g, 2); // White's perspective
+            // White (the player) gained when White's search score rises.
+            const delta = (before === null) ? 0 : (after - before);
             const moveNo = Math.max(1, Math.ceil(g.moveHistory.length / 2));
             const last = this._botLastMove || {};
             const info = this._botMoveInfo || {};
@@ -893,8 +894,11 @@ class ChessCourseApp {
             // handed out — and mistakes are named (hanging piece + square,
             // material lost), never smoothed over.
             // Slots for the dialogue system: concrete facts, persona voice.
+            // Mate-scale swings (|delta| >= 90000) are checkmates, not pawn
+            // counts — they route to dedicated mate lines ("1000 pawns" is
+            // never uttered) and the display value is capped regardless.
             const pawnStr = (cp) => {
-                const v = Math.abs(Math.round(cp / 10) / 10);
+                const v = Math.min(12, Math.abs(Math.round(cp / 10) / 10));
                 return `${v} pawn${v === 1 ? '' : 's'}`;
             };
             const infoPc = (info.piece || '').toLowerCase();
@@ -909,7 +913,12 @@ class ChessCourseApp {
             // Position truth -> dialogue EVENT; each persona speaks it in
             // its own voice (js/bot-dialogue.js). Mistakes are always
             // called out; quiet spots alternate verdict and live plan tip.
-            if (newHang && newHang.val >= 300 && delta <= -80) {
+            if (delta <= -90000) {
+                story.blunders++;
+                evt('mated');
+            } else if (delta >= 90000) {
+                evt('mateCall');
+            } else if (newHang && newHang.val >= 300 && delta <= -80) {
                 story.blunders++;
                 evt('hanging');
             } else if (delta >= 250) {
@@ -951,6 +960,10 @@ class ChessCourseApp {
             }
 
             ownDelta = delta;
+            // Remember the player's swing: a decisive verdict (brilliant or
+            // blunder) keeps the microphone — the bot's own-move reaction
+            // must not stomp it one second later in _commitCpuMove.
+            try { this._botLastPlayerDelta = delta; } catch (_) {}
         } catch (_) {}
         // Stockfish second opinion (async): corrects the mood only when
         // the real engine disagrees across a mood boundary. Silent when
@@ -1148,12 +1161,13 @@ class ChessCourseApp {
             if (sfMood === ownMood) return false;
             const n = Math.max(1, moveNo || 1);
             const f = facts || {};
-            const v = Math.abs(Math.round(sfDelta / 10) / 10);
+            const v = Math.min(12, Math.abs(Math.round(sfDelta / 10) / 10));
             const pawnStr = `${v} pawn${v === 1 ? '' : 's'}`;
-            // Map the real engine's truth to a dialogue EVENT; the persona
-            // speaks it (never engine words — see DoChessDialogue.BANNED).
+            // Mate-scale truth speaks as mate, never as pawn counts.
             let event = 'quiet';
-            if (sfMood === 'happy') event = 'brilliant';
+            if (sfDelta <= -90000) event = 'mated';
+            else if (sfDelta >= 90000) event = 'mateCall';
+            else if (sfMood === 'happy') event = 'brilliant';
             else if (sfMood === 'angry') {
                 event = 'blunder';
                 try {
@@ -1182,8 +1196,8 @@ class ChessCourseApp {
             if (!bot || !this.game || !this._botGame) return;
             const before = (typeof this._botEngineBefore === 'number') ? this._botEngineBefore : null;
             if (before === null) return;
-            const after = this._evaluate(this.game);
-            const deltaBlack = after - before; // + = good for Black (the bot)
+            const after = this._botSearchWhite(this.game, 2); // White's view
+            const deltaBlack = before - after; // + = good for Black (the bot)
             const moveNo = Math.max(1, Math.ceil(this.game.moveHistory.length / 2));
             const story = this._botStory || (this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 });
             if (deltaBlack <= -200) {
@@ -1879,11 +1893,12 @@ class ChessCourseApp {
        EXECUTE PLAYER MOVE
     ══════════════════════════════════════════════════════════════ */
     _doPlayerMove(from, to) {
-        // Coach snapshot: evaluate BEFORE the move lands so the swing can
-        // be judged after it (bot games only; one static eval, instant).
-        // The pre-move snapshot powers hang detection on a throwaway board.
+        // Coach snapshot: search-scored BEFORE the move lands (White's
+        // perspective) so the swing can be judged after it (bot games
+        // only). The pre-move snapshot powers hang detection on a
+        // throwaway board.
         if (this._botGame && this._cpuBot && this.game && !this.game.gameOver) {
-            try { this._botEvalBefore = this._evaluate(this.game); } catch (_) { this._botEvalBefore = null; }
+            try { this._botEvalBefore = this._botSearchWhite(this.game, 2); } catch (_) { this._botEvalBefore = null; }
             try {
                 const pc = this.game.board[from[0]][from[1]];
                 this._botSnapBefore = this.game.snapshot();
@@ -1983,6 +1998,32 @@ class ChessCourseApp {
                 this._setSpeech((this._cpuDifficulty || 'easy') === 'medium' ? 'Thinking three moves deep…' : 'Playing a casual move…');
             }
             setTimeout(() => this._cpuMove(), 650);
+        }
+    }
+
+    /* ── Verdict search: judge moves with tactics, not vibes ───────
+        _evaluate() is static material + tables: blind to sacrifices that
+        work (condemned as "mistakes") and to pieces hung with no capture
+        yet (praised as "quiet"). Verdicts therefore come from a real
+        depth-2 search from White's (the player's) perspective, bounded
+        quiescence so it stays instant (~10-100ms measured). Falls back to
+        static eval if the search ever fails. */
+    _botSearchWhite(g, depth) {
+        try {
+            const d = Math.max(1, Math.min(3, depth || 2));
+            const whiteToMove = (g.currentPlayer || 'white') === 'white';
+            const prevQ = this._quiesceDepth;
+            this._quiesceDepth = 3;
+            let sc;
+            try {
+                sc = this._search(g, d, -Infinity, Infinity, !whiteToMove);
+            } finally {
+                this._quiesceDepth = (prevQ == null ? 6 : prevQ);
+            }
+            if (!Number.isFinite(sc)) throw new Error('no-score');
+            return -sc; // search scores black-minus-white; verdicts read White's
+        } catch (_) {
+            try { return -this._evaluate(g); } catch (_) { return 0; }
         }
     }
 
@@ -2122,9 +2163,9 @@ class ChessCourseApp {
         const g = this.game;
         const moves = this._allMoves(g, 'black');
         // Coach baseline for the bot's OWN move (bot games only): judged
-        // after it lands, in _commitCpuMove.
+        // after it lands, in _commitCpuMove. Search-scored, White's view.
         if (this._botGame && this._cpuBot) {
-            try { this._botEngineBefore = this._evaluate(g); } catch (_) { this._botEngineBefore = null; }
+            try { this._botEngineBefore = this._botSearchWhite(g, 2); } catch (_) { this._botEngineBefore = null; }
         }
 
         if (!moves.length) {
@@ -2258,10 +2299,19 @@ class ChessCourseApp {
             // Single status format everywhere in bot games (the coach talk
             // box above owns commentary; this line owns the move number).
             this._fb(this._botGame ? `Move ${num} · Your move (White)` : `Move ${num} — your turn (White)`, 'info');
-            // The bot judges its own move too (weak bots fess up).
+            // The bot judges its own move too (weak bots fess up) — unless
+            // the player's verdict was decisive (|delta| >= 150): a called
+            // blunder or brilliancy keeps the microphone, so a routine bot
+            // reply can never overwrite it with unrelated talk.
             let reacted = false;
             if (this._botGame && this._cpuBot) {
-                try { reacted = !!this._botReactToOwnMove(); } catch (_) {}
+                try {
+                    const pd = this._botLastPlayerDelta;
+                    this._botLastPlayerDelta = null;
+                    if (!(typeof pd === 'number' && Math.abs(pd) >= 150)) {
+                        reacted = !!this._botReactToOwnMove();
+                    }
+                } catch (_) {}
             }
             // Ahead/behind chirps (chess.com bots needle when winning and
             // squirm when losing): rare, cooldown-gated, persona-scaled —

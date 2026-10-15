@@ -257,7 +257,7 @@ test('dialogue system: personas, no engine words, no repeats', async ({ browser 
         D.reset();
         out.greetings = ['alex', 'prima', 'nico', 'luna', 'max', 'atlas'].map((id) => D.say(id, 'greeting', {}, 1).text.slice(0, 40));
         // Mood map covers every event the app can fire.
-        out.moods = ['greeting', 'opening', 'brilliant', 'good', 'captureWon', 'checkGiven', 'botProud', 'blunder', 'mistake', 'inaccuracy', 'badTrade', 'hanging', 'botGift', 'quiet', 'evenTrade', 'castle', 'develop', 'center', 'winning', 'losing', 'endWin', 'endLoss', 'endDraw']
+        out.moods = ['greeting', 'opening', 'brilliant', 'good', 'captureWon', 'checkGiven', 'botProud', 'mateCall', 'blunder', 'mistake', 'inaccuracy', 'badTrade', 'hanging', 'mated', 'botGift', 'quiet', 'evenTrade', 'castle', 'develop', 'center', 'winning', 'losing', 'endWin', 'endLoss', 'endDraw']
             .map((ev) => ev + ':' + (D.MOODS[ev] || 'MISSING'));
         return out;
     });
@@ -267,6 +267,46 @@ test('dialogue system: personas, no engine words, no repeats', async ({ browser 
     // Six greetings, six different voices.
     expect(new Set(rep.greetings).size).toBe(6);
     expect(rep.moods.every((m) => !/MISSING/.test(m))).toBe(true);
+    expect(errors, 'no page errors').toEqual([]);
+    await ctx.close();
+});
+
+test('verdicts see tactics: static-blind spots fixed by search', async ({ browser }) => {
+    const { ctx, page, errors } = await boot(browser, 1280);
+    // The old judge was static material+PST: it praised walking into mate
+    // (no material moved) and praised unsound sacs (pawn pocketed, doom
+    // invisible). The search judge must condemn both, and must NOT condemn
+    // honest development.
+    const d = await page.evaluate(() => {
+        const A = window.app;
+        const judge = (fen, from, to) => {
+            const g = new ChessGame();
+            g.loadFEN(fen);
+            const beforeS = -A._evaluate(g);
+            const beforeT = A._botSearchWhite(g, 2);
+            g.movePiece(g.algebraicToCoords(from), g.algebraicToCoords(to));
+            return {
+                staticDelta: -A._evaluate(g) - beforeS,
+                searchDelta: A._botSearchWhite(g, 2) - beforeT,
+            };
+        };
+        return {
+            // Fool's mate walk: g4 allows Qh4#.
+            fool: judge('rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 1', 'g2', 'g4'),
+            // Unsound Greek gift: bishop takes, king takes, attack fizzles.
+            sac: judge('r1bq1rk1/pp3ppp/2n1p3/3pP3/3P4/3B1N2/PPP2PPP/RNBQ1RK1 w - - 0 1', 'd3', 'h7'),
+            // Honest development must never be condemned.
+            dev: judge('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1', 'g1', 'f3'),
+        };
+    });
+    // Mate-walk: static shrugs (-10), search sees mate (-99966) -> blunder.
+    expect(d.fool.staticDelta).toBeGreaterThan(-80);
+    expect(d.fool.searchDelta).toBeLessThanOrEqual(-350);
+    // Unsound sac: static pockets a pawn (+85), search sees the refutation.
+    expect(d.sac.staticDelta).toBeGreaterThanOrEqual(-80);
+    expect(d.sac.searchDelta).toBeLessThanOrEqual(-150);
+    // Sound development: search stays calm, never a false blunder call.
+    expect(d.dev.searchDelta).toBeGreaterThan(-80);
     expect(errors, 'no page errors').toEqual([]);
     await ctx.close();
 });

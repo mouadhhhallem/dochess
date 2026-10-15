@@ -30,9 +30,9 @@
     const MOODS = {
         greeting: 'straight', opening: 'straight',
         brilliant: 'happy', good: 'happy', captureWon: 'happy', checkGiven: 'happy',
-        botProud: 'happy',
+        botProud: 'happy', mateCall: 'happy',
         blunder: 'angry', mistake: 'angry', inaccuracy: 'angry',
-        badTrade: 'angry', hanging: 'angry',
+        badTrade: 'angry', hanging: 'angry', mated: 'angry',
         botGift: 'angry',
         quiet: 'straight', tip: 'straight', evenTrade: 'straight',
         castle: 'straight', develop: 'straight', center: 'straight',
@@ -101,6 +101,14 @@
                     'OH NO. {move} drops about {pawns} — a whole piece! Are you okay?? Blink twice if you need a hug!',
                     'GAAASP! That hangs {pawns} of stuff! I... I think I have to take it. Sorry sorry sorry!',
                     'Whoa, that was a big oopsie. {pawns} just... poof! It happens! My sister says even grandmasters oopsie. Rarely. But still!',
+                ],
+                mated: [
+                    'EVERYBODY STOP!! That walks into CHECKMATE! Like, game OVER mate! See my queen? She is coming! BLOCK HER! ...Can you? ...Uh oh.',
+                    'OH NO OH NO. That is MATE in one for me! I am sorry!! ...Wait, am I supposed to NOT take it? ...I have to take it. SORRY!!',
+                ],
+                mateCall: [
+                    'WAIT. Is that... CHECKMATE?! Did YOU just... WHOA!! BEST MOVE EVER!!! I am telling EVERYONE!!',
+                    'MATE?! YOU mated ME?! ...YAY!!! I mean — aww. I mean YAY!! That was BEAUTIFUL!!',
                 ],
                 badTrade: [
                     'Ooh, swapping? Hmm, I think you come out down {pawns} there. My piece had a friend and yours did not!',
@@ -221,6 +229,14 @@
                     'BLUNDER, center stage! {pawns} of material, gone in one act! Take a bow — then take it back mentally and find the hole!',
                     'Gasp! Darling, no! {move} drops {pawns}! I shall avenge... wait, I BENEFIT. *ahem* How unfortunate. For you.',
                 ],
+                mated: [
+                    'Darling. DARLING. That walks into checkmate. IN ONE. The final curtain — and it is MY queen holding it! ...Say you see it. SAY IT!',
+                    'Checkmate approaches, stage left! {move} lets me end the whole PLAY! Block it, dodge it, ANYTHING — the audience is watching!!',
+                ],
+                mateCall: [
+                    '...You are checkmating ME?! On MY stage?! ...*standing ovation* BRAVA! Magnificent finale, darling!',
+                    'MATE! Against PRIMA! Oh, I am telling this story FOREVER! What a way to steal my show!',
+                ],
                 badTrade: [
                     'Swapping DOWN, are we? That trade bleeds {pawns} — my piece had backup, yours had dreams.',
                     'Darling, count the recapture! You take, I take back, and somehow YOU are poorer. Math is cruel!',
@@ -339,6 +355,14 @@
                     '{move} drops {pawns} — a full piece. Stop. Breathe. Scan my checks and captures FIRST, then touch a piece.',
                     'That is a blunder, plain and simple: {pawns} gone. What reply did you miss? Find it before I play it.',
                     'Ouch. {pawns} of material, straight to me. No shame in it — but learn the lesson: look at MY moves first.',
+                ],
+                mated: [
+                    'That walks into mate in one. Full stop. Find my killing reply before I play it — that is your whole job right now.',
+                    'Checkmate is on the board next move, against you. Stop everything. Solve ONLY that.',
+                ],
+                mateCall: [
+                    'Mate. Forced, clean, undeniable. That is championship-level finishing — respect.',
+                    'You saw all the way to mate. Nothing more to say. Respect.',
                 ],
                 badTrade: [
                     'Bad trade — that costs you {pawns}. Only swap when you come out ahead. Count the recapture.',
@@ -459,6 +483,14 @@
                     'Blunder. {pawns} of material into the dark — into MY hands. Breathe. Look at my replies first.',
                     'Oh no. {pawns}... The moon sees the hole even if you do not. Shall I show you? I will. By taking it.',
                 ],
+                mated: [
+                    'The night goes dark all at once: that is mate in one, against you. Find the escape that does not exist... then stop it existing.',
+                    'Checkmate next move. No shadows left to hide in. Your king, my reply — solve it or fall.',
+                ],
+                mateCall: [
+                    'Mate. ...Lovely. Even the moon bows to a forced mate. Beautifully finished.',
+                    'Checkmate, seen to the very end. Rare vision. The night applauds.',
+                ],
                 badTrade: [
                     'That trade favors me by {pawns}. The exchange is a tide — it pulled toward me.',
                     'You swapped down. {pawns}. Count what takes back before you trade the night away.',
@@ -578,6 +610,14 @@
                     '{pawns}. Gone. {move} is a howler. Focus. Breathe. Look at MY threats first.',
                     'That is not a mistake, that is a collapse. {pawns}. Reset your brain or lose fast.',
                 ],
+                mated: [
+                    'That is mate in one. Against YOU. Pathetic? No — instructive. NEVER weaken around your king like that again.',
+                    'Checkmate next move. This game is OVER unless you find the only defense. There usually is not one. Find it anyway.',
+                ],
+                mateCall: [
+                    'Mate. Forced. ...Okay. That is world-class finishing. You earned my respect — all of it.',
+                    'Checkmated by YOU. ...Fine. Clinical. Ruthless. Almost Max-like. Almost.',
+                ],
                 badTrade: [
                     'Bad trade. Down {pawns}. Math is undefeated — count the recapture.',
                     'You swapped yourself poorer by {pawns}. Never trade down. Ever.',
@@ -696,6 +736,14 @@
                     '{move} — a landslide. {pawns}, an entire piece, into the abyss. The mountain accepts your offering.',
                     'BLUNDER. The earth itself groans: {pawns} gone. Did the weight of the moment crush your thinking? It crushes all, in time.',
                     'Catastrophic. {pawns} of stone, shattered. Even I cannot hold what you throw away.',
+                ],
+                mated: [
+                    'Mortal. That is checkmate in one — AGAINST YOU. The mountain does not even need to push. The abyss was already open.',
+                    'The end is written: mate next move. Read it, mortal — then tell me how it feels to see the mountain fall... onto YOU.',
+                ],
+                mateCall: [
+                    '...Checkmate. Delivered. Against ME. ...The mountain bows. Once in an eon, a climber reaches the summit. This is that eon.',
+                    'Mate. You ended the eternal. Speak of this day, mortal — Atlas himself will confirm the tale.',
                 ],
                 badTrade: [
                     'That trade sinks you {pawns}. The mountain does arithmetic in millennia — trust it: never trade down.',
