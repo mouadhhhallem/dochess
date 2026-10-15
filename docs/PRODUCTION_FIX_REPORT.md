@@ -734,3 +734,41 @@ temp dirs.
 
 Test deltas: `node --test` **74/74**; friends E2E **18/18** (+18).
 Assets re-keyed (`friends.js?v=11`).
+
+---
+
+## 20. Faster puzzles, LVL on profile, DB history, 6 party boards, bell toggle, important-only retention (2026-10-15)
+
+1. **Puzzles load faster.** The puzzles page paid two sequential API
+   round-trips per puzzle (random + solution). Now the NEXT puzzle
+   (same band + theme) prefetches in the background while the current
+   one is being solved, so Next/Skip starts instantly; filter changes
+   invalidate the prefetch, failures fall back silently.
+2. **LVL on the profile.** The dossier shows `LVL n · x XP` with the
+   per-source breakdown in the tooltip (Lessons/Games/Puzzles/
+   Streaks, same combined number as the friends hero) next to the
+   Rapid chip, which now leads instead of Blitz.
+3. **History from the database.** The profile pulls the last-20 view
+   window from `GET /api/games` (newest first, `total` shown as
+   "last 20 of N", Show more pages with `before`). The archive is
+   never trimmed anywhere: Mongo is unbounded, the dev file store no
+   longer caps at 2000, and device history stays a 500-game cache.
+   Offline/guests keep the device list.
+4. **Six party boards.** Lovely (hearts), Kitty (dots), Dark Knight
+   (bat-signal yellow on midnight), 67 (the meme, tile and all),
+   Galaxy (stars) and Candy (stripes) join the six classics — pure
+   CSS/SVG tilework, verified piece-legible in screenshots, picked in
+   the same lobby swatches.
+5. **Bell toggles.** Pressing Activity while on Activity goes BACK to
+   the previous screen (profile, game, study…; lesson falls back to
+   the lessons list since a bare board needs an id) — the app-shade
+   behaviour phones need.
+6. **Important notifications stay.** Inbox retention is now
+   important-first: requests, invites, streaks and lifecycle notes are
+   never pruned (the server never deletes them either); plain notes
+   keep the newest 20 under a 100 cap. Login merges, never wipes.
+
+Test deltas: new E2E test 19 (seeded games → LVL 1 · 75 XP on the
+dossier, 3 DB rows with "last 3 of 3", bell profile→activity→
+profile). Assets re-keyed (`friends.js?v=12`, `app.js?v=56`,
+`puzzles.js?v=6`).

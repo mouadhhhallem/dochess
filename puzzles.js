@@ -209,6 +209,32 @@
     function isWrongTarget(alg) { return false; } // reserved: animated miss marker
 
     /* ── Puzzle lifecycle ───────────────────────────────────────────── */
+    // Background prefetch: while the player solves the current puzzle, the
+    // NEXT one (same band + theme) is already downloading. Tapping Next/Skip
+    // then starts instantly instead of paying two API round-trips. One
+    // puzzle held at most; filter changes invalidate it.
+    let prefetch = null;
+    function prefetchKey() { return (S.band || 'any') + '|' + (S.theme || 'any'); }
+    function kickPrefetch() {
+        try {
+            const band = S.band, theme = S.theme;
+            const key = band + '|' + theme;
+            if (prefetch && prefetch.key === key) return;
+            prefetch = {
+                key, band, theme,
+                task: fetchPuzzle().then(
+                    (loaded) => ({ ok: true, loaded }),
+                    () => ({ ok: false })
+                ),
+            };
+            // Never let a stale prefetch resolve into the wrong filters:
+            // drop it if the player moved on before it landed.
+            prefetch.task.then((r) => {
+                try { if (prefetch && (S.band !== prefetch.band || S.theme !== prefetch.theme)) prefetch = null; } catch (_) {}
+                return r;
+            }).catch(() => {});
+        } catch (_) {}
+    }
     async function loadPuzzle() {
         if (S.loading) return;
         S.loading = true;
@@ -216,7 +242,13 @@
         setControlsEnabled(false);
         let loaded = null;
         try {
-            loaded = await fetchPuzzle();
+            // Serve the prefetched puzzle when it matches today's filters.
+            if (prefetch && prefetch.key === prefetchKey()) {
+                const r = await prefetch.task;
+                prefetch = null;
+                if (r && r.ok && r.loaded) loaded = r.loaded;
+            }
+            if (!loaded) loaded = await fetchPuzzle();
             S.fromApi = true;
         } catch (e) {
             // Rate-limited, offline, file://, or API down → built-in pool.
@@ -228,12 +260,19 @@
         startPuzzle(loaded);
         S.loading = false;
         setControlsEnabled(true);
+        kickPrefetch();
     }
 
     function startPuzzle(loaded) {
         S.puzzle = loaded.puzzle;
         S.solution = loaded.solution;
         S.solutionSan = loaded.solutionSan;
+        // Stable identity for server-ledgered first-solve XP (the key names
+        // the EVENT, never a number).
+        try {
+            const p = S.puzzle || {};
+            S.puzzleKey = (S.fromApi ? 'api:' : 'bin:') + String(p.id || p.positionFen || '').slice(0, 48);
+        } catch (_) { S.puzzleKey = ''; }
         S.step = 0;
         S.sel = null;
         S.hintMove = null;

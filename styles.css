@@ -1608,6 +1608,44 @@ body[data-board-skin='gray']   { --board-light: #F0F0F0; --board-dark: #999999; 
 body[data-board-skin='wood']   { --board-light: #E8C9A0; --board-dark: #A17A56; --board-selected: rgba(170, 120, 70, 0.5);  --board-last: #D4A373; }
 body[data-board-skin='purple'] { --board-light: #E0D3E8; --board-dark: #9070A8; --board-selected: rgba(140, 105, 170, 0.5); --board-last: #B090C8; }
 
+/* ── Party boards: flat readable colors PLUS a whisper-quiet SVG tile, so
+   pieces stay perfectly legible while the board has a personality. Tiles
+   are single-request-free data URIs; selected/last-move washes sit on top
+   (the tile faintly shows through, which looks intentional, not broken). ── */
+body[data-board-skin='lovely'] { --board-light: #FBE3EC; --board-dark: #E75480; --board-selected: rgba(231, 84, 128, 0.45); --board-last: #F7A8C4; }
+body[data-board-skin='lovely'] .chess-square.white { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Cpath d='M15 25C8 19 4 15 4 10.5 4 7.5 6.5 5.5 9 5.5c2.5 0 4.5 2 6 4.5 1.5-2.5 3.5-4.5 6-4.5 2.5 0 5 2 5 5 0 4.5-4 8.5-11 14.5z' fill='%23E75480' fill-opacity='0.22'/%3E%3C/svg%3E"); background-size: 30px 30px; }
+body[data-board-skin='lovely'] .chess-square.black { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Cpath d='M15 25C8 19 4 15 4 10.5 4 7.5 6.5 5.5 9 5.5c2.5 0 4.5 2 6 4.5 1.5-2.5 3.5-4.5 6-4.5 2.5 0 5 2 5 5 0 4.5-4 8.5-11 14.5z' fill='%23FFFFFF' fill-opacity='0.20'/%3E%3C/svg%3E"); background-size: 30px 30px; }
+
+body[data-board-skin='kitty'] { --board-light: #FFF5F7; --board-dark: #FF9EBB; --board-selected: rgba(255, 90, 150, 0.45); --board-last: #FFC4D8; }
+body[data-board-skin='kitty'] .chess-square.white { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='7' cy='7' r='3' fill='%23FF9EBB' fill-opacity='0.35'/%3E%3Ccircle cx='21' cy='21' r='3' fill='%23FF9EBB' fill-opacity='0.35'/%3E%3C/svg%3E"); background-size: 28px 28px; }
+body[data-board-skin='kitty'] .chess-square.black { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='7' cy='7' r='3' fill='%23FFFFFF' fill-opacity='0.30'/%3E%3Ccircle cx='21' cy='21' r='3' fill='%23FFFFFF' fill-opacity='0.30'/%3E%3C/svg%3E"); background-size: 28px 28px; }
+
+body[data-board-skin='knight'] { --board-light: #8E9AAF; --board-dark: #1B1E27; --board-selected: rgba(255, 210, 63, 0.55); --board-last: #C9A227; }
+body[data-board-skin='knight'] .chess-square.white { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Cpath d='M18 7 L22 14 L30 12 L26 18 L30 24 L22 22 L18 29 L14 22 L6 24 L10 18 L6 12 L14 14 Z' fill='%231B1E27' fill-opacity='0.20'/%3E%3C/svg%3E"); background-size: 36px 36px; }
+body[data-board-skin='knight'] .chess-square.black { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Cpath d='M18 7 L22 14 L30 12 L26 18 L30 24 L22 22 L18 29 L14 22 L6 24 L10 18 L6 12 L14 14 Z' fill='%23FFD23F' fill-opacity='0.10'/%3E%3C/svg%3E"); background-size: 36px 36px; }
+body[data-board-skin='knight'] .chess-square.white .coord-file,
+body[data-board-skin='knight'] .chess-square.white .coord-rank { color: #232838; }
+body[data-board-skin='knight'] .chess-square.black .coord-file,
+body[data-board-skin='knight'] .chess-square.black .coord-rank { color: #FFD23F; }
+
+body[data-board-skin='sixtyseven'] { --board-light: #FFF3B0; --board-dark: #FFB700; --board-selected: rgba(0, 166, 81, 0.45); --board-last: #FFD54D; }
+body[data-board-skin='sixtyseven'] .chess-square.white { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='52'%3E%3Ctext x='26' y='36' font-size='24' text-anchor='middle' font-family='sans-serif' font-weight='900' fill='%23B27A00' fill-opacity='0.30'%3E67%3C/text%3E%3C/svg%3E"); background-size: 52px 52px; }
+body[data-board-skin='sixtyseven'] .chess-square.black { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='52'%3E%3Ctext x='26' y='36' font-size='24' text-anchor='middle' font-family='sans-serif' font-weight='900' fill='%23FFFFFF' fill-opacity='0.28'%3E67%3C/text%3E%3C/svg%3E"); background-size: 52px 52px; }
+
+body[data-board-skin='galaxy'] { --board-light: #4A3B7A; --board-dark: #171233; --board-selected: rgba(150, 110, 255, 0.55); --board-last: #6E5AC8; }
+body[data-board-skin='galaxy'] .chess-square.white { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='34'%3E%3Ccircle cx='9' cy='9' r='1.8' fill='%23FFFFFF' fill-opacity='0.75'/%3E%3Ccircle cx='25' cy='22' r='1.3' fill='%23FFFFFF' fill-opacity='0.55'/%3E%3Ccircle cx='18' cy='28' r='1' fill='%23FFD6F5' fill-opacity='0.6'/%3E%3C/svg%3E"); background-size: 34px 34px; }
+body[data-board-skin='galaxy'] .chess-square.black { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='34'%3E%3Ccircle cx='9' cy='9' r='1.8' fill='%23FFFFFF' fill-opacity='0.9'/%3E%3Ccircle cx='25' cy='22' r='1.3' fill='%23FFFFFF' fill-opacity='0.7'/%3E%3Ccircle cx='18' cy='28' r='1' fill='%23B7A6FF' fill-opacity='0.8'/%3E%3C/svg%3E"); background-size: 34px 34px; }
+body[data-board-skin='galaxy'] .chess-square.white .coord-file,
+body[data-board-skin='galaxy'] .chess-square.white .coord-rank { color: #D9CCFF; }
+body[data-board-skin='galaxy'] .chess-square.black .coord-file,
+body[data-board-skin='galaxy'] .chess-square.black .coord-rank { color: #8F7FD6; }
+
+body[data-board-skin='candy'] { --board-light: #FFE0F0; --board-dark: #7B2FF7; --board-selected: rgba(255, 255, 255, 0.55); --board-last: #E0B3FF; }
+body[data-board-skin='candy'] .chess-square.white { background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.55) 0 7px, rgba(255, 158, 203, 0.35) 7px 14px); }
+body[data-board-skin='candy'] .chess-square.black { background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.14) 0 7px, rgba(0, 0, 0, 0.10) 7px 14px); }
+body[data-board-skin='candy'] .chess-square.black .coord-file,
+body[data-board-skin='candy'] .chess-square.black .coord-rank { color: #F3E8FF; }
+
 body[data-theme='day'] .header { background: #ffffff; }
 
 body[data-theme='day'] .hero h2,
@@ -1903,6 +1941,13 @@ body[data-piece-set='modern'][data-theme='day'] .dc-id::after { background-image
     background: var(--bg-main);
 }
 .dc-rate-chip strong { color: var(--text-main); font-weight: 800; }
+.dc-lvl-chip {
+    display: inline-flex; align-items: center; gap: .35rem;
+    border: 1px solid var(--glass-border); border-radius: 999px;
+    padding: .15rem .6rem; font-variant-numeric: tabular-nums;
+    background: var(--bg-main); color: var(--accent-bright); font-weight: 800;
+    white-space: nowrap;
+}
 .dc-trend { display: inline-flex; align-items: center; gap: .2rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .dc-trend svg { width: .6em; height: .6em; fill: currentColor; }
 .dc-trend.up { color: #E0B35A; }

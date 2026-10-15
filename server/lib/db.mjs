@@ -393,9 +393,9 @@ class FileStore {
         const list = this._read(this._gamesFile(rec.userId)) || [];
         if (list.some((g) => g.gameId === rec.gameId)) return { ok: true, duplicate: true };
         list.unshift(rec);
-        // Dev file store: keep up to 2000 games per user (aligned with
-        // lib/merge.mjs MAX_GAMES) - history is never casually trimmed.
-        this._write(this._gamesFile(rec.userId), list.slice(0, 2000));
+        // The game archive is NEVER trimmed: the profile shows the last 20
+        // as a view window, but every recorded game stays in the database.
+        this._write(this._gamesFile(rec.userId), list);
         return { ok: true };
     }
 

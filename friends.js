@@ -745,9 +745,27 @@
     }
 
     /* ── inbox ──────────────────────────────────────────────── */
+    // Notification kinds that must never be pruned: the user asked that the
+    // important ones stay across logins, loaded from the database. Plain
+    // 'note's (pokes, send confirmations) are capped; important ones are
+    // kept in full (the server never deletes them either).
+    const IMPORTANT_KINDS = new Set([
+        'friend-request', 'friend-accept', 'friend-decline',
+        'game-invite', 'invite-accepted', 'invite-declined', 'streak',
+    ]);
+    function keepImportant(items) {
+        const out = [];
+        let notes = 0;
+        for (const m of (items || []).slice(0, 200)) {
+            if (!m || !m.id) continue;
+            if (IMPORTANT_KINDS.has(m.kind)) out.push(m);
+            else if (notes < 20) { out.push(m); notes++; }
+        }
+        return out.slice(0, 100);
+    }
     function notifyLocal(kind, title, body, from) {
         S.inbox.unshift({ id: 'l' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36), kind, title: String(title).slice(0, 60), body: String(body || '').slice(0, 140), from: from || null, at: Date.now(), read: false, local: true });
-        S.inbox = S.inbox.slice(0, 50);
+        S.inbox = keepImportant(S.inbox);
         save(); renderBell();
         return true;
     }
@@ -793,7 +811,7 @@ let needSnapshot = false;
                 // this is what stops a declined request from coming back.
                 try { needSnapshot = true; } catch (_) {}
             }
-            if (added || needSnapshot) { S.inbox = S.inbox.slice(0, 50); save(); renderBell(); }
+            if (added || needSnapshot) { S.inbox = keepImportant(S.inbox); save(); renderBell(); }
             try { if (needSnapshot) await pullSnapshot(); } catch (_) {}
             return added;
         } catch (_) { return false; }
@@ -1696,13 +1714,11 @@ let needSnapshot = false;
     }
     function heroHTML() {
         const d = dailyStats();
-        const learnXp = d ? d.xp : 0;
-        // Experience is one number from four honest sources: Learn lessons
-        // (this device, synced) + server-ledgered games, puzzles and streaks
-        // (fixed amounts, same on every device). Level uses Learn's own rule.
-        const sxp = (typeof serverXp === 'object' && serverXp) || { total: 0, games: 0, puzzles: 0, streaks: 0 };
-        const xp = learnXp + (sxp.total || 0);
-        const lvl = 1 + Math.floor(xp / 150);
+        // One XP number from four honest sources (see xpSummary).
+        const xs = xpSummary();
+        const xp = xs.xp, lvl = xs.lvl;
+        const learnXp = xs.learn;
+        const sxp = { games: xs.games, puzzles: xs.puzzles, streaks: xs.streaks };
         const pct = Math.min(100, Math.round(((xp % 150) / 150) * 100));
         const st = Math.max(d ? d.streak : 0, loginDayStreak());
         const week = [];
@@ -1764,6 +1780,24 @@ let needSnapshot = false;
     }
     // Server-ledgered experience (games/puzzles/streaks at fixed amounts).
     let serverXp = { total: 0, games: 0, puzzles: 0, streaks: 0 };
+    /**
+     * One XP number for badges, headers and the profile: Learn lessons
+     * (this device, synced) + the server ledger (same on every device).
+     * Level follows Learn's own rule so the two can never disagree.
+     */
+    function xpSummary() {
+        let learnXp = 0;
+        try {
+            const st = JSON.parse(localStorage.getItem('dochess:v1') || 'null');
+            if (st && typeof st.xp === 'number') learnXp = st.xp;
+        } catch (_) {}
+        const s = (typeof serverXp === 'object' && serverXp) || { total: 0, games: 0, puzzles: 0, streaks: 0 };
+        const xp = learnXp + (s.total || 0);
+        return {
+            xp, lvl: 1 + Math.floor(xp / 150),
+            learn: learnXp, games: s.games || 0, puzzles: s.puzzles || 0, streaks: s.streaks || 0,
+        };
+    }
     async function pullXp() {
         try {
             if (apiBase() === null || uidOf() === 'guest') return false;
@@ -1777,6 +1811,25 @@ let needSnapshot = false;
             }
         } catch (_) {}
         return false;
+    }
+    /**
+     * Recent games straight from the database (newest first, paginated).
+     * The profile shows the last 20 as a view window; the archive itself
+     * is never trimmed. Empty (never an error) when offline, signed out,
+     * or backend-less — callers fall back to device history.
+     */
+    async function fetchGames(limit, before) {
+        const empty = { games: [], total: 0, ok: false };
+        try {
+            if (apiBase() === null || uidOf() === 'guest') return empty;
+            const lim = Math.max(1, Math.min(100, Number(limit) || 20));
+            const q = `games?limit=${lim}` + (Number.isFinite(before) ? `&before=${before}` : '');
+            const r = await api(q);
+            if (r && Array.isArray(r.games)) {
+                return { games: r.games, total: Number.isFinite(r.total) ? r.total : r.games.length, ok: true };
+            }
+        } catch (_) {}
+        return empty;
     }
     /**
      * Report a solved puzzle for +10 XP (first solve per puzzle, ever). The
@@ -2454,19 +2507,20 @@ async function renderHall(box) {
     setInterval(() => { try { warnStreaks(); } catch (_) {} }, 3600000);
 
     window.DoChessFriends = {
-        open, renderBell, metPeer, onGameEnd, profileLink, inboundLink,
+        open, tab: () => { try { return currentTab; } catch (_) { return 'friends'; } },
+        renderBell, metPeer, onGameEnd, profileLink, inboundLink,
         requestFriend, acceptFriend, declineFriend, removeFriend, search, streakOf, versus, ago,
         // Backwards-compatible alias: adding is sending a request.
         addFriend: requestFriend,
         list: () => Object.values(S.friends),
         pendingIn: () => S.pendingIn.slice(),
         unread, inbox: () => S.inbox.slice(),
-        tierOf, rankBoard, hallList,
+        tierOf, rankBoard, hallList, xpSummary, fetchGames,
         apiBase, pollNow: () => watchInbox(),
         // pullRequests / pullEdges are retained as aliases of the single
         // authoritative snapshot for any external caller.
         pullRequests, pullEdges, pullSnapshot, pullInbox, pullInvites,
-        sendGameInvite, checkInvitePopup, watchSentInvite, clearPendingInvite, presenceLeave, pullXp, reportPuzzleSolve, p2pEnsure: ensureP2PInbox, version: 6,
+        sendGameInvite, checkInvitePopup, watchSentInvite, clearPendingInvite, presenceLeave, pullXp, reportPuzzleSolve, p2pEnsure: ensureP2PInbox, version: 7,
         // Exposed for tests and for the retry UI.
         explainFailure, FAILURES, isSignedOut,
     };

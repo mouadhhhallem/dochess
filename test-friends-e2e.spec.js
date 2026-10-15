@@ -867,3 +867,42 @@ test('18: remove, re-add and accept keeps every name on its owner', async ({ bro
 
     await a.ctx.close(); await b.ctx.close();
 });
+
+test('19: bell toggles back; profile shows LVL and database history', async ({ browser }) => {
+    // Fresh account: earlier scenarios ledger XP and games onto the shared
+    // ALICE/BOB identities, so exact-count assertions need isolation.
+    const ME = 'user_e2eprof1901';
+    await call('PUT', '/api/state', { sections: {}, profile: { name: 'Prof Pat' } }, ME);
+    const a = await newAccount(browser, ME, 'Prof Pat');
+    // Three recorded rapid wins: 3x20 game XP + the 3-win streak milestone
+    // (+15) = 75 XP ledgered before the profile ever opens.
+    for (let i = 1; i <= 3; i++) {
+        await call('POST', '/api/games', {
+            gameId: `gprof19-${i}`, result: 'win', date: i * 1000, plies: 40,
+            control: { id: 'rapid' }, opp: 'Sparring Partner',
+        }, ME);
+    }
+    await a.page.evaluate(() => window.app.showProfile());
+    // LVL + combined XP on the dossier.
+    await expect(a.page.locator('#profile-screen')).toContainText(/LVL 1/, { timeout: 20000 });
+    await expect(a.page.locator('#profile-screen')).toContainText(/75 XP/);
+    // History comes from the database (last-20 window over the archive).
+    await expect(a.page.locator('.dc-hist-li')).toHaveCount(3, { timeout: 25000 });
+    await expect(a.page.locator('#profile-screen')).toContainText(/last 3 of 3/);
+    // The bell toggles like an app shade: profile -> activity -> profile.
+    // (Header bell on desktop, side-nav bell on phone — click whichever
+    // one is actually visible.)
+    const ringBell = () => a.page.evaluate(() => {
+        const bells = [...document.querySelectorAll('[data-action="friends-activity"]')];
+        const vis = bells.find((b) => b && b.offsetParent !== null);
+        if (!vis) return false;
+        vis.click();
+        return true;
+    });
+    expect(await ringBell(), 'a visible bell exists').toBe(true);
+    await expect(a.page.locator('#friends-screen')).toHaveClass(/active/, { timeout: 15000 });
+    await expect(a.page.locator('#friends-screen')).toContainText(/Notifications/);
+    expect(await ringBell(), 'the bell toggles back').toBe(true);
+    await expect(a.page.locator('#profile-screen')).toHaveClass(/active/, { timeout: 15000 });
+    await a.ctx.close();
+});

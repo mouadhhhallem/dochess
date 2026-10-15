@@ -287,14 +287,13 @@ class ChessCourseApp {
                 else if (a === 'next-lesson') this._nextLessonFromBoard();
                 else if (a === 'profile-signin') this._profileSignIn(a);
                 else if (a === 'sn-auth') { if (this._clerk?.user) this.showProfile(); else this._authSignIn(); }
-                else if (a === 'friends-activity') this.showFriends('activity');
+                else if (a === 'friends-activity') this._toggleFriendsActivity();
                 else if (a === 'friend-copy-link') this._copyFriendLink(a);
                 else if (a === 'manage-account') this.openUserProfile();
                 else if (a === 'logout') this.signOut();
                 else if (a === 'goto-online') this.showOnline();
                 else if (a === 'hist-more') this._histPage(10);
-                else if (a === 'hist-less') this._histPage(-10);
-                else if (a === 'hist-open') this._histOpen(action.dataset.game);
+                else if (a === 'hist-less') this._histPage(-10);                else if (a === 'hist-open') this._histOpen(action.dataset.game);
                 else if (a === 'hist-close') this._histClose();
                 else if (a === 'hist-nav') this._histNav(action.dataset.where);
                 else if (a === 'hist-goto') this._histGoto(parseInt(action.dataset.ply, 10));
@@ -4104,13 +4103,52 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     showLessons()  { this._go('lessons-screen');  this._renderLessons(); }
     showLesson()   { this._go('lesson-screen'); }
     showProgress() { this._go('progress-screen'); this._syncProgress(); }
-    showProfile()  { this._go('profile-screen');  this._renderProfile(); }
+    showProfile()  { this._go('profile-screen');  this._renderProfile(); this._loadServerHist(); this._refreshProfileXp(); }
     showStudy()    { this._go('study-screen'); if (window.DoChessStudy) window.DoChessStudy.open(); }
     showPuzzles()  { this._go('puzzles-screen'); if (window.DoChessPuzzles) window.DoChessPuzzles.open(); }
     showFriends(tab) {
         this._go('friends-screen');
         try { if (window.DoChessFriends) window.DoChessFriends.open(tab || 'friends'); } catch (_) {}
         this._consumeFriendLink();
+    }
+    /**
+     * The bell toggles like an app notification shade: pressing it while
+     * already on Activity goes BACK to where you were (critical on phones,
+     * where there is no other back gesture to the game you came from).
+     * Otherwise it remembers the current screen and opens Activity.
+     */
+    _toggleFriendsActivity() {
+        try {
+            const F = window.DoChessFriends;
+            const onAct = document.getElementById('friends-screen')?.classList.contains('active')
+                && F && typeof F.tab === 'function' && F.tab() === 'activity';
+            if (onAct) {
+                const back = this._screenBeforeActivity;
+                this._screenBeforeActivity = null;
+                if (back === 'profile-screen') return void this.showProfile();
+                if (back === 'progress-screen') return void this.showProgress();
+                if (back === 'online-screen') return void this.showOnline();
+                if (back === 'study-screen') return void this.showStudy();
+                if (back === 'puzzles-screen') return void this.showPuzzles();
+                if (back === 'lessons-screen') return void this.showLessons();
+                if (back === 'learn-screen') {
+                    try {
+                        const nav = document.querySelector('[data-nav="learn"]');
+                        if (nav) return void nav.click();
+                    } catch (_) {}
+                    return void this.showHome();
+                }
+                if (back === 'home-screen') return void this.showHome();
+                // lesson-screen needs a lesson id to render — the safe
+                // return is the lessons list, never a blank board.
+                return void this.showLessons();
+            }
+            try {
+                const cur = (document.body && document.body.dataset.screen) || 'home-screen';
+                this._screenBeforeActivity = (cur && cur !== 'friends-screen') ? cur : (this._screenBeforeActivity || 'home-screen');
+            } catch (_) { this._screenBeforeActivity = 'home-screen'; }
+            this.showFriends('activity');
+        } catch (_) { try { this.showFriends('activity'); } catch (_) {} }
     }
 
     // Friend invite links (#friend-<uid>-<slug>): the opener lands here and
@@ -4330,7 +4368,15 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         { id: 'green',  name: 'Green',  light: '#FFFFDD', dark: '#86A666' },
         { id: 'gray',   name: 'Gray',   light: '#F0F0F0', dark: '#999999' },
         { id: 'wood',   name: 'Wood',   light: '#E8C9A0', dark: '#A17A56' },
-        { id: 'purple', name: 'Purple', light: '#E0D3E8', dark: '#9070A8' }
+        { id: 'purple', name: 'Purple', light: '#E0D3E8', dark: '#9070A8' },
+        // Party boards: same readable contrast, loud personalities. The
+        // artwork is pure CSS/SVG tilework (see styles.css) — no downloads.
+        { id: 'lovely', name: 'Lovely', light: '#FBE3EC', dark: '#E75480' },
+        { id: 'kitty',  name: 'Kitty',  light: '#FFF5F7', dark: '#FF9EBB' },
+        { id: 'knight', name: 'Dark Knight', light: '#8E9AAF', dark: '#1B1E27' },
+        { id: 'sixtyseven', name: '67', light: '#FFF3B0', dark: '#FFB700' },
+        { id: 'galaxy', name: 'Galaxy', light: '#4A3B7A', dark: '#171233' },
+        { id: 'candy',  name: 'Candy',  light: '#FFE0F0', dark: '#7B2FF7' }
     ];
 
     /* Piece SETS — the artwork folders under assets/pieces/. The list is
@@ -4504,12 +4550,18 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             : `<span class="dc-avatar-letter" aria-hidden="true">${esc((name || 'P')[0].toUpperCase())}</span>`;
         let joined = '';
         try { if (user.createdAt) joined = new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }); } catch (_) {}
-        const blitz = OnlineRatings.get(this.userId, 'blitz');
-        const trend = this._blitzTrend();
-        const trendChip = !trend || trend.d === 0 ? '' :
-            `<span class="dc-trend ${trend.d > 0 ? 'up' : 'down'}" title="Last Blitz game: ${trend.d > 0 ? '+' : ''}${trend.d} vs ${trend.opp}">
-                <svg viewBox="0 0 8 8" aria-hidden="true"><path d="${trend.d > 0 ? 'M4 1l3 5H1z' : 'M4 7L1 2h6z'}"/></svg>${trend.d > 0 ? '+' : ''}${trend.d}
-            </span>`;
+        // Rapid leads: it is the game's main rating. The trend chip stays
+        // Blitz-scoped (the only trend computed), so rapid shows unadorned.
+        const rapid = OnlineRatings.get(this.userId, 'rapid');
+        let lvlChip = '';
+        try {
+            if (window.DoChessFriends && typeof window.DoChessFriends.xpSummary === 'function') {
+                const xs = window.DoChessFriends.xpSummary();
+                if (xs && Number.isFinite(xs.xp)) {
+                    lvlChip = `<span class="dc-lvl-chip" title="Level ${xs.lvl} — ${xs.xp} XP (Lessons ${xs.learn} · Games ${xs.games} · Puzzles ${xs.puzzles} · Streaks ${xs.streaks})">LVL ${xs.lvl} · ${xs.xp} XP</span>`;
+                }
+            }
+        } catch (_) {}
         let rankChip = '';
         try { if (typeof DoChessAchievements !== 'undefined') rankChip = DoChessAchievements.rankChipHTML(this.userId); } catch (_) {}
         return `
@@ -4522,7 +4574,8 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                         ${joined ? `<span>Playing since ${esc(joined)}</span><span class="dc-sep" aria-hidden="true">·</span>` : ''}
                         <span><span class="presence-dot" aria-hidden="true"></span>${seen}</span>
                         <span class="dc-sep" aria-hidden="true">·</span>
-                        <span class="dc-rate-chip" title="Current Blitz rating">Blitz <strong>${blitz}</strong>${trendChip}</span>
+                        <span class="dc-rate-chip" title="Main Rapid rating">Rapid <strong>${rapid}</strong></span>
+                        ${lvlChip ? `<span class="dc-sep" aria-hidden="true">·</span>${lvlChip}` : ''}
                         ${rankChip ? `<span class="dc-sep" aria-hidden="true">·</span>${rankChip}` : ''}
                         <span class="dc-sep" aria-hidden="true">·</span>${this._syncChipHTML()}
                     </p>
@@ -4782,10 +4835,65 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     }
 
     /* Page the history by 10: first 10, "more" reveals 10 at a
-       time, "less" collapses back to the first 10. */
+       time, "less" collapses back to the first 10. With a backend the
+       pages are 20 from the database (see _histServerPage). */
     _histPage(step) {
+        if (this._serverHist && this._serverHist.ok) { this._histServerPage(step); return; }
         const cur = this._histShown || 10;
         this._histShown = step < 0 ? 10 : cur + step;
+        if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
+    }
+    /**
+     * Pull the experience ledger when the dossier opens, then repaint if
+     * it moved: the LVL chip must show ledgered XP, not a stale zero.
+     */
+    async _refreshProfileXp() {
+        try {
+            if (!window.DoChessFriends || typeof window.DoChessFriends.pullXp !== 'function'
+                || typeof window.DoChessFriends.xpSummary !== 'function') return;
+            const before = JSON.stringify(window.DoChessFriends.xpSummary());
+            await window.DoChessFriends.pullXp();
+            const after = JSON.stringify(window.DoChessFriends.xpSummary());
+            if (before !== after && document.getElementById('profile-screen')?.classList.contains('active')) {
+                this._renderProfile();
+            }
+        } catch (_) {}
+    }
+    /**
+     * Pull the last-20 view window from the database. The archive itself
+     * is never trimmed server-side; the profile only ever shows a window.
+     * Re-renders the profile when fresher games land (guarded to the
+     * profile screen so background tabs never repaint).
+     */
+    async _loadServerHist() {
+        try {
+            if (!this.userId || !window.DoChessFriends || typeof window.DoChessFriends.fetchGames !== 'function') return;
+            const r = await window.DoChessFriends.fetchGames(20);
+            if (!r || !r.ok) return;
+            const before = JSON.stringify((this._serverHist && this._serverHist.games) || []);
+            this._serverHist = { games: r.games || [], total: r.total || 0, ok: true };
+            if (!this._histServerCount) this._histServerCount = 20;
+            if (document.getElementById('profile-screen')?.classList.contains('active')
+                && JSON.stringify(r.games || []) !== before) this._renderProfile();
+        } catch (_) {}
+    }
+    async _histServerPage(step) {
+        try {
+            if (step < 0) this._histServerCount = 20;
+            else {
+                const held = (this._serverHist && this._serverHist.games) || [];
+                const shown = this._histServerCount || 20;
+                // Need more than we hold and the archive says more exists:
+                // fetch the next page ending before our oldest game.
+                if (held.length <= shown && held.length < (this._serverHist.total || 0)
+                    && window.DoChessFriends && typeof window.DoChessFriends.fetchGames === 'function') {
+                    const oldest = held.length ? held[held.length - 1].date : null;
+                    const more = await window.DoChessFriends.fetchGames(20, oldest);
+                    if (more && more.ok && more.games.length) this._serverHist.games = held.concat(more.games);
+                }
+                this._histServerCount = shown + 20;
+            }
+        } catch (_) {}
         if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
     }
 
@@ -4798,9 +4906,26 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
        a live game, and a dead link would be worse than none. */
     _profileGamesHTML() {
         const cats = ChessCourseApp.onlineControls();
+        // Database first: the last 20 as a view window over an archive
+        // that is never trimmed. Device history is the honest fallback
+        // (guests, offline, backend-less).
+        const srv = (this._serverHist && this._serverHist.ok) ? this._serverHist : null;
         let hist = [];
-        try { hist = OnlineRatings.history(this.userId) || []; } catch (_) {}
-        const head = `<div class="dc-head"><h3>Recent games</h3>${hist.length ? `<span class="dc-count">last ${hist.length}</span>` : ''}</div>`;
+        let total = 0;
+        let shown = 0;
+        let fromDb = false;
+        if (srv) {
+            fromDb = true;
+            total = srv.total || 0;
+            shown = Math.min(srv.games.length, this._histServerCount || 20);
+            hist = srv.games.slice(0, shown);
+        } else {
+            try { hist = OnlineRatings.history(this.userId) || []; } catch (_) { hist = []; }
+            total = hist.length;
+            shown = Math.min(hist.length, this._histShown || 10);
+            hist = hist.slice(0, this._histShown || 10);
+        }
+        const head = `<div class="dc-head"><h3>Recent games</h3>${total ? `<span class="dc-count">last ${shown} of ${total}${fromDb ? ' · saved' : ''}</span>` : ''}</div>`;
         if (!hist.length) {
             return `
             <section class="dc-panel dc-games" aria-label="Recent games">${head}
@@ -4808,7 +4933,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 <button class="btn-secondary sm" data-action="goto-online" type="button">Play online</button></div>
             </section>`;
         }
-        const rows = hist.slice(0, this._histShown || 10).map(g => {
+        const rows = hist.map(g => {
             const opp = this._histOppName(g);
             const tc = this._histMinutes(g, cats);
             const plies = (g && Number.isFinite(+g.plies)) ? Math.max(0, Math.trunc(+g.plies)) : 0;
@@ -4844,12 +4969,11 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 <span class="dc-hist-meta" aria-hidden="true"><span class="delta ${dCls}">${dTxt}</span><span> · ${esc(movesTxt)} · ${esc(when || '–')}</span></span>
             </button></li>`;
         }).join('');
-        const shown = Math.min(hist.length, this._histShown || 10);
-        const rest = hist.length - shown;
-        const foot = (rest > 0 || shown > 10)
+        const rest = fromDb ? Math.max(0, total - shown) : Math.max(0, hist.length - shown);
+        const foot = (rest > 0 || shown > (fromDb ? 20 : 10))
             ? `<div class="dc-hist-foot">
                 ${rest > 0 ? `<button class="btn-secondary sm" data-action="hist-more" type="button">Show more (${rest} more)</button>` : ''}
-                ${shown > 10 ? `<button class="btn-secondary sm" data-action="hist-less" type="button">Show less</button>` : ''}
+                ${shown > (fromDb ? 20 : 10) ? `<button class="btn-secondary sm" data-action="hist-less" type="button">Show less</button>` : ''}
             </div>` : '';
         return `
             <section class="dc-panel dc-games" aria-label="Recent games">${head}
