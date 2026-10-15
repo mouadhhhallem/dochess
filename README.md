@@ -50,6 +50,7 @@ Playwright uses the installed Edge/Chrome channel (`playwright.config.js`, 2 wor
 - Locked progression: one correct move unlocks the next step; Complete button stays disabled until the exercise checks out.
 - Full rules: promotion picker, castling, en-passant, check/checkmate/stalemate, draw detection.
 - Free game vs CPU (Easy/Medium alpha-beta) with result card (Rematch / Review / Lessons).
+- Vs Bots page: six Elo-rated practice bots (200–2100, data-driven roster) on the same board, Elo-mapped engine depth; practice never locks behind course progress.
 - Match chrome: active-turn + low-time clocks, captured pieces with material edge, board flip, pointer drag-and-drop (= click path), persisted mute.
 - Online: 6-letter codes, arbitrary base/increment wheel picker, per-game Elo (K40/20) with count-up, move navigator, forfeit/draw flows.
 - Study: analysis workspace (library + chapters, move tree with variations/comments/arrows, PGN/FEN import-export, real Stockfish 10 WASM analysis with MultiPV, explain, best-move practice trainer, keyboard shortcuts). See `docs/STUDY.md` and `docs/STOCKFISH.md`.

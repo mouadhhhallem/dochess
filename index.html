@@ -625,7 +625,7 @@
                     <button class="nav-btn" id="nav-lessons" data-nav="lessons" type="button">Lessons</button>
                     <button class="nav-btn" id="nav-progress" data-nav="progress" type="button">Progress</button>
                     <button class="nav-btn" id="nav-profile" data-nav="profile" type="button">Profile</button>
-                    <button class="nav-btn" id="nav-online" data-nav="online" type="button">Online</button>
+                    <button class="nav-btn" id="nav-online" data-nav="online" type="button">Play</button> 
                     <button class="nav-btn" id="nav-study" data-nav="study" type="button">Study</button>
                     <button class="nav-btn" id="nav-puzzles" data-nav="puzzles" type="button">Puzzles</button>
                     <button class="nav-btn theme-toggle" id="theme-toggle" data-nav="theme" type="button" aria-pressed="false" title="Switch to day mode">
@@ -662,7 +662,7 @@
                 <button class="nav-btn sn-link" data-nav="lessons" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></g></svg><span>Lessons</span></button>
                 <button class="nav-btn sn-link" data-nav="progress" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4v16h16"/><path d="M8 16v-5M12 16V8M16 16v-3"/></g></svg><span>Progress</span></button>
                 <button class="nav-btn sn-link" data-nav="profile" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></g></svg><span>Profile</span></button>
-                <button class="nav-btn sn-link" data-nav="online" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.2 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.2-3.8-8.5s1.3-6.2 3.8-8.5z"/></g></svg><span>Online</span></button>
+                <button class="nav-btn sn-link" data-nav="online" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.2 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.2-3.8-8.5s1.3-6.2 3.8-8.5z"/></g></svg><span>Play</span></button>
                 <button class="nav-btn sn-link" data-nav="study" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4M10 3v6l-5.5 9.5A2 2 0 006.2 21h11.6a2 2 0 001.7-2.5L14 9V3"/></g></svg><span>Study</span></button>
                 <button class="nav-btn sn-link" data-nav="puzzles" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9 4h6v3a2 2 0 102 2h3v6h-3a2 2 0 10-2 2v3H9v-3a2 2 0 10-2-2H4v-6h3a2 2 0 102-2V4z"/></g></svg><span>Puzzles</span></button>
                 <button class="nav-btn sn-link" data-nav="friends" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M15.8 14.6c2.9.4 5.2 2.2 5.2 5"/></g></svg><span>Friends</span></button>
@@ -881,12 +881,22 @@
                 </div>
             </div>
 
-            <!-- Online Screen -->
+            <!-- Online Screen (Play tab: live games, quick match, bots) -->
             <div id="online-screen" class="screen" tabindex="-1">
                 <div class="container">
-                    <h2>Play Online</h2>
+                    <h2>Play</h2>
                     <div id="online-content">
                         <!-- Rendered by JS: lobby, live game, or result -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vs Bots Screen -->
+            <div id="vs-bots-screen" class="screen" tabindex="-1">
+                <div class="container">
+                    <h2>Vs Bots</h2>
+                    <div id="vs-bots-content">
+                        <!-- Rendered by JS: bot list -->
                     </div>
                 </div>
             </div>

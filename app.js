@@ -261,6 +261,8 @@ class ChessCourseApp {
                 else if (a === 'online-join-code') this._onlineJoin(action.dataset.code, true);
                 else if (a === 'online-leave') this._onlineLeave();
                 else if (a === 'online-quick') this._quickMatch();
+                else if (a === 'vs-bots') this.showVsBots();
+                else if (a === 'vs-bot') this.startBotGame(action.dataset.bot);
                 else if (a === 'qm-cancel') this._quickCancel();
                 else if (a === 'online-copy-link') {
                     const inp = document.getElementById('invite-link');
@@ -649,8 +651,9 @@ class ChessCourseApp {
     openLesson(id) {
         const l = this.lessons.find(x => x.id === id);
         if (!l || !this.isOpen(id)) return;
-        this.currentLesson = l;
-        this._buildLessonUI(l);
+        // Normal lesson entry always leaves practice-bot mode behind.
+        this._botGame = false; this._cpuBot = null; this._cpuBotParams = null;
+        this.currentLesson = l;        this._buildLessonUI(l);
         this._go('lesson-screen');
         requestAnimationFrame(() => {
             // If the game is already over, _refreshGameOverCard owns the
@@ -661,13 +664,72 @@ class ChessCourseApp {
         });
     }
 
+    /* ── Vs Bots: practice games against the Elo ladder ──────────────
+       Bots play on the lesson free-game board (the existing game
+       component: legal moves, clocks chrome, promotion, game-over card)
+       with Elo-mapped engine settings. Practice mode never locks behind
+       course progress and never completes lesson 10. */
+    startBotGame(botId) {
+        const bot = ChessCourseApp.BOTS.find(b => b && b.id === botId);
+        if (!bot) return;
+        const l = this.lessons.find(x => x.id === 10);
+        if (!l) return;
+        this._cpuDifficulty = 'bot';
+        this._cpuBot = bot;
+        this._cpuBotParams = ChessCourseApp.botCpuParams(bot.elo);
+        this._botGame = true;
+        this.currentLesson = l;
+        this._buildLessonUI(l);
+        this._go('lesson-screen');
+        requestAnimationFrame(() => {
+            document.getElementById('chess-board-wrapper')?.scrollIntoView({ block: 'center' });
+        });
+    }
+
+    showVsBots() {
+        this._go('vs-bots-screen');
+        this._renderVsBots();
+    }
+
+    _botAvatarHTML(bot, size) {
+        const s = size || 52;
+        const src = bot && typeof bot.avatar === 'string' && bot.avatar ? bot.avatar : null;
+        const nm = (bot && bot.name) || 'Bot';
+        if (src) {
+            return `<img class="avatar bot-avatar" src="${esc(src)}" width="${s}" height="${s}" loading="lazy" draggable="false" alt="${esc(nm)}" onerror="this.outerHTML='<span class=&quot;avatar bot-letter&quot; aria-hidden=&quot;true&quot;>${esc(nm[0].toUpperCase())}</span>'">`;
+        }
+        return `<span class="avatar bot-letter" aria-hidden="true">${esc(nm[0].toUpperCase())}</span>`;
+    }
+
+    _renderVsBots() {
+        const box = document.getElementById('vs-bots-content');
+        if (!box) return;
+        const cards = ChessCourseApp.BOTS.map(b => `
+            <article class="bot-card" data-bot="${esc(b.id)}">
+                <div class="bot-top">${this._botAvatarHTML(b, 56)}
+                    <div class="bot-id"><strong>${esc(b.name)}</strong>
+                    <span class="bot-elo" title="Bot rating">${b.elo}+ Elo</span></div>
+                </div>
+                <p class="bot-blurb">${esc(b.blurb || '')}</p>
+                <button class="btn-primary sm" data-action="vs-bot" data-bot="${esc(b.id)}" type="button">Play ${esc(b.name)}</button>
+            </article>`).join('');
+        box.innerHTML = `
+            <p class="lobby-hint">Practice against bots from 200 to 2000+ Elo. No account needed — pick your opponent and play a full game as White.</p>
+            <div class="bot-grid">${cards}</div>`;
+    }
+
     _buildLessonUI(l) {
         const t    = this.teachers.find(x => x.id === l.teacherId);
         const free = l.type === 'free-game';
         const done = this.completedLessons ? this.completedLessons.has(l.id) : false;
+        // Practice-bot mode only ever decorates the free-game board; every
+        // other lesson renders exactly as before.
+        const bot = (free && this._botGame && this._cpuBot) ? this._cpuBot : null;
 
         const exBox = l.exercise
             ? `<div class="exercise-instructions"><h4>Exercise</h4><p id="exercise-instruction">${this._stepText(l.exercise, 0)}</p></div>`
+            : bot
+            ? `<div class="exercise-instructions free-game-box"><h4>Vs ${esc(bot.name)} (${bot.elo} Elo)</h4><p>You are White. ${esc(bot.name)} plays Black at ${bot.elo} Elo — good luck!</p></div>`
             : `<div class="exercise-instructions free-game-box"><h4>Free Game Mode</h4><p>You are White. The computer plays Black. Play a full game — good luck!</p></div>`;
 
         const btn = free
@@ -686,10 +748,10 @@ class ChessCourseApp {
             <div class="lesson-content">
                 <div class="arena">
                     <div class="profile-card opponent" id="profile-opp" data-focus-hide>
-                        <img class="avatar" src="${t.img}" width="52" height="52" alt="${esc(t.name)}">
+                        ${bot ? this._botAvatarHTML(bot, 52) : `<img class="avatar" src="${t.img}" width="52" height="52" alt="${esc(t.name)}">`}
                         <div class="info">
-                            <span class="name">${esc(t.name)}</span>
-                            <span class="sub">${esc(t.title)} (Black)</span>
+                            <span class="name">${bot ? esc(bot.name) : esc(t.name)}</span>
+                            <span class="sub">${bot ? `${bot.elo} Elo (Black)` : `${esc(t.title)} (Black)`}</span>
                             <div class="captured-row" data-cap="opp"></div>
                         </div>
                         <div class="turn-indicator" id="ti-opp">Waiting</div>
@@ -746,11 +808,13 @@ class ChessCourseApp {
                         <button class="btn-secondary" data-action="reset-board">Reset Board</button>
                         <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
                         ${this._muteBtnHTML()}
-                        ${free ? `<label class="diff-label">Computer:
+                        ${free ? (bot
+                            ? `<span class="diff-label">Bot: <strong>${esc(bot.name)} (${bot.elo})</strong></span>`
+                            : `<label class="diff-label">Computer:
                             <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
                                 <option value="easy" selected>Easy</option>
                                 <option value="medium">Medium</option>
-                            </select></label>` : ''}
+                            </select></label>`) : ''}
                         ${btn}
                         <!-- Next stage sits with the controls under the Move Log.
                              Deliberately .btn-cta, NOT .btn-primary — the primary
@@ -1320,7 +1384,9 @@ class ChessCourseApp {
             if (st.startsWith('checkmate')) {
                 this._fb('Checkmate! You win! Magnificent play!', 'success');
                 this.snd.playSuccess();
-                if (this.isFreeGame) this.markDone(this.currentLesson.id);
+                // Practice bot games never complete the course: beating a
+                // 200-Elo bot is not finishing lesson 10 the earned way.
+                if (this.isFreeGame && !this._botGame) this.markDone(this.currentLesson.id);
             } else {
                 this._fb("Stalemate — it's a draw.", 'info');
             }
@@ -1332,16 +1398,27 @@ class ChessCourseApp {
         }
 
         const diff = this._cpuDifficulty || 'easy';
-        const depth = diff === 'medium' ? 3 : 2;
-        this._setSpeech(diff === 'medium' ? 'Thinking three moves deep…' : 'Playing a casual move…');
+        // Bot games use Elo-mapped settings; easy/medium below are exactly
+        // the legacy behaviours, so existing games play identically.
+        const P = (diff === 'bot' && this._cpuBotParams)
+            ? this._cpuBotParams
+            : diff === 'medium'
+                ? { depth: 3, blunder: 0, pool: 0 }
+                : { depth: 2, blunder: 0.15, pool: 60 };
+        const depth = P.depth;
+        this._setSpeech(P.depth >= 4 ? `${(this._cpuBot && this._cpuBot.name) || 'Bot'} is thinking hard…` : P.depth === 3 ? 'Thinking three moves deep…' : 'Playing a casual move…');
         // Chunked root search so the UI never freezes: a few root moves per
         // macrotask, best-so-far kept throughout. The epoch aborts a stale
-        // search if the board was reset mid-think.
+        // search if the board was reset mid-think. Deep bots additionally
+        // stop scoring new root moves after capMs and play best-so-far.
         const epoch = this._searchEpoch || 0;
+        const tStart = Date.now();
+        const capMs = P.depth >= 4 ? (P.capMs || 2500) : 0;
         const ordered = this._orderMoves(g, moves);
         let i = 0, alpha = -Infinity, scored = [];
         const step = () => {
             if (this.game !== g || epoch !== this._searchEpoch || g.gameOver) { this.cpuBusy = false; this._updateTurnUI(); return; }
+            if (capMs && scored.length && Date.now() - tStart > capMs) { i = ordered.length; }
             const t0 = Date.now();
             // 20ms slices: long enough to make progress, short enough that
             // every frame still renders while the computer is thinking.
@@ -1359,11 +1436,12 @@ class ChessCourseApp {
             if (i < ordered.length) { setTimeout(step, 0); return; }
             scored.sort((a, b) => b.score - a.score);
             let best = scored[0];
-            if (diff !== 'medium' && scored.length > 1) {
-                // Easy blunders like a beginner: mostly near-best, sometimes wild.
-                if (Math.random() < 0.15) best = scored[Math.floor(Math.random() * scored.length)];
+            if (P.blunder > 0 && scored.length > 1) {
+                // Weaker bots blunder like a beginner: mostly near-best,
+                // sometimes wild.
+                if (Math.random() < P.blunder) best = scored[Math.floor(Math.random() * scored.length)];
                 else {
-                    const pool = scored.filter(m => best.score - m.score <= 60);
+                    const pool = scored.filter(m => best.score - m.score <= P.pool);
                     best = pool[Math.floor(Math.random() * pool.length)];
                 }
             }
@@ -1968,6 +2046,13 @@ class ChessCourseApp {
                     <div class="lobby-actions">
                         <button class="btn-primary" data-action="online-quick" ${signed ? '' :
                 'disabled'}>Find opponent</button>
+                    </div>
+                </div>
+                <div class="dashboard-section">
+                    <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Vs Bots</h4>
+                    <p class="lobby-hint">Practice against bots from 200 to 2000+ Elo. No account needed — pick your opponent and play.</p>
+                    <div class="lobby-actions">
+                        <button class="btn-primary" data-action="vs-bots" type="button">Play bots</button>
                     </div>
                 </div>
                 <div class="dashboard-section">
@@ -4386,6 +4471,31 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         { id: 'classic', name: 'Classic', dir: 'pieces-main' }
     ];
 
+    /* ── Vs Bots roster: data-driven so new bots are one array entry.
+       Elo drives the engine (depth + blunder rate, see botCpuParams), so a
+       200 plays like a beginner and a 2000+ punishes like one. Avatars are
+       plain asset paths with a letter-tile fallback in the UI. ── */
+    static BOTS = [
+        { id: 'alex',   name: 'Alex',          elo: 200,  avatar: 'assets/pieces/pieces-main/white-pawn.svg',   blurb: 'Just learned how the horsey moves. Be nice.' },
+        { id: 'prima',  name: 'Prima',         elo: 400,  avatar: 'assets/pieces/pieces-main/white-knight.svg', blurb: 'Knows one opening trap and will absolutely try it.' },
+        { id: 'rook',   name: 'Rook Roll',     elo: 800,  avatar: 'assets/pieces/pieces-main/white-rook.svg',   blurb: 'Solid club player. Punishes hanging pieces.' },
+        { id: 'bishop', name: 'Bishop Blitz',  elo: 1200, avatar: 'assets/pieces/pieces-main/white-bishop.svg', blurb: 'Sharp tactics. Double-check every trade.' },
+        { id: 'queen',  name: 'Queen Gambit',  elo: 1600, avatar: 'assets/pieces/pieces-main/white-queen.svg',  blurb: 'Deep calculation. Bring your best game.' },
+        { id: 'king',   name: 'King Crusher',  elo: 2100, avatar: 'assets/pieces/pieces-main/black-king.svg',   blurb: 'The final boss. Good luck.' }
+    ];
+
+    /** Engine settings per bot Elo: search depth, blunder rate, and the
+        score window a "casual" pick may fall inside. Easy/Medium below are
+        exactly the legacy behaviours, so existing games play identically. */
+    static botCpuParams(elo) {
+        const e = Number(elo) || 800;
+        if (e <= 300)  return { depth: 1, blunder: 0.35, pool: 150 };
+        if (e <= 600)  return { depth: 2, blunder: 0.22, pool: 80 };
+        if (e <= 1000) return { depth: 2, blunder: 0.06, pool: 40 };
+        if (e <= 1400) return { depth: 3, blunder: 0, pool: 0 };
+        return { depth: 4, blunder: 0, pool: 0, capMs: 2500 };
+    }
+
     // Line icons for the online action bar. Phones hide the text labels
     // (btn-act-tx) and keep only these; desktop shows icon + label.
     static ACT_ICONS = {
@@ -5371,7 +5481,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         // still be toggled here: navigating Learn -> Puzzles used to leave it
         // active, stacking two pages (and, now that screens height-lock,
         // doubling the scroll height).
-        ['home-screen','lessons-screen','lesson-screen','learn-screen','progress-screen','profile-screen','online-screen','study-screen','puzzles-screen','friends-screen']
+        ['home-screen','lessons-screen','lesson-screen','learn-screen','progress-screen','profile-screen','online-screen','vs-bots-screen','study-screen','puzzles-screen','friends-screen']
             .forEach(s => document.getElementById(s)?.classList.toggle('active', s === id));
         // A11y: move keyboard focus to the new screen so SR users land
         // on the heading instead of staying on a now-hidden control.
@@ -5381,7 +5491,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         } catch (_) {}
         // Keep nav highlighted so users always know where they are
         const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen':
-'online', 'study-screen': 'study', 'puzzles-screen': 'puzzles', 'friends-screen': 'friends' };
+'online', 'vs-bots-screen': 'online', 'study-screen': 'study', 'puzzles-screen': 'puzzles', 'friends-screen': 'friends' };
         const active = navFor[id];
         document.querySelectorAll('.nav-btn').forEach(b => {
             const key = b.dataset.nav || b.textContent.trim().toLowerCase();

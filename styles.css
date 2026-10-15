@@ -1955,6 +1955,19 @@ body[data-piece-set='modern'][data-theme='day'] .dc-id::after { background-image
 body[data-theme='day'] .dc-trend.up { color: #8A6416; }
 body[data-theme='day'] .dc-trend.down { color: #dc2626; }
 .dc-badges { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .6rem; }
+
+/* ── Vs Bots: selectable bot cards (same card language as the lobby) ── */
+.bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .8rem; margin-top: .4rem; }
+.bot-card { border: 1px solid var(--glass-border); border-radius: 14px; padding: .9rem; background: var(--bg-main); display: flex; flex-direction: column; gap: .55rem; }
+.bot-top { display: flex; align-items: center; gap: .7rem; }
+.bot-card .avatar.bot-avatar { width: 56px; height: 56px; border-radius: 14px; background: var(--primary-surface); padding: 4px; flex: none; }
+.bot-card .avatar.bot-letter { width: 56px; height: 56px; border-radius: 14px; background: var(--primary-surface); display: inline-flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 800; flex: none; }
+.bot-id { display: flex; flex-direction: column; gap: .15rem; }
+.bot-id strong { font-size: 1.05rem; }
+.bot-elo { font-variant-numeric: tabular-nums; color: var(--accent-bright); font-weight: 800; font-size: .85rem; }
+.bot-blurb { color: var(--text-muted); font-size: .9rem; margin: 0; flex: 1; }
+.bot-card .btn-primary.sm { align-self: flex-start; }
+.diff-label strong { color: var(--text-main); }
 .dc-badge {
     display: inline-flex; align-items: center; gap: .35rem;
     font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
