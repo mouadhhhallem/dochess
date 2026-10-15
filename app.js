@@ -680,6 +680,7 @@ class ChessCourseApp {
         this._cpuBotParams = ChessCourseApp.botCpuParams(bot.elo);
         this._botGame = true;
         this._botMood = 'straight';
+        this._botSaid = [];
         this._botEvalBefore = null; this._botSnapBefore = null;
         this._botMoveInfo = null; this._botLastMove = null;
         this._botSfPrev = null; this._botSfPrevStamp = ''; this._botSfBusy = false;
@@ -843,7 +844,29 @@ class ChessCourseApp {
             const toCenter = to && ((to[0] === 3 || to[0] === 4) && (to[1] === 3 || to[1] === 4));
             const developed = (movedPc === 'n' || movedPc === 'b') && from && from[0] === 7 && moveNo <= 10;
             let mood = 'straight', text = '';
-            const pick = (arr) => arr[moveNo % arr.length];
+            // Anti-repeat: the same sentence never comes twice in a row —
+            // recent lines are filtered out before rotating by move number.
+            const pick = (arr) => {
+                try {
+                    const said = this._botSaid || [];
+                    const fresh = arr.filter(t => !said.includes(t));
+                    const pool = fresh.length ? fresh : arr;
+                    return pool[moveNo % pool.length];
+                } catch (_) { return arr[moveNo % arr.length]; }
+            };
+            const remember = (t) => {
+                try {
+                    this._botSaid = (this._botSaid || []).concat([t]).slice(-6);
+                } catch (_) {}
+            };
+            // Forward-looking plan, read off the LIVE position: a loose
+            // black piece to win, an undeveloped minor with a real square,
+            // a king that still needs castling, or a center break. Used
+            // instead of judging the past move, so advice never repeats.
+            const planTip = this._botPlanTip();
+            // Quiet positions alternate between judging and advising, so two
+            // calm moves in a row never lecture the same way twice.
+            const advise = !!(planTip && ((moveNo + g.moveHistory.length) % 2 === 1));
             // Every line is a verdict on THIS move: what it did to the
             // position and why. Praise is earned by the eval swing, never
             // handed out — and mistakes are named (hanging piece + square,
@@ -901,49 +924,58 @@ class ChessCourseApp {
                 ]);
             } else if (status.startsWith('check-black')) {
                 mood = 'happy';
-                text = pick([
+                text = advise ? planTip : pick([
                     'Check — and a good one if it comes with a threat. Now convert the pressure into something real: a fork, a pin, or material.',
                     'Check! Checks only count when they improve your position — follow it up before I wriggle out.',
+                    'Good aggression. Keep every check purposeful.',
+                    'Check! Now cut off my escape squares first, then bring help.',
                 ]);
             } else if (isCastle) {
                 mood = 'straight';
-                text = pick([
+                text = advise ? planTip : pick([
                     'Castled — king tucked away and rook connected. That is textbook king safety; now play in the center.',
                     'Good: safety first. A castled king means you can attack without looking over your shoulder.',
+                    'Textbook castling. Next: pick a plan.',
                 ]);
             } else if (developed && delta > -80) {
                 mood = 'straight';
-                text = pick([
+                text = advise ? planTip : pick([
                     'Developing with tempo — knights and bishops out before the attack. That is how winning positions start.',
                     'Pieces out before pawns storm. That development keeps every future tactic working for you.',
+                    'No piece moves twice until they are all out.',
                 ]);
             } else if (toCenter && (movedPc === 'p' || movedPc === 'n') && delta > -80) {
                 mood = 'straight';
-                text = pick([
+                text = advise ? planTip : pick([
                     'Central control — pawns and knights in the middle govern the whole board. Exactly right.',
                     'Taking the center: that is where games are won, because central pieces reach both wings.',
+                    'Defend your center with pieces now, not more pawn pushes.',
                 ]);
             } else if (delta >= 100) {
                 mood = 'happy';
-                text = pick([
+                text = (advise && planTip) ? planTip : pick([
                     `Strong — ${moveSq} improves your position by ${pawns(delta)}. You are outplaying my search.`,
                     `Yes! A full ${pawns(delta)} better. That is real, measurable progress — keep it up.`,
+                    'Wins slowly, then all at once. Keep converting.',
                 ]);
             } else if (moveNo <= 3) {
                 mood = 'straight';
-                text = pick([
+                text = (advise && planTip) ? planTip : pick([
                     'Control the center with pawns, then develop knights before bishops — that order wins openings.',
                     'Knights before bishops, castle early, and never move the same piece twice while undeveloped pieces wait.',
                     'Castle early and stay safe: an unsafe king cancels every clever idea you find.',
+                    'Fight for e4 and d4 first. Whoever owns the middle owns the plans.',
                 ]);
             } else {
                 mood = 'straight';
-                text = pick([
+                text = (advise && planTip) ? planTip : pick([
                     'Solid and safe — nothing hangs and the structure holds. Now look for a move that threatens something.',
                     'A quiet move, honestly played. Simple is fine — but ask what plan it serves before the next one.',
                     'Patient. Good — but patience needs a plan: improving your worst piece is always one.',
+                    'No weaknesses, no threats. Create one threat every few moves.',
                 ]);
             }
+            remember(text);
             this._botSetMood(mood);
             this._botSay(text);
             ownDelta = delta;
@@ -1066,6 +1098,68 @@ class ChessCourseApp {
         return out;
     }
 
+    /** Forward-looking coaching read off the LIVE position (Black just
+        moved or the game just started — it is White's plan that matters).
+        Every tip names real squares and pieces, verified legal where a
+        move is suggested. Returns null when nothing concrete applies. */
+    _botPlanTip() {
+        try {
+            const g = this.game;
+            if (!g || g.gameOver) return null;
+            const names = ChessCourseApp.BOT_PIECE_NAMES;
+            const alg = (sq) => { try { return g.coordsToAlgebraic(sq); } catch (_) { return ''; } };
+            const moveNo = Math.max(1, Math.ceil((g.moveHistory || []).length / 2));
+            // 1) A loose black piece White can win: name it and its square.
+            try {
+                const loose = this._hangList(g, 'black');
+                if (loose && loose.length) {
+                    const t = loose[0];
+                    const nm = names[t.piece] || 'piece';
+                    return `My ${nm} on ${alg(t.sq)} has no defender — find the move that wins it. Free material decides games.`;
+                }
+            } catch (_) {}
+            // 2) King still in the center past the opening: castle now.
+            try {
+                if (moveNo >= 3 && g.board[7][4] === 'K') {
+                    const km = g.getLegalMoves([7, 4]) || [];
+                    const castle = km.find(m => m[0] === 7 && (m[1] === 6 || m[1] === 2));
+                    if (castle) {
+                        const side = castle[1] === 6 ? 'kingside' : 'queenside';
+                        return `Castle ${side} (${alg([7, 4])} to ${alg(castle)}) while it is safe — a center king turns every tactic against you.`;
+                    }
+                    return 'Your king still sits in the center. Tuck it away behind pawns before you start anything ambitious.';
+                }
+            } catch (_) {}
+            // 3) Undeveloped minor on its home square with a real destination.
+            try {
+                const wants = { g1: ['f3', 'h3'], b1: ['c3', 'a3'], c1: ['f4', 'g5', 'e3'], f1: ['c4', 'b5', 'e2'] };
+                for (const from of ['g1', 'b1', 'c1', 'f1']) {
+                    let fc = null;
+                    try { fc = g.algebraicToCoords(from); } catch (_) { continue; }
+                    const pc = g.board[fc[0]][fc[1]];
+                    if (!pc || (pc !== 'N' && pc !== 'B')) continue;
+                    const legal = new Set((g.getLegalMoves(fc) || []).map(m => alg(m)));
+                    const dest = (wants[from] || []).find(s => legal.has(s)) || [...legal][0];
+                    if (!dest) continue;
+                    const pnm = pc === 'N' ? 'knight' : 'bishop';
+                    return `Develop your ${pnm} from ${from} to ${dest} — it fights for the center and frees your back rank. Undeveloped pieces are just spectators.`;
+                }
+            } catch (_) {}
+            // 4) Unclaimed center: push a center pawn if it can go.
+            try {
+                for (const from of ['d2', 'e2']) {
+                    let fc = null;
+                    try { fc = g.algebraicToCoords(from); } catch (_) { continue; }
+                    if (g.board[fc[0]][fc[1]] !== 'P') continue;
+                    const legal = new Set((g.getLegalMoves(fc) || []).map(m => alg(m)));
+                    const dest = from === 'd2' ? (legal.has('d4') ? 'd4' : null) : (legal.has('e4') ? 'e4' : null);
+                    if (dest) return `Claim the middle with ${from} to ${dest} — central pawns back every plan you will ever make.`;
+                }
+            } catch (_) {}
+            return null;
+        } catch (_) { return null; }
+    }
+
     /** Apply a Stockfish verdict if (and only if) it crosses a mood
         boundary versus the instant one AND disagrees by a real margin
         (engine noise near a threshold must never flip-flop the face).
@@ -1081,35 +1175,46 @@ class ChessCourseApp {
             const ownMood = moodOf(ownDelta);
             if (sfMood === ownMood) return false;
             const n = Math.max(1, moveNo || 1);
-            const pick = (arr) => arr[n % arr.length];
+            const said = this._botSaid || [];
+            const pick = (arr) => {
+                const fresh = arr.filter(t => !said.includes(t));
+                const pool = fresh.length ? fresh : arr;
+                return pool[n % pool.length];
+            };
             const f = facts || {};
+            const tip = this._botPlanTip();
             const pawns = (cp) => {
                 const v = Math.abs(Math.round(cp / 10) / 10);
-                return `≈${v} pawn${v === 1 ? '' : 's'}`;
+                return `${v} pawn${v === 1 ? '' : 's'}`;
             };
             const whyBad = f.hangName
                 ? ` Your ${f.hangName}${f.hangSq ? ` on ${f.hangSq}` : ''} is hanging — that is the hole.`
-                : (f.capName ? ` That exchange trades you down — count what takes back before you swap.` : ` Find the reply you allowed before I play it.`);
+                : (f.capName ? ` That exchange trades you down.` : ` Spot the reply you allowed before I play it.`);
             const whyGood = f.checking
                 ? ` It comes with check and a real threat behind it.`
-                : (f.moveSq ? ` ${f.moveSq} is simply the strongest idea there.` : ` The calculation holds at depth.`);
+                : (f.moveSq ? ` ${f.moveSq} is simply the strongest idea there.` : ` Every reply I have falls short.`);
             this._botSetMood(sfMood);
+            let line = '';
             if (sfMood === 'happy') {
-                this._botSay(pick([
-                    `On second look — Stockfish agrees, and it is genuinely strong (+${pawns(sfDelta)}).${whyGood}`,
-                    `I checked with the engine: that move holds up (+${pawns(sfDelta)}).${whyGood} Impressive.`,
-                ]));
+                line = pick([
+                    `I will admit it — that is genuinely strong, worth about ${pawns(sfDelta)}.${whyGood}`,
+                    `Well played, truly. Up about ${pawns(sfDelta)} — now simplify and make it count.`,
+                ]);
             } else if (sfMood === 'angry') {
-                this._botSay(pick([
-                    `On second look — Stockfish says that drops ${pawns(sfDelta)}.${whyBad}`,
-                    `Hmm, the engine is blunt: that was worth ${pawns(sfDelta)} to me.${whyBad}`,
-                ]));
+                line = pick([
+                    `That drops about ${pawns(sfDelta)}.${whyBad}`,
+                    `Costly — you just handed me ${pawns(sfDelta)}.${whyBad}`,
+                ]);
             } else {
-                this._botSay(pick([
-                    'On second look — the engine calls it perfectly fine. Carry on.',
-                    'Deeper look says: solid enough. Next!',
-                ]));
+                line = (tip && n % 2 === 0) ? tip : pick([
+                    'That is fine — nothing hangs, structure holds. Now give your next move a job: improve your worst piece.',
+                    'Solid enough. Next: create a threat instead of waiting for mine.',
+                ]);
             }
+            try {
+                this._botSaid = (this._botSaid || []).concat([line]).slice(-6);
+            } catch (_) {}
+            this._botSay(line);
             return true;
         } catch (_) { return false; }
     }
@@ -1226,7 +1331,7 @@ class ChessCourseApp {
                 </div>
             </div>
             <div class="lesson-content">
-                <div class="arena">
+                <div class="arena bot-arena">
                     <div class="profile-card opponent" id="profile-opp">
                         ${this._botAvatarHTML(bot, 60, 'bot-mood-img')}
                         <div class="info">

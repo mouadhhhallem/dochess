@@ -219,7 +219,9 @@ test('Stockfish score parsing and verdict merge (no worker needed)', async ({ br
     expect(m[0]).toBe(false);
     expect(m[1]).toBe(false);
     expect(m[2]).toBe(true);
-    expect(m[3]).toMatch(/second look/i);
+    // Teacher voice: names the loss, never engine jargon.
+    expect(m[3]).toMatch(/drops about 4 pawns/i);
+    expect(m[3]).not.toMatch(/stockfish|engine|second look|deeper|depth/i);
     expect(m[4]).toMatch(/angry\/bot-1\.png/);
     expect(errors, 'no page errors').toEqual([]);
     await ctx.close();

@@ -4685,3 +4685,35 @@ body[data-theme="day"] .ms-link.active, body[data-theme="day"] .ms-link.active:h
 .fr-hof.me { background: var(--surface-2, rgba(255, 255, 255, 0.05)); border-radius: 10px; }
 .fr-req.unsent { border-left: 3px solid #f0a44a; }
 .fr-req.unsent .fr-sub { color: #f0a44a; }
+
+/* ── Vs Bots arena order lock + phone cards ───────────────────────
+   The bot arena order is explicit at EVERY width (opponent → coach →
+   toolbar → board → status → you), so no breakpoint cascade can ever
+   stack the bot's card under the board. On phones the player cards stay
+   visible as compact chess.com-style bars — the bot's face is never
+   hidden — instead of display:none like lesson teacher cards. */
+#lesson-screen .bot-arena #profile-opp { order: 1; }
+#lesson-screen .bot-arena .bot-talk { order: 2; }
+#lesson-screen .bot-arena #lesson-sticky { order: 3; }
+#lesson-screen .bot-arena #chess-board-wrapper { order: 4; }
+#lesson-screen .bot-arena #promotion-picker { order: 5; }
+#lesson-screen .bot-arena #lesson-feedback { order: 6; }
+#lesson-screen .bot-arena #profile-you { order: 7; }
+@media (max-width: 700px) {
+  #lesson-screen .bot-arena #profile-opp,
+  #lesson-screen .bot-arena #profile-you {
+    display: flex !important;
+    padding: .45rem .6rem;
+    gap: .55rem;
+    border-radius: var(--radius-sm);
+  }
+  #lesson-screen .bot-arena .profile-card .avatar.bot-avatar,
+  #lesson-screen .bot-arena #bot-mood-img { width: 36px; height: 36px; border-radius: 10px; }
+  #lesson-screen .bot-arena .profile-card .info .name { font-size: .85rem; }
+  #lesson-screen .bot-arena .profile-card .info .sub { font-size: .68rem; }
+  #lesson-screen .bot-arena .profile-card .turn-indicator {
+    font-size: .65rem; padding: .25rem .6rem; margin-left: auto;
+  }
+  #lesson-screen .bot-arena .captured-row { display: none; }
+  #lesson-screen .bot-arena .bot-talk { font-size: .82rem; }
+}
