@@ -56,7 +56,7 @@ test('bot roster is data-driven with name, avatar and Elo each', async ({ browse
     await expect(page.locator('#vs-bots-screen')).toHaveClass(/active/);
     const cards = page.locator('.bot-card');
     await expect(cards).toHaveCount(6);
-    for (const [name, elo] of [['Alex', '200'], ['Prima', '400'], ['King Crusher', '2100']]) {
+    for (const [name, elo] of [['Alex', '200'], ['Prima', '400'], ['Atlas', '2100']]) {
         const card = page.locator('.bot-card', { hasText: name }).first();
         await expect(card).toBeVisible();
         await expect(card).toContainText(new RegExp(elo));
@@ -73,6 +73,10 @@ test('tapping a bot starts a real game with Elo-mapped strength', async ({ brows
     const depths = await page.evaluate(() =>
         [200, 400, 800, 1200, 1600, 2100].map((e) => window.app.constructor.botCpuParams(e).depth));
     expect(depths).toEqual([1, 1, 2, 3, 3, 4]);
+    // True beginner chaos only at the bottom; capped think time at depth 2+.
+    const wilds = await page.evaluate(() =>
+        [200, 400, 800, 1200, 1600, 2100].map((e) => window.app.constructor.botCpuParams(e).wild));
+    expect(wilds).toEqual([0.25, 0.08, 0, 0, 0, 0]);
     await page.evaluate(() => window.app.showVsBots());
     await page.locator('.bot-card[data-bot="alex"] [data-action="vs-bot"]').click();
     await expect(page.locator('#lesson-screen')).toHaveClass(/active/, { timeout: 15000 });

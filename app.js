@@ -396,9 +396,9 @@ class ChessCourseApp {
         // teacher{1,2,3}.svg (kept as sources). ~40-60KB, not megabytes.
         const v = ChessCourseApp.assetV();
         return [
-            { id:1, name:'Nico',  title:'Chess Master & Strategist',  desc:'A calm and patient grandmaster who teaches the fundamentals with wisdom and precision.',         img:`assets/teacher1-192.png?${v}` },
-            { id:2, name:'Luna',  title:'Tactical Specialist',         desc:'An energetic coach who focuses on tactics, patterns, and aggressive play.',                     img:`assets/teacher2-192.png?${v}` },
-            { id:3, name:'Max',   title:'Historical Chess Expert',     desc:'A scholarly teacher who brings chess history to life while teaching essential concepts.',       img:`assets/teacher3-192.png?${v}` }
+            { id:1, name:'Milo',  title:'Chess Master & Strategist',  desc:'A calm and patient grandmaster who teaches the fundamentals with wisdom and precision.',         img:`assets/teacher1-192.png?${v}` },
+            { id:2, name:'Sara',  title:'Tactical Specialist',         desc:'An energetic coach who focuses on tactics, patterns, and aggressive play.',                     img:`assets/teacher2-192.png?${v}` },
+            { id:3, name:'Leo',   title:'Historical Chess Expert',     desc:'A scholarly teacher who brings chess history to life while teaching essential concepts.',       img:`assets/teacher3-192.png?${v}` }
         ];
     }
 
@@ -680,6 +680,8 @@ class ChessCourseApp {
         this._cpuBotParams = ChessCourseApp.botCpuParams(bot.elo);
         this._botGame = true;
         this._botMood = 'straight';
+        this._botEvalBefore = null; this._botSnapBefore = null;
+        this._botMoveInfo = null; this._botLastMove = null;
         // Preload all three faces so mid-game swaps never flicker.
         try {
             for (const m of ['straight', 'happy', 'angry']) {
@@ -698,51 +700,9 @@ class ChessCourseApp {
     /* ── Bot coach: mood faces + talk, judged by OUR engine ──────────
        After each of the player's moves the position is evaluated with the
        app's own search tables (never Stockfish, never shown as numbers):
-       a big swing for the player is brilliant/happy, a big drop is a
-       blunder/angry, quiet moves get basic tips. Deterministic rotation
+       new hanging pieces, bad trades and big eval swings drive specific,
+       truthful verdicts — never generic praise. Deterministic rotation
        (move number) so phrases vary without repeating awkwardly. */
-    static BOT_TALK = {
-        brilliant: [
-            'Brilliant! Did you see that coming?',
-            'Wow — that is a winning idea!',
-            'Magnificent! Even I missed that one.',
-        ],
-        good: [
-            'Nice move — that improves your game.',
-            'Good! You are building something real.',
-            'I like that. Keep the pressure on.',
-        ],
-        basic: [
-            'Solid, textbook chess.',
-            'Simple and good. I approve.',
-            'Nothing fancy — just good chess.',
-        ],
-        opening: [
-            'Control the center.',
-            'Knights before bishops!',
-            'Castle early, stay safe.',
-            'Develop with a threat.',
-        ],
-        capture: [
-            'Good trade.',
-            'Well taken!',
-            'Material matters. Nice grab.',
-        ],
-        check: [
-            'Check! Keep the pressure on.',
-            'Check! Make every move count now.',
-        ],
-        mistake: [
-            'Hmm — that gives something away.',
-            'Risky. Can you see why?',
-            'Careful — I smell a tactic in there.',
-        ],
-        blunder: [
-            'Ouch. That hangs material.',
-            'That loses on the spot — look again!',
-            'Oof. Even my cousin Alex would take that.',
-        ],
-    };
 
     _botSetMood(mood) {
         try {
@@ -765,12 +725,37 @@ class ChessCourseApp {
         } catch (_) {}
     }
 
-    _botPhrase(cat, moveNo) {
+    /** Pieces of `color` attacked by the enemy and undefended, most
+        valuable first (kings excluded). Runs on any game instance; uses
+        only legal-move queries, never mutates. */
+    _hangList(g, color) {
+        const out = [];
         try {
-            const list = ChessCourseApp.BOT_TALK[cat] || ChessCourseApp.BOT_TALK.basic;
-            return list[Math.max(0, moveNo || 0) % list.length];
-        } catch (_) { return 'Hmm.'; }
+            const foe = color === 'white' ? 'black' : 'white';
+            const attacks = (r, c, by) => {
+                for (let ar = 0; ar < 8; ar++) for (let ac = 0; ac < 8; ac++) {
+                    if (!g.isColor(ar, ac, by)) continue;
+                    const mv = g.getLegalMoves([ar, ac]);
+                    for (let k = 0; k < mv.length; k++) {
+                        if (mv[k][0] === r && mv[k][1] === c) return true;
+                    }
+                }
+                return false;
+            };
+            const mat = ChessCourseApp._mat();
+            for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+                const p = g.board[r][c];
+                if (!p || g.colorOf(p) !== color || p.toLowerCase() === 'k') continue;
+                if (attacks(r, c, foe) && !attacks(r, c, color)) {
+                    out.push({ piece: p.toLowerCase(), sq: [r, c], val: mat[p.toLowerCase()] || 0 });
+                }
+            }
+        } catch (_) {}
+        out.sort((a, b) => b.val - a.val);
+        return out;
     }
+
+    static BOT_PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 
     /** Pure move-quality classifier (centipawns, White's perspective).
         Shared by the live coach path and the test suite, so the thresholds
@@ -785,38 +770,154 @@ class ChessCourseApp {
     }
 
     /** Rate the player's just-played move and react as a coach. Call only
-        in bot mode, right after White's move, while the game continues. */
+        in bot mode, right after White's move, while the game continues.
+        Every claim is grounded in something measured: new hanging pieces
+        (before/after attack maps), captures, checks, castling,
+        development — with the eval swing as the judge of how much it
+        mattered. No numbers are ever shown, only the verdict. */
     _botCoachMove() {
         try {
             const bot = this._cpuBot;
             if (!bot || !this.game) return;
             const g = this.game;
+            const names = ChessCourseApp.BOT_PIECE_NAMES;
             const before = (typeof this._botEvalBefore === 'number') ? this._botEvalBefore : null;
             const after = this._evaluate(g); // black-minus-white
             // White (the player) gained when Black's score drops.
             const delta = (before === null) ? 0 : (before - after);
             const moveNo = Math.max(1, Math.ceil(g.moveHistory.length / 2));
             const last = this._botLastMove || {};
+            const info = this._botMoveInfo || {};
             const status = g.getGameStatus();
-            const q = ChessCourseApp.classifyMoveQuality(delta);
-            let mood = q.mood, cat = q.cat;
-            if (cat === 'quiet') {
-                if (last.captured) { mood = delta >= 0 ? 'happy' : 'straight'; cat = 'capture'; }
-                else if (status.startsWith('check-black')) { mood = 'happy'; cat = 'check'; }
-                else if (moveNo <= 3) { mood = 'straight'; cat = 'opening'; }
-                else { mood = 'straight'; cat = 'basic'; }
+            const capName = (typeof last.captured === 'string' && last.captured)
+                ? (names[last.captured.toLowerCase()] || 'piece') : '';
+            // New hangs: white pieces hanging now that were safe before.
+            let newHang = null;
+            try {
+                if (this._botSnapBefore) {
+                    const gb = new ChessGame();
+                    gb.restore(this._botSnapBefore);
+                    const was = new Set(this._hangList(gb, 'white').map(h => h.sq.join(',')));
+                    const now = this._hangList(g, 'white');
+                    newHang = now.find(h => !was.has(h.sq.join(','))) || null;
+                }
+            } catch (_) { newHang = null; }
+            const hangName = newHang ? (names[newHang.piece] || 'piece') : '';
+            const movedPc = (info.piece || '').toLowerCase();
+            const from = info.from || null, to = info.to || null;
+            const isCastle = movedPc === 'k' && from && to && from[0] === 7 && to[0] === 7
+                && Math.abs(to[1] - from[1]) === 2;
+            const toCenter = to && ((to[0] === 3 || to[0] === 4) && (to[1] === 3 || to[1] === 4));
+            const developed = (movedPc === 'n' || movedPc === 'b') && from && from[0] === 7 && moveNo <= 10;
+            let mood = 'straight', text = '';
+            const pick = (arr) => arr[moveNo % arr.length];
+            if (newHang && newHang.val >= 300 && delta <= -80) {
+                mood = 'angry';
+                text = pick([
+                    `That leaves your ${hangName} hanging. Take it back mentally — what defends it?`,
+                    `Your ${hangName} is free for the taking now. Always check what is undefended.`,
+                    `Hanging ${hangName}s lose games. Count my attackers next time.`,
+                ]);
+            } else if (delta >= 250) {
+                mood = 'happy';
+                text = pick([
+                    'Brilliant — that is the strongest idea on the board.',
+                    'Superb! That wins by force if I cooperate. I might not.',
+                    'What a move! You saw further than my search did.',
+                ]);
+            } else if (last.captured && delta <= -80) {
+                mood = 'angry';
+                text = pick([
+                    `That trade loses material${capName !== 'piece' ? ` — my ${capName} was defended` : ''}. Recalculate!`,
+                    `Winning the ${capName} costs you more than it gains. Look again.`,
+                    'Bad trade. Never swap when you come out down.',
+                ]);
+            } else if (delta <= -350) {
+                mood = 'angry';
+                text = pick([
+                    'That drops a full piece. Stop, breathe, look at the whole board.',
+                    'Ouch — that is a whole piece gone. What did you miss?',
+                ]);
+            } else if (delta <= -150) {
+                mood = 'angry';
+                text = pick([
+                    'That drops a pawn — and the initiative with it.',
+                    'Careless. Small drops decide big games.',
+                ]);
+            } else if (delta <= -80) {
+                mood = 'angry';
+                text = pick([
+                    'That gives away your edge. Tighten up.',
+                    'Hmm — slightly the second-best idea there.',
+                ]);
+            } else if (last.captured && delta >= 80) {
+                mood = 'happy';
+                text = pick([
+                    `Well taken — ${capName} won, cleanly.`,
+                    `Good grab! That ${capName} was hanging.`,
+                ]);
+            } else if (last.captured) {
+                mood = 'straight';
+                text = pick(['Fair trade.', 'An even swap. Fine.']);
+            } else if (status.startsWith('check-black')) {
+                mood = 'happy';
+                text = pick(['Check! Keep the pressure on.', 'Check! Now convert it into something real.']);
+            } else if (isCastle) {
+                mood = 'straight';
+                text = pick(['Castled — king safe. Textbook.', 'Good — safety first, always.']);
+            } else if (developed && delta > -80) {
+                mood = 'straight';
+                text = pick(['Developing with tempo. Lovely.', 'Pieces out before pawns storm. Well played.']);
+            } else if (toCenter && (movedPc === 'p' || movedPc === 'n') && delta > -80) {
+                mood = 'straight';
+                text = pick(['Taking the center. That is where games are won.', 'Central control — exactly right.']);
+            } else if (delta >= 100) {
+                mood = 'happy';
+                text = pick(['Strong — that improves your position.', 'Yes! That is real progress.']);
+            } else if (moveNo <= 3) {
+                mood = 'straight';
+                text = pick(['Control the center.', 'Knights before bishops!', 'Castle early, stay safe.']);
+            } else {
+                mood = 'straight';
+                text = pick(['Solid, textbook chess.', 'Simple and good. I approve.', 'Patient. Good things come.']);
             }
             this._botSetMood(mood);
-            this._botSay(this._botPhrase(cat, moveNo));
+            this._botSay(text);
         } catch (_) {}
     }
 
-    /** End-of-game feelings: the bot celebrates its wins, rages its
-        losses (sore loser, on purpose), and shrugs draws. */
+    /** The bot's own move, judged the same way: when a weak bot hangs
+        something, it owns up like a good sport — that's when the angry
+        face is funniest, and it teaches spotting blunders. */
+    _botReactToOwnMove() {
+        try {
+            const bot = this._cpuBot;
+            if (!bot || !this.game || !this._botGame) return;
+            const before = (typeof this._botEngineBefore === 'number') ? this._botEngineBefore : null;
+            if (before === null) return;
+            const after = this._evaluate(this.game);
+            const deltaBlack = after - before; // + = good for Black (the bot)
+            const moveNo = Math.max(1, Math.ceil(this.game.moveHistory.length / 2));
+            const pick = (arr) => arr[moveNo % arr.length];
+            if (deltaBlack <= -200) {
+                this._botSetMood('angry');
+                this._botSay(pick([
+                    'Ugh, that was awful. Punish me!',
+                    'Did I just hang that? Take it — you earned it.',
+                    'My circuits glitched. Go on, take the gift.',
+                ]));
+            } else if (deltaBlack >= 250) {
+                this._botSetMood('happy');
+                this._botSay(pick([
+                    'Oh, that is nasty. Sorry not sorry.',
+                    'Too strong. You cannot stop this.',
+                ]));
+            }
+        } catch (_) {}
+    }
     _botGameEnd(kind) {
         try {
             if (!this._botGame || !this._cpuBot) return;
-            const bot = this._cpuBot;
             if (kind === 'win') {
                 this._botSetMood('happy');
                 this._botSay('You got me! Rematch?');
@@ -869,8 +970,11 @@ class ChessCourseApp {
        games never touch course progress. ── */
     _buildBotArenaUI(l, bot) {
         try {
+            // The arena ships its own ← Bots navigation; the lesson back
+            // button above it would double up, so it hides in bot mode
+            // (and _buildLessonUI restores it for real lessons).
             const back = document.getElementById('lesson-back-btn');
-            if (back) { back.textContent = '← Back to Bots'; back.dataset.action = 'back-bots'; }
+            if (back) back.style.display = 'none';
         } catch (_) {}
         document.getElementById('lesson-content').innerHTML = `
             <div class="lesson-detail-header">
@@ -943,7 +1047,7 @@ class ChessCourseApp {
     _buildLessonUI(l) {
         try {
             const back = document.getElementById('lesson-back-btn');
-            if (back) { back.textContent = '← Back to Lessons'; back.dataset.action = 'back-lessons'; }
+            if (back) { back.style.display = ''; back.textContent = '← Back to Lessons'; back.dataset.action = 'back-lessons'; }
         } catch (_) {}
         const t    = this.teachers.find(x => x.id === l.teacherId);
         const free = l.type === 'free-game';
@@ -1439,8 +1543,14 @@ class ChessCourseApp {
     _doPlayerMove(from, to) {
         // Coach snapshot: evaluate BEFORE the move lands so the swing can
         // be judged after it (bot games only; one static eval, instant).
+        // The pre-move snapshot powers hang detection on a throwaway board.
         if (this._botGame && this._cpuBot && this.game && !this.game.gameOver) {
             try { this._botEvalBefore = this._evaluate(this.game); } catch (_) { this._botEvalBefore = null; }
+            try {
+                const pc = this.game.board[from[0]][from[1]];
+                this._botSnapBefore = this.game.snapshot();
+                this._botMoveInfo = { piece: (pc || '').toLowerCase() || '', from: [from[0], from[1]], to: [to[0], to[1]] };
+            } catch (_) { this._botSnapBefore = null; this._botMoveInfo = null; }
             this._botLastMove = { captured: false, promo: false };
         }
         const result = this.game.movePiece(from, to);
@@ -1666,6 +1776,11 @@ class ChessCourseApp {
         if (this.game.gameOver) { this.cpuBusy = false; return; }
         const g = this.game;
         const moves = this._allMoves(g, 'black');
+        // Coach baseline for the bot's OWN move (bot games only): judged
+        // after it lands, in _commitCpuMove.
+        if (this._botGame && this._cpuBot) {
+            try { this._botEngineBefore = this._evaluate(g); } catch (_) { this._botEngineBefore = null; }
+        }
 
         if (!moves.length) {
             // No legal black moves — distinguish checkmate from stalemate
@@ -1689,13 +1804,14 @@ class ChessCourseApp {
         }
 
         const diff = this._cpuDifficulty || 'easy';
-        // Bot games use Elo-mapped settings; easy/medium below are exactly
-        // the legacy behaviours, so existing games play identically.
+        // Bot games use Elo-mapped settings; easy/medium keep their legacy
+        // selection mechanics (same blunder model), lifted by quiescence
+        // like everything else.
         const P = (diff === 'bot' && this._cpuBotParams)
             ? this._cpuBotParams
             : diff === 'medium'
-                ? { depth: 3, blunder: 0, pool: 0 }
-                : { depth: 2, blunder: 0.15, pool: 60 };
+                ? { depth: 3, blunder: 0, pool: 0, wild: 0, capMs: 2500 }
+                : { depth: 2, blunder: 0.15, pool: 60, wild: 0, capMs: 1500 };
         const depth = P.depth;
         this._setSpeech(P.depth >= 4 ? `${(this._cpuBot && this._cpuBot.name) || 'Bot'} is thinking hard…` : P.depth === 3 ? 'Thinking three moves deep…' : 'Playing a casual move…');
         // Chunked root search so the UI never freezes: a few root moves per
@@ -1704,7 +1820,9 @@ class ChessCourseApp {
         // stop scoring new root moves after capMs and play best-so-far.
         const epoch = this._searchEpoch || 0;
         const tStart = Date.now();
-        const capMs = P.depth >= 4 ? (P.capMs || 2500) : 0;
+        // Every level thinks at most capMs per move (best-so-far wins):
+        // deep bots stay usable instead of freezing the board.
+        const capMs = P.capMs || 0;
         const ordered = this._orderMoves(g, moves);
         let i = 0, alpha = -Infinity, scored = [];
         const step = () => {
@@ -1727,7 +1845,10 @@ class ChessCourseApp {
             if (i < ordered.length) { setTimeout(step, 0); return; }
             scored.sort((a, b) => b.score - a.score);
             let best = scored[0];
-            if (P.blunder > 0 && scored.length > 1) {
+            if ((P.wild || 0) > 0 && Math.random() < P.wild && ordered.length) {
+                // True beginner chaos: any legal move, however silly.
+                best = ordered[Math.floor(Math.random() * ordered.length)];
+            } else if (P.blunder > 0 && scored.length > 1) {
                 // Weaker bots blunder like a beginner: mostly near-best,
                 // sometimes wild.
                 if (Math.random() < P.blunder) best = scored[Math.floor(Math.random() * scored.length)];
@@ -1777,6 +1898,8 @@ class ChessCourseApp {
         } else {
             const num = Math.ceil(g.moveHistory.length / 2);
             this._fb(`Move ${num} — your turn (White)`, 'info');
+            // The bot judges its own move too (weak bots fess up).
+            if (this._botGame && this._cpuBot) this._botReactToOwnMove();
         }
         this._updateTurnUI();
     }
@@ -4786,40 +4909,43 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
           avatar: 'assets/DoChess_Bot_Avatars/straight/bot-2.png',
           moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-2.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-2.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-2.png' },
           blurb: 'Knows one opening trap and will absolutely try it.' },
-        { id: 'rook',   name: 'Rook Roll',     elo: 800,
+        { id: 'nico',   name: 'Nico',          elo: 800,
           avatar: 'assets/DoChess_Bot_Avatars/straight/bot-3.png',
           moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-3.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-3.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-3.png' },
           blurb: 'Solid club player. Punishes hanging pieces.' },
-        { id: 'bishop', name: 'Bishop Blitz',  elo: 1200,
+        { id: 'luna',   name: 'Luna',          elo: 1200,
           avatar: 'assets/DoChess_Bot_Avatars/straight/bot-4.png',
           moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-4.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-4.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-4.png' },
           blurb: 'Sharp tactics. Double-check every trade.' },
-        { id: 'queen',  name: 'Queen Gambit',  elo: 1600,
+        { id: 'max',    name: 'Max',           elo: 1600,
           avatar: 'assets/DoChess_Bot_Avatars/straight/bot-5.png',
           moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-5.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-5.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-5.png' },
           blurb: 'Deep calculation. Bring your best game.' },
-        { id: 'king',   name: 'King Crusher',  elo: 2100,
+        { id: 'atlas',  name: 'Atlas',         elo: 2100,
           avatar: 'assets/DoChess_Bot_Avatars/straight/bot-6.png',
           moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-6.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-6.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-6.png' },
           blurb: 'The final boss. Good luck.' }
     ];
 
-    /** Engine settings per bot Elo: search depth, blunder rate, and the
-        score window a "casual" pick may fall inside. Easy/Medium below are
-        exactly the legacy behaviours, so existing games play identically.
-        Strengths are engineered estimates, not tournament ratings: every
-        rung searches deeper or blunders less than the one below, so the
-        ladder order is strict by construction (verified by self-play in
-        test-vs-bots). Quiescence search lifts every depth, which is what
-        makes the top rungs genuinely strong instead of horizon-blind. */
+    /** Engine settings per bot Elo: search depth, blunder rate, the
+        score window a "casual" pick may fall inside, and `wild` — the
+        chance of a FULLY random legal move (how real beginners actually
+        play: sometimes the rook just goes for a walk). Easy/Medium below
+        are exactly the legacy behaviours, so existing games play
+        identically. Strengths are engineered estimates, not tournament
+        ratings: every rung searches deeper or plays wilder-less than the
+        one below, so the ladder order is strict by construction (verified
+        by self-play gauntlet, see test-vs-bots). Quiescence search lifts
+        every depth, which is what makes the top rungs genuinely strong
+        instead of horizon-blind. */
     static botCpuParams(elo) {
         const e = Number(elo) || 800;
-        if (e <= 300)  return { depth: 1, blunder: 0.40, pool: 200 };
-        if (e <= 600)  return { depth: 1, blunder: 0.15, pool: 80 };
-        if (e <= 1000) return { depth: 2, blunder: 0.10, pool: 50 };
-        if (e <= 1400) return { depth: 3, blunder: 0.03, pool: 30 };
-        if (e <= 1800) return { depth: 3, blunder: 0, pool: 0 };
-        return { depth: 4, blunder: 0, pool: 0, capMs: 3000 };
+        if (e <= 300)  return { depth: 1, blunder: 0.30, pool: 200, wild: 0.25, capMs: 0 };
+        if (e <= 600)  return { depth: 1, blunder: 0.12, pool: 80, wild: 0.08, capMs: 0 };
+        if (e <= 1000) return { depth: 2, blunder: 0.10, pool: 50, wild: 0, capMs: 1200 };
+        if (e <= 1400) return { depth: 3, blunder: 0.03, pool: 30, wild: 0, capMs: 2000 };
+        if (e <= 1800) return { depth: 3, blunder: 0, pool: 0, wild: 0, capMs: 2000 };
+        return { depth: 4, blunder: 0, pool: 0, wild: 0, capMs: 3000 };
     }
 
     // Line icons for the online action bar. Phones hide the text labels

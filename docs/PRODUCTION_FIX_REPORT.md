@@ -768,6 +768,39 @@ feelings). Full Playwright suite: **104 passed, 0 failed**.
 
 ---
 
+## 21. Bot arena split, real names, strict Elo, coach bots (2026-10-15)
+
+1. **Bot games left Lesson 10.** A dedicated arena shell (Vs header,
+   back-to-bots, Rematch/Change bot, move log, result card pointing
+   back to bots) hosts the same board component — no lesson number,
+   teacher, lecture notes, Complete or Next buttons. The stray
+   duplicate back button is gone too. Practice still never locks and
+   never completes the course.
+2. **Names:** bots are Alex, Prima, Nico, Luna, Max, Atlas (portraits
+   bot-1..6 in order); professors are now Milo, Sara and Leo, so no
+   name is ever shared between a teacher and a bot.
+3. **Strict Elo, settled:** quiescence search at every depth
+   (horizon blindness gone), true-random beginner chaos (Alex plays
+   a fully random move 25% of the time), per-level think caps
+   (1.2–3 s), and a self-play gauntlet with real settings —
+   Nico beats Alex both colors, Luna beats Nico — plus mate-in-1
+   and hanging-piece solves asserted at every depth in the suite.
+   Strengths stay documented as engineered estimates.
+4. **Coach bots:** each bot's own portrait set (straight/happy/
+   angry) reacts per move — blunders and hanging pieces get the
+   angry face with the specific reason named ("leaves your knight
+   hanging", "that trade loses material"), wins get the happy face;
+   bots even own up to their own blunders. The talk box coaches
+   with specifics (hangs, trades, checks, castling, development,
+   center control), never generic praise, never numbers. Avatars
+   render covered and sharp (the stretch is gone). Phone (390px)
+   and desktop verified by screenshot: foe, Elo, talk and board
+   all visible.
+
+Test deltas: `test-vs-bots.spec.js` **6/6**. Full suite re-run below.
+
+---
+
 ## 20. Faster puzzles, LVL on profile, DB history, 6 party boards, bell toggle, important-only retention (2026-10-15)
 
 1. **Puzzles load faster.** The puzzles page paid two sequential API
