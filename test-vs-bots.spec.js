@@ -80,6 +80,9 @@ test('tapping a bot starts a real game with Elo-mapped strength', async ({ brows
     await page.evaluate(() => window.app.showVsBots());
     await page.locator('.bot-card[data-bot="alex"] [data-action="vs-bot"]').click();
     await expect(page.locator('#lesson-screen')).toHaveClass(/active/, { timeout: 15000 });
+    // Roster deals random colors — force this game white for a deterministic script.
+    const drewBlack = await page.evaluate(() => window.app._sidePlayer && window.app._sidePlayer() === 'black');
+    if (drewBlack) await page.locator('.lesson-actions [data-action="swap-sides"]').click();
     // Bot identity is on the board chrome, and the difficulty picker (which
     // would silently leave bot mode) is replaced by a static chip.
     await expect(page.locator('#profile-opp')).toContainText(/Alex/);
@@ -148,7 +151,7 @@ test('coach moods, talk and game-end feelings', async ({ browser }) => {    cons
         'brilliant/happy', 'good/happy', 'quiet/straight',
         'quiet/straight', 'mistake/angry', 'blunder/angry',
     ]);
-    await page.evaluate(() => window.app.startBotGame('prima'));
+    await page.evaluate(() => window.app.startBotGame('prima', { color: 'white' }));
     await page.waitForTimeout(800);
     // Opening tip on a quiet developing move, straight face.
     await page.locator('#chess-board [data-square="e2"]').first().click();
@@ -210,7 +213,7 @@ test('Stockfish score parsing and verdict merge (no worker needed)', async ({ br
     // Verdict merge: same mood or near-miss never flips the face.
     const m = await page.evaluate(() => {
         const A = window.app;
-        A.startBotGame('alex');
+        A.startBotGame('alex', { color: 'white' });
         return [
             A._botApplySfVerdict(90, 40, 5),     // both straight, near
             A._botApplySfVerdict(150, 40, 5),    // happy vs straight but <120 apart
@@ -307,6 +310,43 @@ test('verdicts see tactics: static-blind spots fixed by search', async ({ browse
     expect(d.sac.searchDelta).toBeLessThanOrEqual(-150);
     // Sound development: search stays calm, never a false blunder call.
     expect(d.dev.searchDelta).toBeGreaterThan(-80);
+    expect(errors, 'no page errors').toEqual([]);
+    await ctx.close();
+});
+
+test('bot can play White: colors, flip, first move, coach as Black', async ({ browser }) => {
+    const { ctx, page, errors } = await boot(browser, 1280);
+    await page.evaluate(() => window.app.startBotGame('nico', { color: 'black' }));
+    await page.waitForTimeout(800);
+    // Identity: header, both cards name the right armies.
+    await expect(page.locator('#lesson-screen .lesson-title')).toContainText(/you are Black/);
+    await expect(page.locator('#profile-opp')).toContainText(/Nico/);
+    await expect(page.locator('#profile-opp')).toContainText(/White/);
+    await expect(page.locator('#profile-you')).toContainText(/Black/);
+    // Board auto-flipped for Black: a1 renders above h8.
+    const flip = await page.evaluate(() => {
+        const top = (sq) => document.querySelector(`#chess-board [data-square="${sq}"]`)?.getBoundingClientRect().top;
+        return { a1: top('a1'), h8: top('h8') };
+    });
+    expect(flip.a1).toBeLessThan(flip.h8);
+    // Bot (White) opens by itself: a white move lands, turn passes to us.
+    await page.waitForFunction(() => {
+        try { return window.app.game.moveHistory.length >= 1 && window.app.game.currentPlayer === 'black' && !window.app.cpuBusy; } catch (_) { return false; }
+    }, null, { timeout: 30000 });
+    // We answer e7-e5 through the UI; the coach judges OUR (black) move.
+    await page.locator('#chess-board [data-square="e7"]').first().click();
+    await page.waitForTimeout(300);
+    await page.locator('#chess-board [data-square="e5"]').first().click();
+    await page.waitForFunction(() => {
+        try { return window.app.game.moveHistory.length >= 3; } catch (_) { return false; }
+    }, null, { timeout: 30000 });
+    await expect(page.locator('#bot-talk')).not.toBeEmpty();
+    expect(await page.locator('#bot-mood-img').getAttribute('src')).toMatch(/bot-3\.png/);
+    // Swap sides starts a fresh game with colors reversed.
+    await page.locator('.lesson-actions [data-action="swap-sides"]').click();
+    await page.waitForTimeout(800);
+    await expect(page.locator('#lesson-screen .lesson-title')).toContainText(/you are White/);
+    await expect(page.locator('#profile-you')).toContainText(/White/);
     expect(errors, 'no page errors').toEqual([]);
     await ctx.close();
 });

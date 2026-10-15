@@ -253,6 +253,7 @@ class ChessCourseApp {
                 if (!action) return;
                 const a = action.dataset.action;
                 if (a === 'reset-board') this.resetBoard();
+                else if (a === 'swap-sides') this._swapBotSides();
                 else if (a === 'mark-complete') this.markComplete();
                 else if (a === 'back-lessons') this.showLessons();
                 else if (a === 'back-bots') this.showVsBots();
@@ -654,6 +655,9 @@ class ChessCourseApp {
         if (!l || !this.isOpen(id)) return;
         // Normal lesson entry always leaves practice-bot mode behind.
         this._botGame = false; this._cpuBot = null; this._cpuBotParams = null;
+        // Lessons are always taught White-bottom.
+        this._playerColor = 'white'; this._botColor = 'black';
+        this.boardFlip = false;
         this.currentLesson = l;        this._buildLessonUI(l);
         this._go('lesson-screen');
         requestAnimationFrame(() => {
@@ -669,16 +673,26 @@ class ChessCourseApp {
        Bots play on the lesson free-game board (the existing game
        component: legal moves, clocks chrome, promotion, game-over card)
        with Elo-mapped engine settings. Practice mode never locks behind
-       course progress and never completes lesson 10. */
-    startBotGame(botId) {
+       course progress and never completes lesson 10. Colors are drawn
+       per game (opts.color 'white'|'black'|'random', default random):
+       the board, input, engine, coach and chrome all follow the draw. */
+    startBotGame(botId, opts) {
         const bot = ChessCourseApp.BOTS.find(b => b && b.id === botId);
         if (!bot) return;
         const l = this.lessons.find(x => x.id === 10);
         if (!l) return;
+        const want = (opts && opts.color) || 'random';
+        const playerColor = want === 'white' ? 'white' : want === 'black' ? 'black'
+            : (Math.random() < 0.5 ? 'white' : 'black');
         this._cpuDifficulty = 'bot';
         this._cpuBot = bot;
         this._cpuBotParams = ChessCourseApp.botCpuParams(bot.elo);
         this._botGame = true;
+        this._playerColor = playerColor;
+        this._botColor = playerColor === 'white' ? 'black' : 'white';
+        // Own perspective at the bottom, like every chess app: the board
+        // auto-flips for Black players (manual Flip still toggles view).
+        this.boardFlip = playerColor === 'black';
         this._botMood = 'straight';
         this._botSaid = [];
         // Game story: the dialogue system remembers what happened, so later
@@ -705,6 +719,13 @@ class ChessCourseApp {
         // Startpos baseline for the Stockfish coach (move 1 measures clean).
         try { this._botSfBaseline(); } catch (_) {}
         this._go('lesson-screen');
+        // Bot plays White: it moves first — same path as every bot reply.
+        if (this._botColor === 'white') {
+            this.cpuBusy = true;
+            this._updateTurnUI();
+            this._fb(`Move 1 · ${bot.name} opens…`, 'info');
+            setTimeout(() => this._cpuMove(), 700);
+        }
         requestAnimationFrame(() => {
             // Bot games open on the FOE, not the board center: the point of
             // the arena is seeing who you face (face, Elo, talk). Centering
@@ -744,6 +765,14 @@ class ChessCourseApp {
             this._botSay('Noted.');
         } catch (_) {}
     }
+
+    /* ── Sides: who is who this game ───────────────────────────────
+       Lessons and the classic free game are always player-White; bot
+       games follow the per-game draw (_playerColor/_botColor). Every
+       color-dependent path below goes through these two getters. */
+    _sidePlayer() { return (this._botGame && this._playerColor) ? this._playerColor : 'white'; }
+    _sideBot() { return (this._botGame && this._botColor) ? this._botColor : 'black'; }
+    _sideName(color) { return color === 'white' ? 'White' : 'Black'; }
 
     _botSetMood(mood) {
         try {
@@ -830,9 +859,10 @@ class ChessCourseApp {
             if (!bot || !this.game) return;
             const g = this.game;
             const names = ChessCourseApp.BOT_PIECE_NAMES;
+            const me = this._sidePlayer();
             const before = (typeof this._botEvalBefore === 'number') ? this._botEvalBefore : null;
-            const after = this._botSearchWhite(g, 2); // White's perspective
-            // White (the player) gained when White's search score rises.
+            const after = this._botSearchPov(g, me, 2); // player's perspective
+            // The player gained when their own search score rises.
             const delta = (before === null) ? 0 : (after - before);
             const moveNo = Math.max(1, Math.ceil(g.moveHistory.length / 2));
             const last = this._botLastMove || {};
@@ -840,19 +870,20 @@ class ChessCourseApp {
             const status = g.getGameStatus();
             const capName = (typeof last.captured === 'string' && last.captured)
                 ? (names[last.captured.toLowerCase()] || 'piece') : '';
-            // New hangs: white pieces hanging now that were safe before.
+            // New hangs: the PLAYER's pieces hanging now that were safe before.
             let newHang = null;
             try {
                 if (this._botSnapBefore) {
                     const gb = new ChessGame();
                     gb.restore(this._botSnapBefore);
-                    const was = new Set(this._hangList(gb, 'white').map(h => h.sq.join(',')));
-                    const now = this._hangList(g, 'white');
+                    const was = new Set(this._hangList(gb, me).map(h => h.sq.join(',')));
+                    const now = this._hangList(g, me);
                     newHang = now.find(h => !was.has(h.sq.join(','))) || null;
                 }
             } catch (_) { newHang = null; }
             const hangName = newHang ? (names[newHang.piece] || 'piece') : '';
             const movedPc = (info.piece || '').toLowerCase();
+            const homeRow = me === 'white' ? 7 : 0;
             const from = info.from || null, to = info.to || null;
             const alg = (sq) => { try { return this.game.coordsToAlgebraic(sq); } catch (_) { return ''; } };
             const moveSq = (from && to) ? `${alg(from)}→${alg(to)}` : '';
@@ -861,10 +892,10 @@ class ChessCourseApp {
                 const v = Math.abs(Math.round(cp / 10) / 10);
                 return `≈${v} pawn${v === 1 ? '' : 's'}`;
             };
-            const isCastle = movedPc === 'k' && from && to && from[0] === 7 && to[0] === 7
+            const isCastle = movedPc === 'k' && from && to && from[0] === homeRow && to[0] === homeRow
                 && Math.abs(to[1] - from[1]) === 2;
             const toCenter = to && ((to[0] === 3 || to[0] === 4) && (to[1] === 3 || to[1] === 4));
-            const developed = (movedPc === 'n' || movedPc === 'b') && from && from[0] === 7 && moveNo <= 10;
+            const developed = (movedPc === 'n' || movedPc === 'b') && from && from[0] === homeRow && moveNo <= 10;
             let mood = 'straight', text = '';
             // Anti-repeat: the same sentence never comes twice in a row —
             // recent lines are filtered out before rotating by move number.
@@ -1027,9 +1058,12 @@ class ChessCourseApp {
                     const now = this._botMovesUci(this.game.moveHistory).join(',');
                     if (now !== stamp) return;
                     // Baseline must be the pre-move position; anything else
-                    // would blame the player for the bot's own reply.
+                    // would blame the player for the bot's own reply. The
+                    // worker scores White's view; flip for Black players so
+                    // the verdict reads in the PLAYER's perspective.
                     if (typeof this._botSfPrev === 'number' && this._botSfPrevStamp === beforeStamp) {
-                        const sfDelta = r.whiteCp - this._botSfPrev;
+                        const whiteDelta = r.whiteCp - this._botSfPrev;
+                        const sfDelta = this._sidePlayer() === 'white' ? whiteDelta : -whiteDelta;
                         this._botSfPrev = r.whiteCp;
                         this._botSfPrevStamp = stamp;
                         this._botApplySfVerdict(sfDelta, ownDelta, moveNo, facts);
@@ -1053,14 +1087,16 @@ class ChessCourseApp {
         try {
             const g = this.game;
             if (!g) return out;
+            const me = this._sidePlayer(), foe = this._sideBot();
+            const homeRow = me === 'white' ? 7 : 0;
             const names = ChessCourseApp.BOT_PIECE_NAMES;
             const info = this._botMoveInfo || {};
             const last = this._botLastMove || {};
             if (this._botSnapBefore) {
                 const gb = new ChessGame();
                 gb.restore(this._botSnapBefore);
-                const was = new Set(this._hangList(gb, 'white').map(h => h.sq.join(',')));
-                const now = this._hangList(g, 'white');
+                const was = new Set(this._hangList(gb, me).map(h => h.sq.join(',')));
+                const now = this._hangList(g, me);
                 const nh = now.find(h => !was.has(h.sq.join(','))) || null;
                 if (nh) {
                     out.hangName = names[nh.piece] || 'piece';
@@ -1074,29 +1110,35 @@ class ChessCourseApp {
             if (from && to) {
                 try { out.moveSq = `${g.coordsToAlgebraic(from)}→${g.coordsToAlgebraic(to)}`; } catch (_) {}
             }
-            out.checking = g.getGameStatus().startsWith('check-black');
-            out.castle = movedPc === 'k' && from && to && from[0] === 7 && to[0] === 7 && Math.abs(to[1] - from[1]) === 2;
+            out.checking = g.getGameStatus().startsWith(`check-${foe}`);
+            out.castle = movedPc === 'k' && from && to && from[0] === homeRow && to[0] === homeRow && Math.abs(to[1] - from[1]) === 2;
             out.center = !!(to && ((to[0] === 3 || to[0] === 4) && (to[1] === 3 || to[1] === 4)) && (movedPc === 'p' || movedPc === 'n'));
             const moveNo = Math.max(1, Math.ceil((g.moveHistory || []).length / 2));
-            out.developed = (movedPc === 'n' || movedPc === 'b') && from && from[0] === 7 && moveNo <= 10;
+            out.developed = (movedPc === 'n' || movedPc === 'b') && from && from[0] === homeRow && moveNo <= 10;
         } catch (_) {}
         return out;
     }
 
-    /** Forward-looking coaching read off the LIVE position (Black just
-        moved or the game just started — it is White's plan that matters).
-        Every tip names real squares and pieces, verified legal where a
-        move is suggested. Returns null when nothing concrete applies. */
+    /** Forward-looking coaching read off the LIVE position (whoever just
+        moved, it is the PLAYER's plan that matters — either army). Every
+        tip names real squares and pieces, verified legal where a move is
+        suggested. Returns null when nothing concrete applies. */
     _botPlanTip() {
         try {
             const g = this.game;
             if (!g || g.gameOver) return null;
+            const me = this._sidePlayer(), foe = this._sideBot();
             const names = ChessCourseApp.BOT_PIECE_NAMES;
             const alg = (sq) => { try { return g.coordsToAlgebraic(sq); } catch (_) { return ''; } };
             const moveNo = Math.max(1, Math.ceil((g.moveHistory || []).length / 2));
-            // 1) A loose black piece White can win: name it and its square.
+            const myK = me === 'white' ? 'K' : 'k';
+            const myN = me === 'white' ? 'N' : 'n';
+            const myB = me === 'white' ? 'B' : 'b';
+            const myP = me === 'white' ? 'P' : 'p';
+            const eHome = me === 'white' ? 'e1' : 'e8';
+            // 1) A loose FOE piece the player can win: name it and its square.
             try {
-                const loose = this._hangList(g, 'black');
+                const loose = this._hangList(g, foe);
                 if (loose && loose.length) {
                     const t = loose[0];
                     const nm = names[t.piece] || 'piece';
@@ -1105,40 +1147,46 @@ class ChessCourseApp {
             } catch (_) {}
             // 2) King still in the center past the opening: castle now.
             try {
-                if (moveNo >= 3 && g.board[7][4] === 'K') {
-                    const km = g.getLegalMoves([7, 4]) || [];
-                    const castle = km.find(m => m[0] === 7 && (m[1] === 6 || m[1] === 2));
+                let kc = null;
+                try { kc = g.algebraicToCoords(eHome); } catch (_) { kc = null; }
+                if (moveNo >= 3 && kc && g.board[kc[0]][kc[1]] === myK) {
+                    const km = g.getLegalMoves(kc) || [];
+                    const homeRow = kc[0];
+                    const castle = km.find(m => m[0] === homeRow && (m[1] === 6 || m[1] === 2));
                     if (castle) {
                         const side = castle[1] === 6 ? 'kingside' : 'queenside';
-                        return `Castle ${side} (${alg([7, 4])} to ${alg(castle)}) while it is safe — a center king turns every tactic against you.`;
+                        return `Castle ${side} (${alg(kc)} to ${alg(castle)}) while it is safe — a center king turns every tactic against you.`;
                     }
                     return 'Your king still sits in the center. Tuck it away behind pawns before you start anything ambitious.';
                 }
             } catch (_) {}
             // 3) Undeveloped minor on its home square with a real destination.
             try {
-                const wants = { g1: ['f3', 'h3'], b1: ['c3', 'a3'], c1: ['f4', 'g5', 'e3'], f1: ['c4', 'b5', 'e2'] };
-                for (const from of ['g1', 'b1', 'c1', 'f1']) {
+                const dev = me === 'white'
+                    ? { homes: ['g1', 'b1', 'c1', 'f1'], wants: { g1: ['f3', 'h3'], b1: ['c3', 'a3'], c1: ['f4', 'g5', 'e3'], f1: ['c4', 'b5', 'e2'] } }
+                    : { homes: ['g8', 'b8', 'c8', 'f8'], wants: { g8: ['f6', 'h6'], b8: ['c6', 'a6'], c8: ['f5', 'g4', 'e6'], f8: ['c5', 'b4', 'e7'] } };
+                for (const from of dev.homes) {
                     let fc = null;
                     try { fc = g.algebraicToCoords(from); } catch (_) { continue; }
                     const pc = g.board[fc[0]][fc[1]];
-                    if (!pc || (pc !== 'N' && pc !== 'B')) continue;
+                    if (!pc || (pc !== myN && pc !== myB)) continue;
                     const legal = new Set((g.getLegalMoves(fc) || []).map(m => alg(m)));
-                    const dest = (wants[from] || []).find(s => legal.has(s)) || [...legal][0];
+                    const dest = (dev.wants[from] || []).find(s => legal.has(s)) || [...legal][0];
                     if (!dest) continue;
-                    const pnm = pc === 'N' ? 'knight' : 'bishop';
+                    const pnm = pc === myN ? 'knight' : 'bishop';
                     return `Develop your ${pnm} from ${from} to ${dest} — it fights for the center and frees your back rank. Undeveloped pieces are just spectators.`;
                 }
             } catch (_) {}
             // 4) Unclaimed center: push a center pawn if it can go.
             try {
-                for (const from of ['d2', 'e2']) {
+                const pushes = me === 'white'
+                    ? [['d2', 'd4'], ['e2', 'e4']] : [['d7', 'd5'], ['e7', 'e5']];
+                for (const [from, dest] of pushes) {
                     let fc = null;
                     try { fc = g.algebraicToCoords(from); } catch (_) { continue; }
-                    if (g.board[fc[0]][fc[1]] !== 'P') continue;
+                    if (g.board[fc[0]][fc[1]] !== myP) continue;
                     const legal = new Set((g.getLegalMoves(fc) || []).map(m => alg(m)));
-                    const dest = from === 'd2' ? (legal.has('d4') ? 'd4' : null) : (legal.has('e4') ? 'e4' : null);
-                    if (dest) return `Claim the middle with ${from} to ${dest} — central pawns back every plan you will ever make.`;
+                    if (legal.has(dest)) return `Claim the middle with ${from} to ${dest} — central pawns back every plan you will ever make.`;
                 }
             } catch (_) {}
             return null;
@@ -1196,8 +1244,9 @@ class ChessCourseApp {
             if (!bot || !this.game || !this._botGame) return;
             const before = (typeof this._botEngineBefore === 'number') ? this._botEngineBefore : null;
             if (before === null) return;
-            const after = this._botSearchWhite(this.game, 2); // White's view
-            const deltaBlack = before - after; // + = good for Black (the bot)
+            const after = this._botSearchPov(this.game, this._sidePlayer(), 2);
+            const swing = after - before; // + = good for the player
+            const deltaBlack = this._sideBot() === 'black' ? -swing : swing; // + = good for the bot
             const moveNo = Math.max(1, Math.ceil(this.game.moveHistory.length / 2));
             const story = this._botStory || (this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 });
             if (deltaBlack <= -200) {
@@ -1205,7 +1254,7 @@ class ChessCourseApp {
                 // Name what was hung so the player learns to LOOK.
                 let hung = '';
                 try {
-                    const hangs = this._hangList(this.game, 'black');
+                    const hangs = this._hangList(this.game, this._sideBot());
                     if (hangs && hangs.length) {
                         const names = ChessCourseApp.BOT_PIECE_NAMES;
                         hung = names[hangs[0].piece] || 'piece';
@@ -1242,8 +1291,9 @@ class ChessCourseApp {
             const st = this._botStory || (this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 });
             const moveNo = Math.max(1, Math.ceil((this.game.moveHistory || []).length / 2));
             if (moveNo < 8 || moveNo - st.lastTauntMove < 6) return;
-            let lead = 0; // + = bot (Black) ahead, White perspective inverted
+            let lead = 0; // + = bot ahead, either color
             try { lead = this._evaluate(this.game); } catch (_) { return; }
+            if (this._sideBot() === 'white') lead = -lead;
             const trash = (window.DoChessDialogue && DoChessDialogue.PERSONAS[bot.id]
                 && DoChessDialogue.PERSONAS[bot.id].trash) || 1;
             if (lead >= 200 && Math.random() < 0.25 + trash * 0.2) {
@@ -1318,6 +1368,8 @@ class ChessCourseApp {
        number, teacher, lecture notes, Complete or Next buttons. Practice
        games never touch course progress. ── */
     _buildBotArenaUI(l, bot) {
+        const playerColor = this._sidePlayer(), botColor = this._sideBot();
+        const PC = this._sideName(playerColor), BC = this._sideName(botColor);
         try {
             // The arena ships its own ← Bots navigation; the lesson back
             // button above it would double up, so it hides in bot mode
@@ -1329,7 +1381,7 @@ class ChessCourseApp {
             <div class="lesson-detail-header bot-header">
                 <button class="btn-secondary sm" data-action="back-bots" type="button" aria-label="Back to all bots">← Bots</button>
                 <div class="lesson-title">
-                    <div><h2>Vs ${esc(bot.name)}</h2><p>${bot.elo} Elo · ${esc(ChessCourseApp.botSkill(bot.elo))} · practice game — you are White</p></div>
+                    <div><h2>Vs ${esc(bot.name)}</h2><p>${bot.elo} Elo · ${esc(ChessCourseApp.botSkill(bot.elo))} · practice game — you are ${PC}</p></div>
                 </div>
             </div>
             <div class="lesson-content">
@@ -1338,17 +1390,18 @@ class ChessCourseApp {
                         ${this._botAvatarHTML(bot, 60, 'bot-mood-img')}
                         <div class="info">
                             <span class="name">${esc(bot.name)}</span>
-                            <span class="sub">${bot.elo} Elo · Black</span>
+                            <span class="sub">${bot.elo} Elo · ${BC}</span>
                             <div class="captured-row" data-cap="opp"></div>
                         </div>
                         <div class="turn-indicator" id="ti-opp">Waiting</div>
                     </div>
-                    <div class="bot-talk" id="bot-talk" data-mood="straight" role="status" aria-live="polite"><span class="coach-name">${esc(bot.name)}</span><span class="coach-text">Hey! I'm ${esc(bot.name)}. You are White — you start!</span></div>
+                    <div class="bot-talk" id="bot-talk" data-mood="straight" role="status" aria-live="polite"><span class="coach-name">${esc(bot.name)}</span><span class="coach-text">Hey! I'm ${esc(bot.name)}. You are ${PC} — ${playerColor === 'white' ? 'you start!' : 'I start — good luck!'}</span></div>
                     <div class="sticky-actions" id="lesson-sticky">
                         <span class="sticky-label" id="lesson-sticky-label">Vs ${esc(bot.name)}</span>
                         <span class="sticky-count"><span id="lesson-sticky-score">0</span> moves</span>
                         <button class="btn-secondary sm" data-action="reset-board" type="button" title="Rematch"><span class="btn-icon">↺</span> Rematch</button>
                         <button class="btn-secondary sm" data-action="flip-board" type="button" title="Flip board"><span class="btn-icon">⇄</span> Flip</button>
+                        <button class="btn-secondary sm" data-action="swap-sides" type="button" title="New game with colors swapped"><span class="btn-icon">⇄</span> Swap sides</button>
                         <button class="btn-secondary sm" data-action="back-bots" type="button" title="Change bot">Change bot</button>
                         <button class="icon-btn" id="lesson-focus-toggle" data-focus-toggle type="button"
                                 aria-expanded="true" aria-controls="lesson-screen"
@@ -1360,33 +1413,31 @@ class ChessCourseApp {
                     <div id="chess-board-wrapper"><div id="chess-board" role="group" aria-label="Chess board"></div></div>
                     <div id="promotion-picker" class="promotion-picker hidden"></div>
                     <div id="lesson-feedback" class="feedback info" role="status" aria-live="polite">
-                        Move 1 · Your move (White)
+                        Move 1 · ${playerColor === 'white' ? `Your move (${PC})` : `${esc(bot.name)} opens…`}
                     </div>
 
                     <div class="profile-card player" id="profile-you">
-                        <img class="avatar" src="${this._pieceFile('P')}" width="52" height="52" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
+                        <img class="avatar" src="${this._pieceFile(playerColor === 'white' ? 'P' : 'p')}" width="52" height="52" alt="You (${PC})" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
                         <div class="info">
                             <span class="name">You</span>
-                            <span class="sub">White</span>
+                            <span class="sub">${PC}</span>
                             <div class="captured-row" data-cap="you"></div>
                         </div>
-                        <div class="turn-indicator" id="ti-you">Your turn</div>
+                        <div class="turn-indicator" id="ti-you">${playerColor === 'white' ? 'Your turn' : 'Waiting'}</div>
                     </div>
                 </div>
                 <div class="lesson-dashboard">
                     <div class="dashboard-section">
                         <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Move Log</h4>
-                        <div class="move-log" id="move-log" role="log" aria-live="polite" aria-label="Move log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
+                        <div class="move-log" id="move-log" role="log" aria-live="polite" aria-label="Move log"><span style="color:var(--text-muted-dim)">No moves yet — select a ${playerColor === 'white' ? 'white' : 'black'} piece to begin.</span></div>
                     </div>
                     <div class="lesson-actions">
                         <button class="btn-secondary" data-action="reset-board">Rematch</button>
                         <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
+                        <button class="btn-secondary" data-action="swap-sides" title="New game with colors swapped">Swap sides</button>
                         ${this._muteBtnHTML()}
                         <button class="btn-secondary" data-action="back-bots" type="button">All bots</button>
-                    </div>
-                    <div id="gameover-card" style="display:none" role="dialog" aria-modal="false" aria-labelledby="gameover-title"></div>
-                </div>
-            </div>`;
+                    </div>`;
 
         this._initBoard(l);
         // Persona greeting (chess.com bots introduce themselves in voice).
@@ -1721,7 +1772,7 @@ class ChessCourseApp {
         if (!light) {
             this._updateMoveLog();
             this._updateTurnUI();
-            this._paintCaptured('lesson-content', this.game, 'white');
+            this._paintCaptured('lesson-content', this.game, this._sidePlayer());
         }
         const sc = document.getElementById('lesson-sticky-score');
         if (sc) sc.textContent = this.game.moveHistory.length;
@@ -1855,7 +1906,7 @@ class ChessCourseApp {
             this._fb('Exercise complete! Click "Complete Lesson" to continue.', 'success');
             return;
         }
-        if (this.game.currentPlayer !== 'white') return;
+        if (this.game.currentPlayer !== this._sidePlayer()) return;
         if (this.game.gameOver) return;
 
         const g = this.game;
@@ -1863,7 +1914,7 @@ class ChessCourseApp {
         // Selection never changes log/turn/captured — light sync only.
         const paintSel = () => this._draw({ light: true });
         if (!g.selectedSquare) {
-            if (g.board[r][c] && g.isColor(r, c, 'white')) {
+            if (g.board[r][c] && g.isColor(r, c, this._sidePlayer())) {
                 g.selectedSquare = [r, c];
                 g.legalMoves     = g.getLegalMoves([r, c]);
                 if (!g.legalMoves.length) {
@@ -1878,7 +1929,7 @@ class ChessCourseApp {
                 const from = g.selectedSquare;
                 g.selectedSquare = null; g.legalMoves = [];
                 this._doPlayerMove(from, [r, c]);
-            } else if (g.board[r][c] && g.isColor(r, c, 'white')) {
+            } else if (g.board[r][c] && g.isColor(r, c, this._sidePlayer())) {
                 g.selectedSquare = [r, c];
                 g.legalMoves     = g.getLegalMoves([r, c]);
                 paintSel();
@@ -1893,12 +1944,12 @@ class ChessCourseApp {
        EXECUTE PLAYER MOVE
     ══════════════════════════════════════════════════════════════ */
     _doPlayerMove(from, to) {
-        // Coach snapshot: search-scored BEFORE the move lands (White's
-        // perspective) so the swing can be judged after it (bot games
-        // only). The pre-move snapshot powers hang detection on a
-        // throwaway board.
+        // Coach snapshot: search-scored BEFORE the move lands (in the
+        // PLAYER's view, whichever army that is) so the swing can be
+        // judged after it (bot games only). The pre-move snapshot powers
+        // hang detection on a throwaway board.
         if (this._botGame && this._cpuBot && this.game && !this.game.gameOver) {
-            try { this._botEvalBefore = this._botSearchWhite(this.game, 2); } catch (_) { this._botEvalBefore = null; }
+            try { this._botEvalBefore = this._botSearchPov(this.game, this._sidePlayer(), 2); } catch (_) { this._botEvalBefore = null; }
             try {
                 const pc = this.game.board[from[0]][from[1]];
                 this._botSnapBefore = this.game.snapshot();
@@ -1909,7 +1960,7 @@ class ChessCourseApp {
         const result = this.game.movePiece(from, to);
         if (result === 'promotion-needed') {
             this._draw();
-            this._showPromotion(from, to, 'white');
+            this._showPromotion(from, to, this._sidePlayer());
             return;
         }
         if (this._botGame && result && typeof result === 'object') {
@@ -1943,14 +1994,16 @@ class ChessCourseApp {
 
         if (status.startsWith('checkmate')) {
             const winner = status.split('-')[1];
-            const msg = winner === 'white'
+            const mine = winner === this._sidePlayer();
+            const bot = this._botGame ? this._cpuBot : null;
+            const msg = mine
                 ? 'Checkmate! You win! Magnificent play!'
-                : 'Checkmate! The computer wins. Study the position and try again!';
-            this._fb(msg, winner === 'white' ? 'success' : 'error');
+                : `Checkmate! ${(bot && bot.name) || 'The computer'} wins. Study the position and try again!`;
+            this._fb(msg, mine ? 'success' : 'error');
             this.game.gameOver = true;
-            if (winner === 'white') { this.snd.playSuccess(); }
-            if (winner === 'white' && !this._botGame) this.markDone(this.currentLesson.id);
-            if (this._botGame) this._botGameEnd(winner === 'white' ? 'win' : 'loss');
+            if (mine) { this.snd.playSuccess(); }
+            if (mine && !this._botGame) this.markDone(this.currentLesson.id);
+            if (this._botGame) this._botGameEnd(mine ? 'win' : 'loss');
             this._updateTurnUI();
             return;
         }
@@ -1971,20 +2024,22 @@ class ChessCourseApp {
             if (this._botGame) this._botGameEnd('draw');
             this._updateTurnUI(); return;
         }
-        if (status.startsWith('check-white')) {
+        const me = this._sidePlayer(), foe = this._sideBot();
+        const bot = this._botGame ? this._cpuBot : null;
+        if (status.startsWith(`check-${me}`)) {
             this._fb('Your king is in check! You must defend it.', 'error');
             this.snd.playCheck();
             this._updateTurnUI();
-            return; // White is still to move — do NOT trigger CPU
+            return; // Still our move — do NOT trigger CPU
         }
-        if (status.startsWith('check-black')) {
-            this._fb('Check! The black king is under attack.', 'info');
+        if (status.startsWith(`check-${foe}`)) {
+            this._fb(bot ? `Check! ${bot.name}'s king is under attack.` : `Check! The ${this._sideName(foe)} king is under attack.`, 'info');
             this.snd.playCheck();
         }
 
-        // Trigger CPU if it is now black's turn (free game only)
-        if (this.game.currentPlayer === 'black' && !this.game.gameOver) {
-            // Coach reacts to White's move first (bot games only), then the
+        // Trigger CPU if it is now the bot's turn (free game only)
+        if (this.game.currentPlayer === foe && !this.game.gameOver) {
+            // Coach reacts to the player's move first (bot games only), then the
             // bot thinks. The feedback line is the single status source:
             // it names the move count and who is thinking — nothing else
             // echoes it.
@@ -2005,27 +2060,32 @@ class ChessCourseApp {
         _evaluate() is static material + tables: blind to sacrifices that
         work (condemned as "mistakes") and to pieces hung with no capture
         yet (praised as "quiet"). Verdicts therefore come from a real
-        depth-2 search from White's (the player's) perspective, bounded
+        depth-2 search from the PLAYER's perspective, bounded
         quiescence so it stays instant (~10-100ms measured). Falls back to
         static eval if the search ever fails. */
-    _botSearchWhite(g, depth) {
+    _botSearchPov(g, pov, depth) {
         try {
             const d = Math.max(1, Math.min(3, depth || 2));
-            const whiteToMove = (g.currentPlayer || 'white') === 'white';
+            const sideToMove = g.currentPlayer || 'white';
             const prevQ = this._quiesceDepth;
             this._quiesceDepth = 3;
             let sc;
             try {
-                sc = this._search(g, d, -Infinity, Infinity, !whiteToMove);
+                // maxBlack = side to move maximizes black-minus-white, i.e.
+                // side to move IS black. The recursion alternates by itself.
+                sc = this._search(g, d, -Infinity, Infinity, sideToMove === 'black');
             } finally {
                 this._quiesceDepth = (prevQ == null ? 6 : prevQ);
             }
             if (!Number.isFinite(sc)) throw new Error('no-score');
-            return -sc; // search scores black-minus-white; verdicts read White's
+            return (pov || 'white') === 'white' ? -sc : sc;
         } catch (_) {
-            try { return -this._evaluate(g); } catch (_) { return 0; }
+            try { const e = -this._evaluate(g); return (pov || 'white') === 'white' ? e : -e; }
+            catch (_) { return 0; }
         }
     }
+    // Legacy wrapper (tests + older paths read White's view).
+    _botSearchWhite(g, depth) { return this._botSearchPov(g, 'white', depth); }
 
     /* ══════════════════════════════════════════════════════════════
        COMPUTER MOVE — alpha-beta over material + piece-square tables.
@@ -2052,7 +2112,11 @@ class ChessCourseApp {
             if (!g.isColor(r, c, color)) continue;
             const piece = g.board[r][c];
             g.getLegalMoves([r, c]).forEach(([tr, tc]) => {
-                const promo = (piece.toLowerCase() === 'p' && (tr === 0 || tr === 7)) ? 'q' : null;
+                // Promotion piece matches the mover's army (search sims
+                // and commits share these entries — wrong case would
+                // promote White to a black queen mid-search).
+                const promo = (piece.toLowerCase() === 'p' && (tr === 0 || tr === 7))
+                    ? (color === 'white' ? 'Q' : 'q') : null;
                 const target = g.board[tr][tc];
                 out.push({ from: [r, c], to: [tr, tc], promo, cap: target ? (ChessCourseApp._mat()[target.toLowerCase()] || 0) : 0 });
             });
@@ -2161,15 +2225,18 @@ class ChessCourseApp {
     _cpuMove() {
         if (this.game.gameOver) { this.cpuBusy = false; return; }
         const g = this.game;
-        const moves = this._allMoves(g, 'black');
+        // Either army can be the machine's now: bot games follow the draw,
+        // the classic free game keeps computer-Black.
+        const botColor = this._sideBot(), playerColor = this._sidePlayer();
+        const moves = this._allMoves(g, botColor);
         // Coach baseline for the bot's OWN move (bot games only): judged
-        // after it lands, in _commitCpuMove. Search-scored, White's view.
+        // after it lands, in _commitCpuMove. Scored in the player's view.
         if (this._botGame && this._cpuBot) {
-            try { this._botEngineBefore = this._botSearchWhite(g, 2); } catch (_) { this._botEngineBefore = null; }
+            try { this._botEngineBefore = this._botSearchPov(g, playerColor, 2); } catch (_) { this._botEngineBefore = null; }
         }
 
         if (!moves.length) {
-            // No legal black moves — distinguish checkmate from stalemate
+            // No legal bot moves — the PLAYER mated or stalemated it.
             const st = g.getGameStatus();
             if (st.startsWith('checkmate')) {
                 this._fb('Checkmate! You win! Magnificent play!', 'success');
@@ -2215,7 +2282,12 @@ class ChessCourseApp {
         // deep bots stay usable instead of freezing the board.
         const capMs = P.capMs || 0;
         const ordered = this._orderMoves(g, moves);
-        let i = 0, alpha = -Infinity, scored = [];
+        // Root node: the bot maximizes black-minus-white as Black and
+        // minimizes it as White — the recursion below already alternates
+        // by side to move, so only the root extremum flips.
+        const botMax = botColor === 'black';
+        const oppMaxBlack = playerColor === 'black'; // side to move after us
+        let i = 0, alpha = -Infinity, beta = Infinity, scored = [];
         const step = () => {
             if (this.game !== g || epoch !== this._searchEpoch || g.gameOver) { this.cpuBusy = false; this._updateTurnUI(); return; }
             if (capMs && scored.length && Date.now() - tStart > capMs) { i = ordered.length; }
@@ -2226,22 +2298,22 @@ class ChessCourseApp {
                 const mv = ordered[i++];
                 const snap = g.snapshot();
                 g.movePiece(mv.from, mv.to, mv.promo || null);
-                // _search scores from Black's perspective; after Black's
-                // move it is White (minimizer) to move.
-                const sc = this._search(g, depth - 1, alpha, Infinity, false);
+                const sc = this._search(g, depth - 1, alpha, beta, oppMaxBlack);
                 g.restore(snap);
                 scored.push({ ...mv, score: sc });
-                if (sc > alpha) alpha = sc;
+                if (botMax) { if (sc > alpha) alpha = sc; }
+                else { if (sc < beta) beta = sc; }
             }
             if (i < ordered.length) { setTimeout(step, 0); return; }
-            scored.sort((a, b) => b.score - a.score);
+            const better = (a, b) => botMax ? b.score - a.score : a.score - b.score;
+            scored.sort(better);
             // Weak-bot judgement noise: jitter each root score so quiet
             // misjudgements happen the human way (strong bots: noise 0,
             // untouched). Applied before selection, never to the search.
             let ranked = scored;
             if (noise > 0 && scored.length > 1) {
                 ranked = scored.map(m => ({ ...m, score: m.score + (Math.random() * 2 - 1) * noise }));
-                ranked.sort((a, b) => b.score - a.score);
+                ranked.sort(better);
             }
             let best = ranked[0];
             if ((P.wild || 0) > 0 && Math.random() < P.wild && ordered.length) {
@@ -2252,7 +2324,7 @@ class ChessCourseApp {
                 // sometimes wild.
                 if (Math.random() < P.blunder) best = ranked[Math.floor(Math.random() * ranked.length)];
                 else {
-                    const pool = ranked.filter(m => best.score - m.score <= P.pool);
+                    const pool = ranked.filter(m => (m.score - best.score) * (botMax ? 1 : -1) <= P.pool);
                     best = pool[Math.floor(Math.random() * pool.length)];
                 }
             }
@@ -2264,10 +2336,12 @@ class ChessCourseApp {
 
     _commitCpuMove(best) {
         const g = this.game;
-        // Computer always promotes to queen
+        // Computer always promotes to queen — of its OWN army.
+        const botColor = this._sideBot(), playerColor = this._sidePlayer();
         const piece = g.board[best.from[0]][best.from[1]];
-        const isPromo = piece && piece.toLowerCase() === 'p' && (best.to[0] === 0 || best.to[0] === 7);
-        const result = g.movePiece(best.from, best.to, isPromo ? 'q' : null);
+        const promoRow = botColor === 'white' ? 7 : 0;
+        const isPromo = piece && piece.toLowerCase() === 'p' && best.to[0] === promoRow;
+        const result = g.movePiece(best.from, best.to, isPromo ? (botColor === 'white' ? 'Q' : 'q') : null);
 
         this._playMoveSound(result);
         this.cpuBusy = false;
@@ -2276,11 +2350,13 @@ class ChessCourseApp {
         const status = g.getGameStatus();
         if (status.startsWith('checkmate')) {
             const winner = status.split('-')[1];
-            const msg = winner === 'black' ? 'Checkmate! Computer wins. Try again!' : 'You win!';
-            this._fb(msg, winner === 'black' ? 'error' : 'success');
-            if (winner === 'white') { this.snd.playSuccess(); }
+            const mine = winner === playerColor;
+            const bot = this._botGame ? this._cpuBot : null;
+            const msg = mine ? 'You win!' : `Checkmate! ${(bot && bot.name) || 'Computer'} wins. Try again!`;
+            this._fb(msg, mine ? 'success' : 'error');
+            if (mine) { this.snd.playSuccess(); }
             g.gameOver = true;
-            if (this._botGame) this._botGameEnd(winner === 'black' ? 'loss' : 'win');
+            if (this._botGame) this._botGameEnd(mine ? 'win' : 'loss');
         } else if (status === 'stalemate') {
             this._fb("Stalemate — it's a draw.", 'info'); g.gameOver = true;
             if (this._botGame) this._botGameEnd('draw');
@@ -2292,13 +2368,13 @@ class ChessCourseApp {
             };
             this._fb(msgs[status] || "It's a draw.", 'info'); g.gameOver = true;
             if (this._botGame) this._botGameEnd('draw');
-        } else if (status.startsWith('check-white')) {
+        } else if (status.startsWith(`check-${playerColor}`)) {
             this._fb('Your king is in check! Defend it.', 'error'); this.snd.playCheck();
         } else {
             const num = Math.ceil(g.moveHistory.length / 2);
             // Single status format everywhere in bot games (the coach talk
             // box above owns commentary; this line owns the move number).
-            this._fb(this._botGame ? `Move ${num} · Your move (White)` : `Move ${num} — your turn (White)`, 'info');
+            this._fb(this._botGame ? `Move ${num} · Your move (${this._sideName(playerColor)})` : `Move ${num} — your turn (White)`, 'info');
             // The bot judges its own move too (weak bots fess up) — unless
             // the player's verdict was decisive (|delta| >= 150): a called
             // blunder or brilliancy keeps the microphone, so a routine bot
@@ -2511,7 +2587,8 @@ class ChessCourseApp {
         // Never show "Thinking..." in that state — it confused users into
         // thinking a button was broken.
         const lockedDone = !this.isFreeGame && this.exerciseDone && !this.game.gameOver;
-        const yourTurn = !lockedDone && this.game.currentPlayer === 'white' && !this.cpuBusy && !this.game.gameOver;
+        const me = this._sidePlayer(), foe = this._sideBot();
+        const yourTurn = !lockedDone && this.game.currentPlayer === me && !this.cpuBusy && !this.game.gameOver;
         const cpuTurn  = !lockedDone && !yourTurn && !this.game.gameOver && this.isFreeGame;
 
         const pYou  = document.getElementById('profile-you');
@@ -2535,8 +2612,12 @@ class ChessCourseApp {
         let status;
         if (this._statusCache && this._statusCache.key === sKey) status = this._statusCache.status;
         else { status = this.game.getGameStatus(); this._statusCache = { key: sKey, status }; }
-        if (status.startsWith('check-white'))      this._setSpeech('Your king is in check — defend it!');
-        else if (status.startsWith('check-black')) this._setSpeech('Check! The black king is under attack.');
+        if (status.startsWith(`check-${me}`))      this._setSpeech('Your king is in check — defend it!');
+        else if (status.startsWith(`check-${foe}`)) {
+            this._setSpeech(this._botGame && this._cpuBot
+                ? `Check! ${this._cpuBot.name}'s king is under attack.`
+                : `Check! The ${this._sideName(foe)} king is under attack.`);
+        }
         else if (this.exerciseDone)                this._setSpeech('Well done! Click "Complete Lesson" to continue.');
         else if (this.isFreeGame) {
             const num = Math.ceil(this.game.moveHistory.length / 2) + 1;
@@ -2646,8 +2727,23 @@ class ChessCourseApp {
         }
     }
 
+    /** Swap sides with the same bot: a fresh game with colors reversed
+        (you played White → now Black, the bot takes White). */
+    _swapBotSides() {
+        try {
+            if (!this._botGame || !this._cpuBot) return;
+            const next = this._sidePlayer() === 'white' ? 'black' : 'white';
+            this.startBotGame(this._cpuBot.id, { color: next });
+        } catch (_) {}
+    }
+
     resetBoard() {
         if (!this.currentLesson) return;
+        // Bot rematch = brand-new game, same opponent, SAME colors.
+        if (this._botGame && this._cpuBot) {
+            try { this.startBotGame(this._cpuBot.id, { color: this._sidePlayer() }); } catch (_) {}
+            return;
+        }
         this.cpuBusy = false;
         this.game.pendingPromotion = null;
         this._initBoard(this.currentLesson);
@@ -2666,7 +2762,7 @@ class ChessCourseApp {
                 btn.title = 'Finish the exercise move first';
             }
         });
-        this._fb(this.isFreeGame ? 'Board reset. You are White — make your first move!' : 'Board reset. Start fresh!', 'info');
+        this._fb(this.isFreeGame ? `Board reset. You are ${this._sideName(this._sidePlayer())} — make your first move!` : 'Board reset. Start fresh!', 'info');
         this._updateTurnUI();
         this._syncNextLessonBtn();
     }
@@ -4501,9 +4597,10 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         if (!this.isFreeGame || !this.currentLesson || !this.game.gameOver) { card.style.display = 'none'; this._gameOverShown = false; return; }
         const status = this.game.getGameStatus();
         const bot = this._botGame ? this._cpuBot : null;
+        const mine = (status.split('-')[1] || 'white') === this._sidePlayer();
         let title = 'Game over', body = '';
         if (status.startsWith('checkmate')) {
-            const w = status.split('-')[1] === 'white';
+            const w = mine;
             title = w ? 'You win!' : `${(bot && bot.name) || 'Computer'} wins`;
             body = w
                 ? (bot ? `Checkmate — magnificent play! Rematch ${bot.name} or try a stronger bot.` : 'Checkmate — magnificent play! Your lesson is complete.')
