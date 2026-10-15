@@ -171,6 +171,12 @@
         try {
             if (location.protocol.indexOf('http') === 0 && !/\.github\.io$/.test(location.hostname)) return '';
         } catch (_) {}
+        // Production API origin (clerk-config.js, set on deploy). Empty
+        // until the backend exists — then Pages behaves like localhost.
+        try {
+            const def = window.DOCHESS_API_BASE;
+            if (def) return String(def).replace(/\/+$/, '');
+        } catch (_) {}
         return null;
     }
     async function api(path, body) {

@@ -1,0 +1,17 @@
+node_modules
+.git
+.env
+.env.*
+server/.data
+server/.data.bak-*
+server/*.log
+*.log
+test-results/
+shots/
+shots-l/
+shots2/
+shots-skins/
+baselines/
+.playwright-cli/
+dream-canvas-player/
+skills/

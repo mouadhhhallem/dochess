@@ -1,0 +1,32 @@
+# DoChess API on Fly.io (persistent Node process + MongoDB Atlas).
+# Deploy: flyctl launch --no-deploy (first time) then flyctl deploy.
+# Secrets (never committed — set once from .env values):
+#   flyctl secrets set MONGODB_URI="..." CLERK_SECRET_KEY="..." \
+#     UPSTASH_REDIS_REST_URL="..." UPSTASH_REDIS_REST_TOKEN="..."
+app = 'dochess-api'
+primary_region = 'cdg'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'
+
+# Production defaults (secrets override nothing here — these are safe).
+[env]
+  PORT = '8080'
+  HOST = '0.0.0.0'
+  NODE_ENV = 'production'
+  MONGODB_DB = 'dochess'
+  CORS_ORIGIN = 'https://mouadhhhallem.github.io'
+  # Refuse the local file fallback: without the database the API must fail
+  # loudly instead of silently forking state on ephemeral disk.
+  DOCHESS_DEV_FILE_STORE = '0'

@@ -682,6 +682,10 @@ class ChessCourseApp {
         this._botMood = 'straight';
         this._botEvalBefore = null; this._botSnapBefore = null;
         this._botMoveInfo = null; this._botLastMove = null;
+        this._botSfPrev = null; this._botSfBusy = false;
+        // Warm the Stockfish worker now so the first analysis (after the
+        // player's first move) doesn't pay the WASM boot cost mid-game.
+        try { if (window.DoChessBotFish) window.DoChessBotFish.warm(); } catch (_) {}
         // Preload all three faces so mid-game swaps never flicker.
         try {
             for (const m of ['straight', 'happy', 'angry']) {
@@ -693,7 +697,15 @@ class ChessCourseApp {
         this._buildLessonUI(l);
         this._go('lesson-screen');
         requestAnimationFrame(() => {
-            document.getElementById('chess-board-wrapper')?.scrollIntoView({ block: 'center' });
+            // Bot games open on the FOE, not the board center: the point of
+            // the arena is seeing who you face (face, Elo, talk). Centering
+            // the board instead buries the opponent above the fold on PC.
+            try {
+                const arena = document.querySelector('#lesson-screen .arena');
+                if (arena) arena.scrollIntoView({ block: 'start' });
+            } catch (_) {
+                document.getElementById('chess-board-wrapper')?.scrollIntoView({ block: 'center' });
+            }
         });
     }
 
@@ -721,7 +733,7 @@ class ChessCourseApp {
             const box = document.getElementById('bot-talk');
             if (!box || !text) return;
             const nm = (this._cpuBot && this._cpuBot.name) || 'Coach';
-            box.innerHTML = `<strong>${esc(nm)}:</strong> <span>${esc(text)}</span>`;
+            box.innerHTML = `<span class="sr-only">${esc(nm)} says: </span><span>${esc(text)}</span>`;
         } catch (_) {}
     }
 
@@ -771,11 +783,13 @@ class ChessCourseApp {
 
     /** Rate the player's just-played move and react as a coach. Call only
         in bot mode, right after White's move, while the game continues.
-        Every claim is grounded in something measured: new hanging pieces
-        (before/after attack maps), captures, checks, castling,
-        development — with the eval swing as the judge of how much it
-        mattered. No numbers are ever shown, only the verdict. */
+        Two layers: an INSTANT verdict from our own engine and attack maps
+        (facts + swing, always works, even on file://), then a Stockfish
+        refinement that corrects the mood only when the real engine
+        disagrees across a mood boundary. Numbers never reach the screen —
+        only words. */
     _botCoachMove() {
+        let ownDelta = 0;
         try {
             const bot = this._cpuBot;
             if (!bot || !this.game) return;
@@ -883,7 +897,82 @@ class ChessCourseApp {
             }
             this._botSetMood(mood);
             this._botSay(text);
+            ownDelta = delta;
         } catch (_) {}
+        // Stockfish second opinion (async): corrects the mood only when
+        // the real engine disagrees across a mood boundary. Silent when
+        // Stockfish cannot run here — the instant verdict above stands.
+        try { this._botSfJudge(ownDelta); } catch (_) {}
+    }
+
+    /** Stockfish second opinion on the player's last move. The instant
+        verdict above is already showing; this replaces it ONLY on a real
+        disagreement (different mood), phrased as a second look — never a
+        flicker between neighbouring grades. */
+    _botSfJudge(ownDelta) {
+        try {
+            if (!this._botGame || !this._cpuBot || !this.game || this.game.gameOver) return;
+            if (!window.DoChessBotFish) return;
+            const hist = this.game.moveHistory || [];
+            if (!hist.length) return;
+            const movesUci = hist.map(m => {
+                if (!m || !m.from || !m.to) return '';
+                const pr = m.promotion ? String(m.promotion).toLowerCase().slice(-1) : '';
+                return (m.from + m.to + pr).replace(/[^a-h1-8qrbn]/g, '');
+            }).filter(Boolean);
+            if (!movesUci.length) return;
+            const moveNo = Math.max(1, Math.ceil(hist.length / 2));
+            const stamp = movesUci.join(',');
+            window.DoChessBotFish.analyze(movesUci, { depth: 11, timeoutMs: 4000 }).then((r) => {
+                try {
+                    if (!r || !r.ok) return; // fallback: instant verdict stands
+                    if (!this._botGame || !this._cpuBot || !this.game || this.game.gameOver) return;
+                    // Stale: the player already moved again.
+                    const now = (this.game.moveHistory || []).map(m => (m && m.from && m.to) ? m.from + m.to : '').join(',');
+                    if (now !== stamp) return;
+                    const sfDelta = (typeof this._botSfPrev === 'number') ? (r.whiteCp - this._botSfPrev) : null;
+                    this._botSfPrev = r.whiteCp;
+                    if (sfDelta === null) return; // first measured move: baseline only
+                    this._botApplySfVerdict(sfDelta, ownDelta, moveNo);
+                } catch (_) {}
+            }).catch(() => {});
+        } catch (_) {}
+    }
+
+    /** Apply a Stockfish verdict if (and only if) it crosses a mood
+        boundary versus the instant one AND disagrees by a real margin
+        (engine noise near a threshold must never flip-flop the face).
+        Returns true when applied — exposed for tests with synthetic
+        deltas, no worker needed. */
+    _botApplySfVerdict(sfDelta, ownDelta, moveNo) {
+        try {
+            if (!Number.isFinite(sfDelta) || !Number.isFinite(ownDelta)) return false;
+            if (Math.abs(sfDelta - ownDelta) <= 120) return false;
+            const moodOf = (d) => ChessCourseApp.classifyMoveQuality(d).mood;
+            const sfMood = moodOf(sfDelta);
+            const ownMood = moodOf(ownDelta);
+            if (sfMood === ownMood) return false;
+            const n = Math.max(1, moveNo || 1);
+            const pick = (arr) => arr[n % arr.length];
+            this._botSetMood(sfMood);
+            if (sfMood === 'happy') {
+                this._botSay(pick([
+                    'On second look — that is genuinely strong. Well played!',
+                    'I checked deeper: that move holds up. Impressive.',
+                ]));
+            } else if (sfMood === 'angry') {
+                this._botSay(pick([
+                    'On second look — that drops something real. See it?',
+                    'Hmm, deeper calculation says that was costly. Find the hole!',
+                ]));
+            } else {
+                this._botSay(pick([
+                    'On second look — perfectly fine. Carry on.',
+                    'Deeper look says: solid enough. Next!',
+                ]));
+            }
+            return true;
+        } catch (_) { return false; }
     }
 
     /** The bot's own move, judged the same way: when a weak bot hangs
@@ -982,7 +1071,6 @@ class ChessCourseApp {
                 <div class="lesson-title">
                     <div><h2>Vs ${esc(bot.name)}</h2><p>${bot.elo} Elo · practice game — you are White</p></div>
                 </div>
-                <div class="teacher-info">${this._botAvatarHTML(bot, 32)}<span>${bot.elo} Elo</span></div>
             </div>
             <div class="lesson-content">
                 <div class="arena">
@@ -995,7 +1083,10 @@ class ChessCourseApp {
                         </div>
                         <div class="turn-indicator" id="ti-opp">Waiting</div>
                     </div>
-                    <div class="bot-talk" id="bot-talk" role="status" aria-live="polite"><strong>${esc(bot.name)}:</strong> <span>Hey! I'm ${esc(bot.name)}. Let's play — you start!</span></div>
+                    <div class="bot-talk" id="bot-talk" role="status" aria-live="polite"><span class="sr-only">${esc(bot.name)} says: </span><span>Hey! I'm ${esc(bot.name)}. Let's play — you start!</span></div>
+                    <!-- No engine speech bubble here: the coach talk above
+                         already narrates, and lesson-feedback carries checks
+                         and results — a third status line just duplicated. -->
                     <div class="speech-bubble" id="speech" role="status" aria-live="polite">${esc(bot.blurb || 'Good luck!')}</div>
                     <div class="sticky-actions" id="lesson-sticky">
                         <span class="sticky-label" id="lesson-sticky-label">Vs ${esc(bot.name)}</span>
@@ -2129,7 +2220,15 @@ class ChessCourseApp {
 
     _setSpeech(msg) {
         const el = document.getElementById('speech');
-        if (el) el.textContent = msg;
+        if (!el) return;
+        // Bot arena: "your turn" chatter would duplicate lesson-feedback
+        // line for line, so the bubble clears instead (the coach talk box
+        // above already narrates). "Thinking…" states still show.
+        if (this._botGame && this._cpuBot && /your turn\./i.test(msg || '')) {
+            el.textContent = '';
+            return;
+        }
+        el.textContent = msg;
     }
 
     _fmtLogMove(m) {
@@ -2813,9 +2912,14 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             if (ov) return String(ov).replace(/\/+$/, '');
         } catch (_) {}
         // Same-origin /api exists only when the node server serves the
-        // page (local dev / Railway). GitHub Pages and file:// have none.
+        // page (local dev / Fly). GitHub Pages and file:// have none —
+        // unless a production origin was configured on deploy.
         try {
             if (location.protocol.indexOf('http') === 0 && !/\.github\.io$/.test(location.hostname)) return '';
+        } catch (_) {}
+        try {
+            const def = window.DOCHESS_API_BASE;
+            if (def) return String(def).replace(/\/+$/, '');
         } catch (_) {}
         return null;
     }

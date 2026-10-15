@@ -4,6 +4,30 @@ Target: a **controlled public release** of the API on a persistent-process
 host, with the static site staying on GitHub Pages. Nothing here deploys
 itself — every step below is manual and reviewable.
 
+## Fast path: Fly.io (2026-10-15, ready to run)
+
+`fly.toml` + `Dockerfile` are committed. The frontend already honours
+`window.DOCHESS_API_BASE` (clerk-config.js, currently empty) in all three
+API resolvers, and the CSP already allows `https://*.fly.dev`.
+
+```sh
+flyctl auth login
+flyctl launch --no-deploy          # accept dochess-api, region cdg
+flyctl secrets set MONGODB_URI="..." CLERK_SECRET_KEY="..." UPSTASH_REDIS_REST_URL="..." UPSTASH_REDIS_REST_TOKEN="..."
+flyctl deploy
+curl https://dochess-api.fly.dev/api/health   # productionReady: true, db.kind: mongo
+```
+
+Then point the frontend at it (one line + push, Pages redeploys):
+
+```js
+window.DOCHESS_API_BASE = 'https://dochess-api.fly.dev';
+```
+
+Before that, in MongoDB Atlas → Network Access, allow `0.0.0.0/0`
+(Fly has no static egress IPs), with a least-privilege DB user scoped
+to `dochess` only.
+
 ## ⚠️ Status as of the 2026-10-13 audit: NOT DEPLOYED
 
 This document has described a Railway deployment since it was written, but

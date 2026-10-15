@@ -45,6 +45,10 @@ function apiOrigin() {
     try {
         if (location.protocol.indexOf('http') === 0 && !/\.github\.io$/.test(location.hostname)) return '';
     } catch (_) { /* no location */ }
+    try {
+        var def = window.DOCHESS_API_BASE;
+        if (def) return String(def).replace(/\/+$/, '');
+    } catch (_) { /* no config */ }
     return null;
 }
     var PUSH_DEBOUNCE_MS = 4000;
