@@ -1324,7 +1324,7 @@ class ChessCourseApp {
             if (back) back.style.display = 'none';
         } catch (_) {}
         document.getElementById('lesson-content').innerHTML = `
-            <div class="lesson-detail-header">
+            <div class="lesson-detail-header bot-header">
                 <button class="btn-secondary sm" data-action="back-bots" type="button" aria-label="Back to all bots">← Bots</button>
                 <div class="lesson-title">
                     <div><h2>Vs ${esc(bot.name)}</h2><p>${bot.elo} Elo · ${esc(ChessCourseApp.botSkill(bot.elo))} · practice game — you are White</p></div>

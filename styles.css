@@ -4717,3 +4717,35 @@ body[data-theme="day"] .ms-link.active, body[data-theme="day"] .ms-link.active:h
   #lesson-screen .bot-arena .captured-row { display: none; }
   #lesson-screen .bot-arena .bot-talk { font-size: .82rem; }
 }
+
+/* ── Vs Bots desktop: the whole game fits the screen ──────────────
+   The generic desktop board (100dvh - 8rem) only reserved 128px for ALL
+   chrome, so the square grew past the fold and the You card needed a
+   scroll. Here the chrome is compact AND the board is capped by the
+   viewport minus real chrome (~30rem: header, both cards, talk, status,
+   gaps, page padding) — opponent, board and you stay visible together,
+   chess.com-style. Short windows still scroll instead of crushing. */
+#lesson-screen .bot-header {
+  padding: .7rem 1rem;
+  margin-bottom: .8rem;
+  gap: .5rem .8rem;
+}
+#lesson-screen .bot-header .lesson-title h2 { font-size: 1.05rem; }
+#lesson-screen .bot-header .lesson-title p { font-size: .78rem; }
+@media (min-width: 1025px) {
+  #lesson-screen .bot-arena { gap: .8rem; }
+  #lesson-screen .bot-arena .profile-card { padding: .7rem .9rem; }
+  #lesson-screen .bot-arena .bot-talk {
+    padding: .4rem .65rem; font-size: .88rem; min-height: 0;
+  }
+  #lesson-screen .bot-arena #lesson-feedback.feedback {
+    padding: .55rem .8rem; font-size: .85rem; margin-top: 0;
+  }
+  #lesson-screen .bot-arena #chess-board-wrapper {
+    order: 4;
+    /* Floor at 440px: tiny windows scroll a little instead of crushing
+       the board into unplayable size. */
+    width: min(100%, max(440px, calc(100dvh - 30rem)), 860px);
+    max-width: min(100%, 860px);
+  }
+}
