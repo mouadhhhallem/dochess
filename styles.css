@@ -1968,6 +1968,15 @@ body[data-theme='day'] .dc-trend.down { color: #dc2626; }
 .bot-blurb { color: var(--text-muted); font-size: .9rem; margin: 0; flex: 1; }
 .bot-card .btn-primary.sm { align-self: flex-start; }
 .diff-label strong { color: var(--text-main); }
+/* Bot coach talk: a compact line under the bot's face. Fixed min-height so
+   the board never jumps when the text changes; aria-live announces it. */
+.bot-talk {
+    border: 1px solid var(--glass-border); border-radius: 12px;
+    background: var(--bg-main); padding: .45rem .7rem; font-size: .92rem;
+    min-height: 2.6em; display: flex; align-items: center; gap: .35rem;
+}
+.bot-talk strong { color: var(--accent-bright); white-space: nowrap; }
+.bot-talk span { color: var(--text-main); }
 .dc-badge {
     display: inline-flex; align-items: center; gap: .35rem;
     font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;

@@ -255,6 +255,7 @@ class ChessCourseApp {
                 if (a === 'reset-board') this.resetBoard();
                 else if (a === 'mark-complete') this.markComplete();
                 else if (a === 'back-lessons') this.showLessons();
+                else if (a === 'back-bots') this.showVsBots();
                 else if (a === 'online-host') this._onlineHost();
                 else if (a === 'online-host-code') this._onlineHost(action.dataset.code);
                 else if (a === 'online-join') this._onlineJoin();
@@ -395,9 +396,9 @@ class ChessCourseApp {
         // teacher{1,2,3}.svg (kept as sources). ~40-60KB, not megabytes.
         const v = ChessCourseApp.assetV();
         return [
-            { id:1, name:'Grandmaster Elena', title:'Chess Master & Strategist',  desc:'A calm and patient grandmaster who teaches the fundamentals with wisdom and precision.',         img:`assets/teacher1-192.png?${v}` },
-            { id:2, name:'Coach Marcus',      title:'Tactical Specialist',         desc:'An energetic coach who focuses on tactics, patterns, and aggressive play.',                     img:`assets/teacher2-192.png?${v}` },
-            { id:3, name:'Professor Aris',    title:'Historical Chess Expert',     desc:'A scholarly teacher who brings chess history to life while teaching essential concepts.',       img:`assets/teacher3-192.png?${v}` }
+            { id:1, name:'Nico',  title:'Chess Master & Strategist',  desc:'A calm and patient grandmaster who teaches the fundamentals with wisdom and precision.',         img:`assets/teacher1-192.png?${v}` },
+            { id:2, name:'Luna',  title:'Tactical Specialist',         desc:'An energetic coach who focuses on tactics, patterns, and aggressive play.',                     img:`assets/teacher2-192.png?${v}` },
+            { id:3, name:'Max',   title:'Historical Chess Expert',     desc:'A scholarly teacher who brings chess history to life while teaching essential concepts.',       img:`assets/teacher3-192.png?${v}` }
         ];
     }
 
@@ -678,6 +679,14 @@ class ChessCourseApp {
         this._cpuBot = bot;
         this._cpuBotParams = ChessCourseApp.botCpuParams(bot.elo);
         this._botGame = true;
+        this._botMood = 'straight';
+        // Preload all three faces so mid-game swaps never flicker.
+        try {
+            for (const m of ['straight', 'happy', 'angry']) {
+                const src = bot.moods && bot.moods[m];
+                if (src) { const im = new Image(); im.src = src; }
+            }
+        } catch (_) {}
         this.currentLesson = l;
         this._buildLessonUI(l);
         this._go('lesson-screen');
@@ -686,19 +695,155 @@ class ChessCourseApp {
         });
     }
 
+    /* ── Bot coach: mood faces + talk, judged by OUR engine ──────────
+       After each of the player's moves the position is evaluated with the
+       app's own search tables (never Stockfish, never shown as numbers):
+       a big swing for the player is brilliant/happy, a big drop is a
+       blunder/angry, quiet moves get basic tips. Deterministic rotation
+       (move number) so phrases vary without repeating awkwardly. */
+    static BOT_TALK = {
+        brilliant: [
+            'Brilliant! Did you see that coming?',
+            'Wow — that is a winning idea!',
+            'Magnificent! Even I missed that one.',
+        ],
+        good: [
+            'Nice move — that improves your game.',
+            'Good! You are building something real.',
+            'I like that. Keep the pressure on.',
+        ],
+        basic: [
+            'Solid, textbook chess.',
+            'Simple and good. I approve.',
+            'Nothing fancy — just good chess.',
+        ],
+        opening: [
+            'Control the center.',
+            'Knights before bishops!',
+            'Castle early, stay safe.',
+            'Develop with a threat.',
+        ],
+        capture: [
+            'Good trade.',
+            'Well taken!',
+            'Material matters. Nice grab.',
+        ],
+        check: [
+            'Check! Keep the pressure on.',
+            'Check! Make every move count now.',
+        ],
+        mistake: [
+            'Hmm — that gives something away.',
+            'Risky. Can you see why?',
+            'Careful — I smell a tactic in there.',
+        ],
+        blunder: [
+            'Ouch. That hangs material.',
+            'That loses on the spot — look again!',
+            'Oof. Even my cousin Alex would take that.',
+        ],
+    };
+
+    _botSetMood(mood) {
+        try {
+            const bot = this._cpuBot;
+            if (!bot || (mood !== 'straight' && mood !== 'happy' && mood !== 'angry')) return;
+            if (this._botMood === mood) return;
+            this._botMood = mood;
+            const img = document.getElementById('bot-mood-img');
+            const src = bot.moods && bot.moods[mood];
+            if (img && img.tagName === 'IMG' && src) img.src = src;
+        } catch (_) {}
+    }
+
+    _botSay(text) {
+        try {
+            const box = document.getElementById('bot-talk');
+            if (!box || !text) return;
+            const nm = (this._cpuBot && this._cpuBot.name) || 'Coach';
+            box.innerHTML = `<strong>${esc(nm)}:</strong> <span>${esc(text)}</span>`;
+        } catch (_) {}
+    }
+
+    _botPhrase(cat, moveNo) {
+        try {
+            const list = ChessCourseApp.BOT_TALK[cat] || ChessCourseApp.BOT_TALK.basic;
+            return list[Math.max(0, moveNo || 0) % list.length];
+        } catch (_) { return 'Hmm.'; }
+    }
+
+    /** Pure move-quality classifier (centipawns, White's perspective).
+        Shared by the live coach path and the test suite, so the thresholds
+        below are asserted, not hoped for. */
+    static classifyMoveQuality(deltaWhite) {
+        const d = Number(deltaWhite) || 0;
+        if (d >= 250) return { mood: 'happy', cat: 'brilliant' };
+        if (d >= 100) return { mood: 'happy', cat: 'good' };
+        if (d <= -250) return { mood: 'angry', cat: 'blunder' };
+        if (d <= -100) return { mood: 'angry', cat: 'mistake' };
+        return { mood: 'straight', cat: 'quiet' };
+    }
+
+    /** Rate the player's just-played move and react as a coach. Call only
+        in bot mode, right after White's move, while the game continues. */
+    _botCoachMove() {
+        try {
+            const bot = this._cpuBot;
+            if (!bot || !this.game) return;
+            const g = this.game;
+            const before = (typeof this._botEvalBefore === 'number') ? this._botEvalBefore : null;
+            const after = this._evaluate(g); // black-minus-white
+            // White (the player) gained when Black's score drops.
+            const delta = (before === null) ? 0 : (before - after);
+            const moveNo = Math.max(1, Math.ceil(g.moveHistory.length / 2));
+            const last = this._botLastMove || {};
+            const status = g.getGameStatus();
+            const q = ChessCourseApp.classifyMoveQuality(delta);
+            let mood = q.mood, cat = q.cat;
+            if (cat === 'quiet') {
+                if (last.captured) { mood = delta >= 0 ? 'happy' : 'straight'; cat = 'capture'; }
+                else if (status.startsWith('check-black')) { mood = 'happy'; cat = 'check'; }
+                else if (moveNo <= 3) { mood = 'straight'; cat = 'opening'; }
+                else { mood = 'straight'; cat = 'basic'; }
+            }
+            this._botSetMood(mood);
+            this._botSay(this._botPhrase(cat, moveNo));
+        } catch (_) {}
+    }
+
+    /** End-of-game feelings: the bot celebrates its wins, rages its
+        losses (sore loser, on purpose), and shrugs draws. */
+    _botGameEnd(kind) {
+        try {
+            if (!this._botGame || !this._cpuBot) return;
+            const bot = this._cpuBot;
+            if (kind === 'win') {
+                this._botSetMood('happy');
+                this._botSay('You got me! Rematch?');
+            } else if (kind === 'loss') {
+                this._botSetMood('angry');
+                this._botSay('Grr... you won this one. REMATCH. Now.');
+            } else {
+                this._botSetMood('straight');
+                this._botSay('A draw — I will take it. One more?');
+            }
+        } catch (_) {}
+    }
+
     showVsBots() {
         this._go('vs-bots-screen');
         this._renderVsBots();
     }
 
-    _botAvatarHTML(bot, size) {
+    _botAvatarHTML(bot, size, id) {
         const s = size || 52;
         const src = bot && typeof bot.avatar === 'string' && bot.avatar ? bot.avatar : null;
         const nm = (bot && bot.name) || 'Bot';
+        const idAttr = id ? ` id="${id}"` : '';
         if (src) {
-            return `<img class="avatar bot-avatar" src="${esc(src)}" width="${s}" height="${s}" loading="lazy" draggable="false" alt="${esc(nm)}" onerror="this.outerHTML='<span class=&quot;avatar bot-letter&quot; aria-hidden=&quot;true&quot;>${esc(nm[0].toUpperCase())}</span>'">`;
+            return `<img class="avatar bot-avatar"${idAttr} src="${esc(src)}" width="${s}" height="${s}" loading="lazy" draggable="false" alt="${esc(nm)}" onerror="this.outerHTML='<span class=&quot;avatar bot-letter&quot; aria-hidden=&quot;true&quot;>${esc(nm[0].toUpperCase())}</span>'">`;
         }
-        return `<span class="avatar bot-letter" aria-hidden="true">${esc(nm[0].toUpperCase())}</span>`;
+        return `<span class="avatar bot-letter"${idAttr} aria-hidden="true">${esc(nm[0].toUpperCase())}</span>`;
     }
 
     _renderVsBots() {
@@ -718,18 +863,96 @@ class ChessCourseApp {
             <div class="bot-grid">${cards}</div>`;
     }
 
+    /* ── Bot arena: the same board component as lessons (same element
+       ids, so all game logic just works), but its own shell — no lesson
+       number, teacher, lecture notes, Complete or Next buttons. Practice
+       games never touch course progress. ── */
+    _buildBotArenaUI(l, bot) {
+        try {
+            const back = document.getElementById('lesson-back-btn');
+            if (back) { back.textContent = '← Back to Bots'; back.dataset.action = 'back-bots'; }
+        } catch (_) {}
+        document.getElementById('lesson-content').innerHTML = `
+            <div class="lesson-detail-header">
+                <button class="btn-secondary sm" data-action="back-bots" type="button" aria-label="Back to all bots">← Bots</button>
+                <div class="lesson-title">
+                    <div><h2>Vs ${esc(bot.name)}</h2><p>${bot.elo} Elo · practice game — you are White</p></div>
+                </div>
+                <div class="teacher-info">${this._botAvatarHTML(bot, 32)}<span>${bot.elo} Elo</span></div>
+            </div>
+            <div class="lesson-content">
+                <div class="arena">
+                    <div class="profile-card opponent" id="profile-opp">
+                        ${this._botAvatarHTML(bot, 52, 'bot-mood-img')}
+                        <div class="info">
+                            <span class="name">${esc(bot.name)}</span>
+                            <span class="sub">${bot.elo} Elo (Black)</span>
+                            <div class="captured-row" data-cap="opp"></div>
+                        </div>
+                        <div class="turn-indicator" id="ti-opp">Waiting</div>
+                    </div>
+                    <div class="bot-talk" id="bot-talk" role="status" aria-live="polite"><strong>${esc(bot.name)}:</strong> <span>Hey! I'm ${esc(bot.name)}. Let's play — you start!</span></div>
+                    <div class="speech-bubble" id="speech" role="status" aria-live="polite">${esc(bot.blurb || 'Good luck!')}</div>
+                    <div class="sticky-actions" id="lesson-sticky">
+                        <span class="sticky-label" id="lesson-sticky-label">Vs ${esc(bot.name)}</span>
+                        <span class="sticky-count"><span id="lesson-sticky-score">0</span> moves</span>
+                        <button class="btn-secondary sm" data-action="reset-board" type="button" title="Rematch"><span class="btn-icon">↺</span> Rematch</button>
+                        <button class="btn-secondary sm" data-action="flip-board" type="button" title="Flip board"><span class="btn-icon">⇄</span> Flip</button>
+                        <button class="btn-secondary sm" data-action="back-bots" type="button" title="Change bot">Change bot</button>
+                        <button class="icon-btn" id="lesson-focus-toggle" data-focus-toggle type="button"
+                                aria-expanded="true" aria-controls="lesson-screen"
+                                aria-label="Hide everything except the board" title="Focus mode">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v18M16 3v18"/></g></svg>
+                        </button>
+                    </div>
+
+                    <div id="chess-board-wrapper"><div id="chess-board" role="group" aria-label="Chess board"></div></div>
+                    <div id="promotion-picker" class="promotion-picker hidden"></div>
+                    <div id="lesson-feedback" class="feedback info" role="status" aria-live="polite">
+                        You are White — make your first move!
+                    </div>
+
+                    <div class="profile-card player" id="profile-you">
+                        <img class="avatar" src="${this._pieceFile('P')}" width="52" height="52" alt="You (White)" style="background:var(--primary-surface);border-radius:50%;padding:6px;">
+                        <div class="info">
+                            <span class="name">You</span>
+                            <span class="sub">White</span>
+                            <div class="captured-row" data-cap="you"></div>
+                        </div>
+                        <div class="turn-indicator" id="ti-you">Your turn</div>
+                    </div>
+                </div>
+                <div class="lesson-dashboard">
+                    <div class="dashboard-section">
+                        <h4 style="color:var(--accent-bright);font-family:'Inter',system-ui,sans-serif;margin-bottom:.75rem">Move Log</h4>
+                        <div class="move-log" id="move-log" role="log" aria-live="polite" aria-label="Move log"><span style="color:var(--text-muted-dim)">No moves yet — select a white piece to begin.</span></div>
+                    </div>
+                    <div class="lesson-actions">
+                        <button class="btn-secondary" data-action="reset-board">Rematch</button>
+                        <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
+                        ${this._muteBtnHTML()}
+                        <button class="btn-secondary" data-action="back-bots" type="button">All bots</button>
+                    </div>
+                    <div id="gameover-card" style="display:none" role="dialog" aria-modal="false" aria-labelledby="gameover-title"></div>
+                </div>
+            </div>`;
+
+        this._initBoard(l);
+    }
+
     _buildLessonUI(l) {
+        try {
+            const back = document.getElementById('lesson-back-btn');
+            if (back) { back.textContent = '← Back to Lessons'; back.dataset.action = 'back-lessons'; }
+        } catch (_) {}
         const t    = this.teachers.find(x => x.id === l.teacherId);
         const free = l.type === 'free-game';
         const done = this.completedLessons ? this.completedLessons.has(l.id) : false;
-        // Practice-bot mode only ever decorates the free-game board; every
-        // other lesson renders exactly as before.
-        const bot = (free && this._botGame && this._cpuBot) ? this._cpuBot : null;
+        // Practice-bot games get their own arena shell (no lesson chrome).
+        if (free && this._botGame && this._cpuBot) { this._buildBotArenaUI(l, this._cpuBot); return; }
 
         const exBox = l.exercise
             ? `<div class="exercise-instructions"><h4>Exercise</h4><p id="exercise-instruction">${this._stepText(l.exercise, 0)}</p></div>`
-            : bot
-            ? `<div class="exercise-instructions free-game-box"><h4>Vs ${esc(bot.name)} (${bot.elo} Elo)</h4><p>You are White. ${esc(bot.name)} plays Black at ${bot.elo} Elo — good luck!</p></div>`
             : `<div class="exercise-instructions free-game-box"><h4>Free Game Mode</h4><p>You are White. The computer plays Black. Play a full game — good luck!</p></div>`;
 
         const btn = free
@@ -748,10 +971,10 @@ class ChessCourseApp {
             <div class="lesson-content">
                 <div class="arena">
                     <div class="profile-card opponent" id="profile-opp" data-focus-hide>
-                        ${bot ? this._botAvatarHTML(bot, 52) : `<img class="avatar" src="${t.img}" width="52" height="52" alt="${esc(t.name)}">`}
+                        <img class="avatar" src="${t.img}" width="52" height="52" alt="${esc(t.name)}">
                         <div class="info">
-                            <span class="name">${bot ? esc(bot.name) : esc(t.name)}</span>
-                            <span class="sub">${bot ? `${bot.elo} Elo (Black)` : `${esc(t.title)} (Black)`}</span>
+                            <span class="name">${esc(t.name)}</span>
+                            <span class="sub">${esc(t.title)} (Black)</span>
                             <div class="captured-row" data-cap="opp"></div>
                         </div>
                         <div class="turn-indicator" id="ti-opp">Waiting</div>
@@ -808,13 +1031,11 @@ class ChessCourseApp {
                         <button class="btn-secondary" data-action="reset-board">Reset Board</button>
                         <button class="btn-secondary" data-action="flip-board" title="Flip board" aria-label="Flip board">Flip</button>
                         ${this._muteBtnHTML()}
-                        ${free ? (bot
-                            ? `<span class="diff-label">Bot: <strong>${esc(bot.name)} (${bot.elo})</strong></span>`
-                            : `<label class="diff-label">Computer:
+                        ${free ? `<label class="diff-label">Computer:
                             <select id="cpu-diff" class="diff-select" aria-label="Computer difficulty">
                                 <option value="easy" selected>Easy</option>
                                 <option value="medium">Medium</option>
-                            </select></label>`) : ''}
+                            </select></label>` : ''}
                         ${btn}
                         <!-- Next stage sits with the controls under the Move Log.
                              Deliberately .btn-cta, NOT .btn-primary — the primary
@@ -1216,11 +1437,20 @@ class ChessCourseApp {
        EXECUTE PLAYER MOVE
     ══════════════════════════════════════════════════════════════ */
     _doPlayerMove(from, to) {
+        // Coach snapshot: evaluate BEFORE the move lands so the swing can
+        // be judged after it (bot games only; one static eval, instant).
+        if (this._botGame && this._cpuBot && this.game && !this.game.gameOver) {
+            try { this._botEvalBefore = this._evaluate(this.game); } catch (_) { this._botEvalBefore = null; }
+            this._botLastMove = { captured: false, promo: false };
+        }
         const result = this.game.movePiece(from, to);
         if (result === 'promotion-needed') {
             this._draw();
             this._showPromotion(from, to, 'white');
             return;
+        }
+        if (this._botGame && result && typeof result === 'object') {
+            this._botLastMove = { captured: !!result.captured, promo: false };
         }
         this._playMoveSound(result);
         this._draw();
@@ -1256,13 +1486,16 @@ class ChessCourseApp {
             this._fb(msg, winner === 'white' ? 'success' : 'error');
             this.game.gameOver = true;
             if (winner === 'white') { this.snd.playSuccess(); }
-            if (winner === 'white') this.markDone(this.currentLesson.id);
+            if (winner === 'white' && !this._botGame) this.markDone(this.currentLesson.id);
+            if (this._botGame) this._botGameEnd(winner === 'white' ? 'win' : 'loss');
             this._updateTurnUI();
             return;
         }
         if (status === 'stalemate') {
             this._fb("Stalemate! It's a draw — no legal moves.", 'info');
-            this.game.gameOver = true; this._updateTurnUI(); return;
+            this.game.gameOver = true;
+            if (this._botGame) this._botGameEnd('draw');
+            this._updateTurnUI(); return;
         }
         if (status.startsWith('draw-')) {
             const msgs = {
@@ -1271,7 +1504,9 @@ class ChessCourseApp {
                 'draw-fifty': 'Draw by the fifty-move rule — 50 moves with no pawn move or capture.'
             };
             this._fb(msgs[status] || "It's a draw.", 'info');
-            this.game.gameOver = true; this._updateTurnUI(); return;
+            this.game.gameOver = true;
+            if (this._botGame) this._botGameEnd('draw');
+            this._updateTurnUI(); return;
         }
         if (status.startsWith('check-white')) {
             this._fb('Your king is in check! You must defend it.', 'error');
@@ -1286,9 +1521,12 @@ class ChessCourseApp {
 
         // Trigger CPU if it is now black's turn (free game only)
         if (this.game.currentPlayer === 'black' && !this.game.gameOver) {
+            // Coach reacts to White's move first (bot games only), then the
+            // engine's own "thinking" speech takes over in _cpuMove.
+            if (this._botGame && this._cpuBot) this._botCoachMove();
             this.cpuBusy = true;
             this._updateTurnUI();
-            this._setSpeech((this._cpuDifficulty || 'easy') === 'medium' ? 'Thinking a few moves deep…' : 'Playing a casual move…');
+            this._setSpeech((this._cpuDifficulty || 'easy') === 'medium' ? 'Thinking three moves deep…' : 'Playing a casual move…');
             setTimeout(() => this._cpuMove(), 650);
         }
     }
@@ -1347,7 +1585,11 @@ class ChessCourseApp {
             if (!g.findKing(color)) return 0;
             return g._isKingInCheck(color) ? (maxBlack ? -100000 - depth : 100000 + depth) : 0;
         }
-        if (depth === 0) return this._evaluate(g);
+        // Quiescence: instead of stopping at a volatile position, extend
+        // captures-only so hanging pieces are actually seen. This is the
+        // single biggest honest strength gain (no more horizon blunders),
+        // and it makes deeper bots strictly stronger than shallow ones.
+        if (depth === 0) return this._quiesce(g, alpha, beta, maxBlack, 6);
         if (maxBlack) {
             let best = -Infinity;
             for (const mv of moves) {
@@ -1373,6 +1615,53 @@ class ChessCourseApp {
         }
         return best;
     }
+    /* Quiescence search: stand-pat + captures only, so the engine never
+       stops in the middle of a capture sequence grabbing thin air (or
+       hanging a queen). Bounded to 6 capture plies — plenty to settle any
+       real tactic, cheap enough to run at every leaf. Mate/stalemate with
+       no legal moves scores exactly like the main search. */
+    _quiesce(g, alpha, beta, maxBlack, qdepth) {
+        if (g._insufficientMaterial() || g.repetitionCount() >= 3 || (g.halfmoveClock || 0) >= 100) return 0;
+        const color = maxBlack ? 'black' : 'white';
+        const stand = this._evaluate(g);
+        if (maxBlack) {
+            if (stand >= beta) return beta;
+            if (stand > alpha) alpha = stand;
+        } else {
+            if (stand <= alpha) return alpha;
+            if (stand < beta) beta = stand;
+        }
+        if (qdepth <= 0) return maxBlack ? alpha : beta;
+        const caps = this._orderMoves(g, this._allMoves(g, color).filter(m => m.cap > 0));
+        if (!caps.length) {
+            // No captures: quiet — unless there are no legal moves at all.
+            if (!this._allMoves(g, color).length) {
+                if (!g.findKing(color)) return stand;
+                if (g._isKingInCheck(color)) return maxBlack ? -100000 : 100000;
+            }
+            return maxBlack ? alpha : beta;
+        }
+        if (maxBlack) {
+            for (const mv of caps) {
+                const snap = g.snapshot();
+                g.movePiece(mv.from, mv.to, mv.promo || null);
+                const v = this._quiesce(g, alpha, beta, false, qdepth - 1);
+                g.restore(snap);
+                if (v > alpha) alpha = v;
+                if (alpha >= beta) break;
+            }
+            return alpha;
+        }
+        for (const mv of caps) {
+            const snap = g.snapshot();
+            g.movePiece(mv.from, mv.to, mv.promo || null);
+            const v = this._quiesce(g, alpha, beta, true, qdepth - 1);
+            g.restore(snap);
+            if (v < beta) beta = v;
+            if (alpha >= beta) break;
+        }
+        return beta;
+    }
     _cpuMove() {
         if (this.game.gameOver) { this.cpuBusy = false; return; }
         const g = this.game;
@@ -1387,8 +1676,10 @@ class ChessCourseApp {
                 // Practice bot games never complete the course: beating a
                 // 200-Elo bot is not finishing lesson 10 the earned way.
                 if (this.isFreeGame && !this._botGame) this.markDone(this.currentLesson.id);
+                if (this._botGame) this._botGameEnd('win');
             } else {
                 this._fb("Stalemate — it's a draw.", 'info');
+                if (this._botGame) this._botGameEnd('draw');
             }
             g.gameOver = true;
             this.cpuBusy = false;
@@ -1469,8 +1760,10 @@ class ChessCourseApp {
             this._fb(msg, winner === 'black' ? 'error' : 'success');
             if (winner === 'white') { this.snd.playSuccess(); }
             g.gameOver = true;
+            if (this._botGame) this._botGameEnd(winner === 'black' ? 'loss' : 'win');
         } else if (status === 'stalemate') {
             this._fb("Stalemate — it's a draw.", 'info'); g.gameOver = true;
+            if (this._botGame) this._botGameEnd('draw');
         } else if (status.startsWith('draw-')) {
             const msgs = {
                 'draw-insufficient': 'Draw — neither side can possibly checkmate.',
@@ -1478,6 +1771,7 @@ class ChessCourseApp {
                 'draw-fifty': 'Draw by the fifty-move rule.'
             };
             this._fb(msgs[status] || "It's a draw.", 'info'); g.gameOver = true;
+            if (this._botGame) this._botGameEnd('draw');
         } else if (status.startsWith('check-white')) {
             this._fb('Your king is in check! Defend it.', 'error'); this.snd.playCheck();
         } else {
@@ -1548,6 +1842,9 @@ class ChessCourseApp {
             btn.onclick = () => {
                 picker.innerHTML = ''; picker.classList.add('hidden');
                 const result = this.game.movePiece(from, to, p);
+                if (this._botGame && result && typeof result === 'object') {
+                    this._botLastMove = { captured: !!result.captured, promo: true };
+                }
                 this._playMoveSound(result);
                 this._draw();
                 if (!this.isFreeGame) this._checkExercise();
@@ -3645,11 +3942,14 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         if (!card) return;
         if (!this.isFreeGame || !this.currentLesson || !this.game.gameOver) { card.style.display = 'none'; this._gameOverShown = false; return; }
         const status = this.game.getGameStatus();
+        const bot = this._botGame ? this._cpuBot : null;
         let title = 'Game over', body = '';
         if (status.startsWith('checkmate')) {
             const w = status.split('-')[1] === 'white';
-            title = w ? 'You win!' : 'Computer wins';
-            body = w ? 'Checkmate — magnificent play! Your lesson is complete.' : 'Checkmate — study the final position, then try again!';
+            title = w ? 'You win!' : `${(bot && bot.name) || 'Computer'} wins`;
+            body = w
+                ? (bot ? `Checkmate — magnificent play! Rematch ${bot.name} or try a stronger bot.` : 'Checkmate — magnificent play! Your lesson is complete.')
+                : 'Checkmate — study the final position, then try again!';
         } else if (status === 'stalemate') { title = 'Draw'; body = 'Stalemate — neither side has a legal move.'; }
         else if (status.startsWith('draw-')) {
             title = 'Draw';
@@ -3659,7 +3959,9 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             <div class="lesson-actions">
                 <button class="btn-primary btn-glow-strong" data-action="reset-board">Rematch</button>
                 <button class="btn-secondary" data-action="gameover-hide">Review board</button>
-                <button class="btn-secondary" data-action="back-lessons">Lessons</button>
+                ${bot
+                    ? `<button class="btn-secondary" data-action="back-bots">Bots</button>`
+                    : `<button class="btn-secondary" data-action="back-lessons">Lessons</button>`}
             </div>`;
         card.style.display = '';
         // Reveal once per game-over: the card sits below the move log and is
@@ -4473,27 +4775,51 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
 
     /* ── Vs Bots roster: data-driven so new bots are one array entry.
        Elo drives the engine (depth + blunder rate, see botCpuParams), so a
-       200 plays like a beginner and a 2000+ punishes like one. Avatars are
-       plain asset paths with a letter-tile fallback in the UI. ── */
+       200 plays like a beginner and a 2000+ punishes like one. Each bot has
+       three portraits (straight/happy/angry) for live reactions. ── */
     static BOTS = [
-        { id: 'alex',   name: 'Alex',          elo: 200,  avatar: 'assets/pieces/pieces-main/white-pawn.svg',   blurb: 'Just learned how the horsey moves. Be nice.' },
-        { id: 'prima',  name: 'Prima',         elo: 400,  avatar: 'assets/pieces/pieces-main/white-knight.svg', blurb: 'Knows one opening trap and will absolutely try it.' },
-        { id: 'rook',   name: 'Rook Roll',     elo: 800,  avatar: 'assets/pieces/pieces-main/white-rook.svg',   blurb: 'Solid club player. Punishes hanging pieces.' },
-        { id: 'bishop', name: 'Bishop Blitz',  elo: 1200, avatar: 'assets/pieces/pieces-main/white-bishop.svg', blurb: 'Sharp tactics. Double-check every trade.' },
-        { id: 'queen',  name: 'Queen Gambit',  elo: 1600, avatar: 'assets/pieces/pieces-main/white-queen.svg',  blurb: 'Deep calculation. Bring your best game.' },
-        { id: 'king',   name: 'King Crusher',  elo: 2100, avatar: 'assets/pieces/pieces-main/black-king.svg',   blurb: 'The final boss. Good luck.' }
+        { id: 'alex',   name: 'Alex',          elo: 200,
+          avatar: 'assets/DoChess_Bot_Avatars/straight/bot-1.png',
+          moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-1.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-1.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-1.png' },
+          blurb: 'Just learned how the horsey moves. Be nice.' },
+        { id: 'prima',  name: 'Prima',         elo: 400,
+          avatar: 'assets/DoChess_Bot_Avatars/straight/bot-2.png',
+          moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-2.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-2.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-2.png' },
+          blurb: 'Knows one opening trap and will absolutely try it.' },
+        { id: 'rook',   name: 'Rook Roll',     elo: 800,
+          avatar: 'assets/DoChess_Bot_Avatars/straight/bot-3.png',
+          moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-3.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-3.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-3.png' },
+          blurb: 'Solid club player. Punishes hanging pieces.' },
+        { id: 'bishop', name: 'Bishop Blitz',  elo: 1200,
+          avatar: 'assets/DoChess_Bot_Avatars/straight/bot-4.png',
+          moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-4.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-4.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-4.png' },
+          blurb: 'Sharp tactics. Double-check every trade.' },
+        { id: 'queen',  name: 'Queen Gambit',  elo: 1600,
+          avatar: 'assets/DoChess_Bot_Avatars/straight/bot-5.png',
+          moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-5.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-5.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-5.png' },
+          blurb: 'Deep calculation. Bring your best game.' },
+        { id: 'king',   name: 'King Crusher',  elo: 2100,
+          avatar: 'assets/DoChess_Bot_Avatars/straight/bot-6.png',
+          moods: { straight: 'assets/DoChess_Bot_Avatars/straight/bot-6.png', happy: 'assets/DoChess_Bot_Avatars/happy/bot-6.png', angry: 'assets/DoChess_Bot_Avatars/angry/bot-6.png' },
+          blurb: 'The final boss. Good luck.' }
     ];
 
     /** Engine settings per bot Elo: search depth, blunder rate, and the
         score window a "casual" pick may fall inside. Easy/Medium below are
-        exactly the legacy behaviours, so existing games play identically. */
+        exactly the legacy behaviours, so existing games play identically.
+        Strengths are engineered estimates, not tournament ratings: every
+        rung searches deeper or blunders less than the one below, so the
+        ladder order is strict by construction (verified by self-play in
+        test-vs-bots). Quiescence search lifts every depth, which is what
+        makes the top rungs genuinely strong instead of horizon-blind. */
     static botCpuParams(elo) {
         const e = Number(elo) || 800;
-        if (e <= 300)  return { depth: 1, blunder: 0.35, pool: 150 };
-        if (e <= 600)  return { depth: 2, blunder: 0.22, pool: 80 };
-        if (e <= 1000) return { depth: 2, blunder: 0.06, pool: 40 };
-        if (e <= 1400) return { depth: 3, blunder: 0, pool: 0 };
-        return { depth: 4, blunder: 0, pool: 0, capMs: 2500 };
+        if (e <= 300)  return { depth: 1, blunder: 0.40, pool: 200 };
+        if (e <= 600)  return { depth: 1, blunder: 0.15, pool: 80 };
+        if (e <= 1000) return { depth: 2, blunder: 0.10, pool: 50 };
+        if (e <= 1400) return { depth: 3, blunder: 0.03, pool: 30 };
+        if (e <= 1800) return { depth: 3, blunder: 0, pool: 0 };
+        return { depth: 4, blunder: 0, pool: 0, capMs: 3000 };
     }
 
     // Line icons for the online action bar. Phones hide the text labels
@@ -5490,9 +5816,11 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             if (scr) { scr.focus({ preventScroll: true }); }
         } catch (_) {}
         // Keep nav highlighted so users always know where they are
+        // (bot practice lives on the lesson screen but belongs to Play).
+        const botPlay = id === 'lesson-screen' && this._botGame;
         const navFor = { 'home-screen': 'home', 'lessons-screen': 'lessons', 'lesson-screen': 'lessons', 'progress-screen': 'progress', 'profile-screen': 'profile', 'online-screen':
 'online', 'vs-bots-screen': 'online', 'study-screen': 'study', 'puzzles-screen': 'puzzles', 'friends-screen': 'friends' };
-        const active = navFor[id];
+        const active = botPlay ? 'online' : navFor[id];
         document.querySelectorAll('.nav-btn').forEach(b => {
             const key = b.dataset.nav || b.textContent.trim().toLowerCase();
             // Learn is module-owned (learn-screen): highlight its buttons too.

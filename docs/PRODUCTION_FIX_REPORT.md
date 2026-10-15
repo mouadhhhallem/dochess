@@ -737,6 +737,37 @@ Assets re-keyed (`friends.js?v=11`).
 
 ---
 
+## 20. Vs Bots: separate arena, real names, strict Elo, coach bots (2026-10-15)
+
+1. **Bot games are their own thing now.** They no longer open inside
+   Lesson 10: a dedicated arena shell (Vs header, back-to-bots,
+   Rematch/Change bot, move log, result card pointing back to bots)
+   hosts the same board component. Practice never locks behind
+   course progress and never completes lesson 10.
+2. **Professors renamed** to Nico, Luna and Max (titles, photos and
+   lessons untouched; Atlas kept spare; Alex/Prima stay bots so no
+   name is ever shared between a teacher and a bot).
+3. **Strict Elo ladder.** Quiescence search (captures-only extension)
+   removed the horizon blindness at every depth, and each rung now
+   searches deeper or blunders less than the one below — verified by
+   mate-in-1 + hanging-piece solves at every depth in the suite.
+   Strengths remain engineered estimates, stated as such in code.
+4. **Coach bots.** Each bot has its own portrait set
+   (`assets/DoChess_Bot_Avatars`, straight/happy/angry): blunders get
+   the angry face, winning moves the happy one, quiet play the
+   straight face — judged per move by the app's own evaluation,
+   never Stockfish, never shown as numbers. A talk box by the bot's
+   face coaches every move (basic/opening/capture/check/praise/
+   scold sets, deterministic rotation) and feels the result at the
+   end. Phone (390px) and desktop verified by screenshot: foe,
+   Elo, talk and board all visible without hunting.
+
+Test deltas: `test-vs-bots.spec.js` **6/6** (labels, roster with new
+portraits, real game loop, tactics at every depth, moods/talk/game
+feelings). Full Playwright suite: **104 passed, 0 failed**.
+
+---
+
 ## 20. Faster puzzles, LVL on profile, DB history, 6 party boards, bell toggle, important-only retention (2026-10-15)
 
 1. **Puzzles load faster.** The puzzles page paid two sequential API
