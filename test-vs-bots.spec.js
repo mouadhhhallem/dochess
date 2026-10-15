@@ -176,8 +176,11 @@ test('coach moods, talk and game-end feelings', async ({ browser }) => {    cons
     expect(moods[0]).toMatch(/happy\/bot-2\.png/);
     expect(moods[1]).toMatch(/angry\/bot-2\.png/);
     expect(moods[2]).toMatch(/straight\/bot-2\.png/);
-    expect(moods[3]).toMatch(/you got me/i);
-    expect(moods[4]).toMatch(/angry\/bot-2\.png/);
+    // Endings speak in character: 'win' (player won) -> Prima's graceless
+    // defeat demanding a rematch; 'loss' (bot won) -> smug happy face.
+    expect(moods[3]).toMatch(/rematch|again/i);
+    expect(moods[3]).not.toMatch(/stockfish|engine|second look|deeper|depth/i);
+    expect(moods[4]).toMatch(/happy\/bot-2\.png/);
     expect(errors, 'no page errors').toEqual([]);
     await ctx.close();
 });
@@ -223,6 +226,47 @@ test('Stockfish score parsing and verdict merge (no worker needed)', async ({ br
     expect(m[3]).toMatch(/drops about 4 pawns/i);
     expect(m[3]).not.toMatch(/stockfish|engine|second look|deeper|depth/i);
     expect(m[4]).toMatch(/angry\/bot-1\.png/);
+    expect(errors, 'no page errors').toEqual([]);
+    await ctx.close();
+});
+
+test('dialogue system: personas, no engine words, no repeats', async ({ browser }) => {
+    const { ctx, page, errors } = await boot(browser, 1280);
+    const rep = await page.evaluate(() => {
+        const D = window.DoChessDialogue;
+        const banned = D.BANNED;
+        const out = { personas: Object.keys(D.PERSONAS), bad: [], events: {} };
+        // Every line of every persona of every event must be clean.
+        for (const [id, p] of Object.entries(D.PERSONAS)) {
+            for (const [ev, pool] of Object.entries(p.lines)) {
+                out.events[ev] = (out.events[ev] || 0) + pool.length;
+                for (const line of pool) {
+                    if (banned.test(line)) out.bad.push(id + '/' + ev + ': ' + line.slice(0, 60));
+                    // No unfilled slots may survive rendering.
+                    const t = D.say(id, ev, { piece: 'knight', square: 'f3', move: 'e2e4', pawns: '2 pawns', n: 2 }, 3).text;
+                    if (/{piece}|{square}|{move}|{pawns}|{n}/.test(t)) out.bad.push(id + '/' + ev + ': unfilled slot');
+                }
+            }
+        }
+        // Anti-repeat: same event twice in a row must differ.
+        D.reset();
+        const a = D.say('prima', 'blunder', { piece: 'queen', square: 'd1', move: 'e2e4', pawns: '4 pawns', n: 1 }, 6).text;
+        const b = D.say('prima', 'blunder', { piece: 'queen', square: 'd1', move: 'e2e4', pawns: '4 pawns', n: 1 }, 6).text;
+        out.repeat = { a, b, same: a === b };
+        // Voice check: each persona greets in its own unmistakable voice.
+        D.reset();
+        out.greetings = ['alex', 'prima', 'nico', 'luna', 'max', 'atlas'].map((id) => D.say(id, 'greeting', {}, 1).text.slice(0, 40));
+        // Mood map covers every event the app can fire.
+        out.moods = ['greeting', 'opening', 'brilliant', 'good', 'captureWon', 'checkGiven', 'botProud', 'blunder', 'mistake', 'inaccuracy', 'badTrade', 'hanging', 'botGift', 'quiet', 'evenTrade', 'castle', 'develop', 'center', 'winning', 'losing', 'endWin', 'endLoss', 'endDraw']
+            .map((ev) => ev + ':' + (D.MOODS[ev] || 'MISSING'));
+        return out;
+    });
+    expect(rep.personas).toEqual(['alex', 'prima', 'nico', 'luna', 'max', 'atlas']);
+    expect(rep.bad).toEqual([]);
+    expect(rep.repeat.same).toBe(false);
+    // Six greetings, six different voices.
+    expect(new Set(rep.greetings).size).toBe(6);
+    expect(rep.moods.every((m) => !/MISSING/.test(m))).toBe(true);
     expect(errors, 'no page errors').toEqual([]);
     await ctx.close();
 });

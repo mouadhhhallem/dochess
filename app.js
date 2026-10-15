@@ -681,6 +681,9 @@ class ChessCourseApp {
         this._botGame = true;
         this._botMood = 'straight';
         this._botSaid = [];
+        // Game story: the dialogue system remembers what happened, so later
+        // lines can callback ("again", "second gift", "still no castle").
+        this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 };
         this._botEvalBefore = null; this._botSnapBefore = null;
         this._botMoveInfo = null; this._botLastMove = null;
         this._botSfPrev = null; this._botSfPrevStamp = ''; this._botSfBusy = false;
@@ -714,14 +717,32 @@ class ChessCourseApp {
         });
     }
 
-    /* ── Bot coach: Stockfish-first teacher ──────────────────────────
-        After each of the player's moves an INSTANT verdict from our own
-        engine + attack maps shows immediately (facts + swing, always works,
-        even on file://), then Stockfish refines it with the real engine's
-        truth: baselines are banked before every White move, so the delta
-        measures the player's move alone. Numbers never reach the screen —
-        only a teacher's explanation of WHY. Deterministic rotation (move
-        number) so phrases vary without repeating awkwardly. */
+    /* ── Bot dialogue system (chess.com-style) ───────────────────────
+        Every bot is a CHARACTER: game events (blunder, brilliant, check,
+        gift, win, loss...) route through js/bot-dialogue.js, which speaks
+        in that bot's voice with memory of the game story. Talk NEVER names
+        machinery (no Stockfish/engine/depth) — personas only. Falls back
+        to a plain line if the module failed to load. */
+
+    /** Speak one dialogue event: sets the face, renders the line. */
+    _botTalk(event, slots, moveNo) {
+        try {
+            const bot = this._cpuBot;
+            if (!bot) return;
+            if (window.DoChessDialogue) {
+                const n = Math.max(1, moveNo || Math.ceil(((this.game && this.game.moveHistory) || []).length / 2) || 1);
+                const r = DoChessDialogue.say(bot.id, event, slots || {}, n);
+                if (r && r.text) {
+                    this._botSetMood(r.mood || 'straight');
+                    this._botSay(r.text);
+                    return;
+                }
+            }
+            // Fallback (module missing): short neutral line, correct face.
+            this._botSetMood((DoChessDialogue && DoChessDialogue.MOODS[event]) || 'straight');
+            this._botSay('Noted.');
+        } catch (_) {}
+    }
 
     _botSetMood(mood) {
         try {
@@ -871,113 +892,64 @@ class ChessCourseApp {
             // position and why. Praise is earned by the eval swing, never
             // handed out — and mistakes are named (hanging piece + square,
             // material lost), never smoothed over.
+            // Slots for the dialogue system: concrete facts, persona voice.
+            const pawnStr = (cp) => {
+                const v = Math.abs(Math.round(cp / 10) / 10);
+                return `${v} pawn${v === 1 ? '' : 's'}`;
+            };
+            const infoPc = (info.piece || '').toLowerCase();
+            const pieceSlot = hangName || capName || (names[infoPc] || 'piece');
+            const sqSlot = hangSq || (to ? alg(to) : '');
+            const story = this._botStory || (this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 });
+            const slots = () => ({
+                piece: pieceSlot, square: sqSlot, move: moveSq || 'that move',
+                pawns: pawnStr(delta), n: story.blunders || 0,
+            });
+            const evt = (e, extra) => this._botTalk(e, Object.assign(slots(), extra || {}), moveNo);
+            // Position truth -> dialogue EVENT; each persona speaks it in
+            // its own voice (js/bot-dialogue.js). Mistakes are always
+            // called out; quiet spots alternate verdict and live plan tip.
             if (newHang && newHang.val >= 300 && delta <= -80) {
-                mood = 'angry';
-                text = pick([
-                    `That leaves your ${hangName} on ${hangSq} hanging — I take it for free next move. Before you move, ask what defends every piece you leave behind.`,
-                    `Your ${hangName} on ${hangSq} is undefended now, and that costs ${pawns(delta)}. Count my attackers before you let go of a piece.`,
-                    `Hanging ${hangName}s lose games: ${hangSq} falls next move. Get in the habit — my move, your threats, then your move.`,
-                ]);
+                story.blunders++;
+                evt('hanging');
             } else if (delta >= 250) {
-                mood = 'happy';
-                text = pick([
-                    `Brilliant — ${moveSq} gains ${pawns(delta)} by force. That is the strongest idea on the board.`,
-                    `Superb! ${moveSq} wins material because my replies all fall short. You calculated deeper than my search.`,
-                    `What a move! ${moveSq} improves your position by ${pawns(delta)} — keep punishing every inaccuracy like that.`,
-                ]);
+                evt('brilliant');
             } else if (last.captured && delta <= -80) {
-                mood = 'angry';
-                text = pick([
-                    `Bad trade — that capture loses ${pawns(delta)}${capName && capName !== 'piece' ? ` because my ${capName} was defended` : ''}. Only swap when you come out ahead.`,
-                    `Taking there costs you: you emerge down ${pawns(delta)}. Recalculate captures — what takes back?`,
-                    `Never swap when you come out down. That exchange bleeds ${pawns(delta)} — undo it mentally and find the recapture first.`,
-                ]);
+                story.blunders++;
+                evt('badTrade');
             } else if (delta <= -350) {
-                mood = 'angry';
-                text = pick([
-                    `Blunder — ${moveSq} drops ${pawns(delta)}, a full piece. Stop, breathe, and scan my checks and captures before you touch a piece.`,
-                    `Ouch. ${moveSq} hangs ${pawns(delta)} of material${hangSq ? ` — ${hangSq} is the hole` : ''}. What reply did you miss? Find it before I play it.`,
-                ]);
+                story.blunders++;
+                evt('blunder');
             } else if (delta <= -150) {
-                mood = 'angry';
-                text = pick([
-                    `Mistake — ${moveSq} gives up ${pawns(delta)} and the initiative with it. Small drops decide big games.`,
-                    `Careless. That move leaks ${pawns(delta)} for nothing. Ask of every move: what does it threaten, and what does it leave?`,
-                ]);
+                story.blunders++;
+                evt('mistake');
             } else if (delta <= -80) {
-                mood = 'angry';
-                text = pick([
-                    `Inaccuracy — ${moveSq} surrenders ${pawns(delta)} of your edge. Tighten up: there was a stronger idea.`,
-                    `Hmm — second-best. ${moveSq} drifts ${pawns(delta)} off course. Compare candidate moves before you commit.`,
-                ]);
+                evt('inaccuracy');
             } else if (last.captured && delta >= 80) {
-                mood = 'happy';
-                text = pick([
-                    `Well taken — ${capName} won cleanly for ${pawns(delta)}, and nothing of yours hangs in return.`,
-                    `Good grab! That ${capName} was loose, so ${moveSq} banks ${pawns(delta)}. Punish every free piece.`,
-                ]);
+                evt('captureWon');
             } else if (last.captured) {
-                mood = 'straight';
-                text = pick([
-                    'An even trade — no harm, no gain. Keep pieces active rather than swapping for its own sake.',
-                    'Fair swap. Equal material, so now outplay me positionally: center, development, king safety.',
-                ]);
+                evt('evenTrade');
             } else if (status.startsWith('check-black')) {
-                mood = 'happy';
-                text = advise ? planTip : pick([
-                    'Check — and a good one if it comes with a threat. Now convert the pressure into something real: a fork, a pin, or material.',
-                    'Check! Checks only count when they improve your position — follow it up before I wriggle out.',
-                    'Good aggression. Keep every check purposeful.',
-                    'Check! Now cut off my escape squares first, then bring help.',
-                ]);
+                story.checks++;
+                evt('checkGiven');
             } else if (isCastle) {
-                mood = 'straight';
-                text = advise ? planTip : pick([
-                    'Castled — king tucked away and rook connected. That is textbook king safety; now play in the center.',
-                    'Good: safety first. A castled king means you can attack without looking over your shoulder.',
-                    'Textbook castling. Next: pick a plan.',
-                ]);
+                evt('castle');
             } else if (developed && delta > -80) {
-                mood = 'straight';
-                text = advise ? planTip : pick([
-                    'Developing with tempo — knights and bishops out before the attack. That is how winning positions start.',
-                    'Pieces out before pawns storm. That development keeps every future tactic working for you.',
-                    'No piece moves twice until they are all out.',
-                ]);
+                evt('develop');
             } else if (toCenter && (movedPc === 'p' || movedPc === 'n') && delta > -80) {
-                mood = 'straight';
-                text = advise ? planTip : pick([
-                    'Central control — pawns and knights in the middle govern the whole board. Exactly right.',
-                    'Taking the center: that is where games are won, because central pieces reach both wings.',
-                    'Defend your center with pieces now, not more pawn pushes.',
-                ]);
+                evt('center');
             } else if (delta >= 100) {
-                mood = 'happy';
-                text = (advise && planTip) ? planTip : pick([
-                    `Strong — ${moveSq} improves your position by ${pawns(delta)}. You are outplaying my search.`,
-                    `Yes! A full ${pawns(delta)} better. That is real, measurable progress — keep it up.`,
-                    'Wins slowly, then all at once. Keep converting.',
-                ]);
+                evt('good');
             } else if (moveNo <= 3) {
-                mood = 'straight';
-                text = (advise && planTip) ? planTip : pick([
-                    'Control the center with pawns, then develop knights before bishops — that order wins openings.',
-                    'Knights before bishops, castle early, and never move the same piece twice while undeveloped pieces wait.',
-                    'Castle early and stay safe: an unsafe king cancels every clever idea you find.',
-                    'Fight for e4 and d4 first. Whoever owns the middle owns the plans.',
-                ]);
+                evt('opening');
+            } else if (advise) {
+                this._botSetMood('straight');
+                this._botSay(planTip);
+                remember(planTip);
             } else {
-                mood = 'straight';
-                text = (advise && planTip) ? planTip : pick([
-                    'Solid and safe — nothing hangs and the structure holds. Now look for a move that threatens something.',
-                    'A quiet move, honestly played. Simple is fine — but ask what plan it serves before the next one.',
-                    'Patient. Good — but patience needs a plan: improving your worst piece is always one.',
-                    'No weaknesses, no threats. Create one threat every few moves.',
-                ]);
+                evt('quiet');
             }
-            remember(text);
-            this._botSetMood(mood);
-            this._botSay(text);
+
             ownDelta = delta;
         } catch (_) {}
         // Stockfish second opinion (async): corrects the mood only when
@@ -1175,53 +1147,35 @@ class ChessCourseApp {
             const ownMood = moodOf(ownDelta);
             if (sfMood === ownMood) return false;
             const n = Math.max(1, moveNo || 1);
-            const said = this._botSaid || [];
-            const pick = (arr) => {
-                const fresh = arr.filter(t => !said.includes(t));
-                const pool = fresh.length ? fresh : arr;
-                return pool[n % pool.length];
-            };
             const f = facts || {};
-            const tip = this._botPlanTip();
-            const pawns = (cp) => {
-                const v = Math.abs(Math.round(cp / 10) / 10);
-                return `${v} pawn${v === 1 ? '' : 's'}`;
-            };
-            const whyBad = f.hangName
-                ? ` Your ${f.hangName}${f.hangSq ? ` on ${f.hangSq}` : ''} is hanging — that is the hole.`
-                : (f.capName ? ` That exchange trades you down.` : ` Spot the reply you allowed before I play it.`);
-            const whyGood = f.checking
-                ? ` It comes with check and a real threat behind it.`
-                : (f.moveSq ? ` ${f.moveSq} is simply the strongest idea there.` : ` Every reply I have falls short.`);
-            this._botSetMood(sfMood);
-            let line = '';
-            if (sfMood === 'happy') {
-                line = pick([
-                    `I will admit it — that is genuinely strong, worth about ${pawns(sfDelta)}.${whyGood}`,
-                    `Well played, truly. Up about ${pawns(sfDelta)} — now simplify and make it count.`,
-                ]);
-            } else if (sfMood === 'angry') {
-                line = pick([
-                    `That drops about ${pawns(sfDelta)}.${whyBad}`,
-                    `Costly — you just handed me ${pawns(sfDelta)}.${whyBad}`,
-                ]);
-            } else {
-                line = (tip && n % 2 === 0) ? tip : pick([
-                    'That is fine — nothing hangs, structure holds. Now give your next move a job: improve your worst piece.',
-                    'Solid enough. Next: create a threat instead of waiting for mine.',
-                ]);
+            const v = Math.abs(Math.round(sfDelta / 10) / 10);
+            const pawnStr = `${v} pawn${v === 1 ? '' : 's'}`;
+            // Map the real engine's truth to a dialogue EVENT; the persona
+            // speaks it (never engine words — see DoChessDialogue.BANNED).
+            let event = 'quiet';
+            if (sfMood === 'happy') event = 'brilliant';
+            else if (sfMood === 'angry') {
+                event = 'blunder';
+                try {
+                    const st = this._botStory || (this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 });
+                    st.blunders++;
+                } catch (_) {}
             }
-            try {
-                this._botSaid = (this._botSaid || []).concat([line]).slice(-6);
-            } catch (_) {}
-            this._botSay(line);
+            this._botTalk(event, {
+                piece: f.hangName || f.capName || 'piece',
+                square: f.hangSq || '',
+                move: f.moveSq || 'that move',
+                pawns: pawnStr,
+                n: (this._botStory && this._botStory.blunders) || 0,
+            }, n);
             return true;
         } catch (_) { return false; }
     }
 
     /** The bot's own move, judged the same way: when a weak bot hangs
-        something, it owns up like a good sport — that's when the angry
-        face is funniest, and it teaches spotting blunders. */
+        something, it owns up IN CHARACTER (Alex panics, Atlas quakes) —
+        that's when personas shine brightest, and it teaches spotting
+        blunders. Strong moves get persona-scaled menace, not gloating. */
     _botReactToOwnMove() {
         try {
             const bot = this._cpuBot;
@@ -1231,35 +1185,59 @@ class ChessCourseApp {
             const after = this._evaluate(this.game);
             const deltaBlack = after - before; // + = good for Black (the bot)
             const moveNo = Math.max(1, Math.ceil(this.game.moveHistory.length / 2));
-            const pick = (arr) => arr[moveNo % arr.length];
+            const story = this._botStory || (this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 });
             if (deltaBlack <= -200) {
-                this._botSetMood('angry');
-                this._botSay(pick([
-                    'Ugh, that was awful. Punish me!',
-                    'Did I just hang that? Take it — you earned it.',
-                    'My circuits glitched. Go on, take the gift.',
-                ]));
+                story.gifts++;
+                // Name what was hung so the player learns to LOOK.
+                let hung = '';
+                try {
+                    const hangs = this._hangList(this.game, 'black');
+                    if (hangs && hangs.length) {
+                        const names = ChessCourseApp.BOT_PIECE_NAMES;
+                        hung = names[hangs[0].piece] || 'piece';
+                    }
+                } catch (_) {}
+                this._botTalk('botGift', { piece: hung || 'piece', n: story.gifts }, moveNo);
+                return true;
             } else if (deltaBlack >= 250) {
-                this._botSetMood('happy');
-                this._botSay(pick([
-                    'Oh, that is nasty. Sorry not sorry.',
-                    'Too strong. You cannot stop this.',
-                ]));
+                this._botTalk('botProud', { n: moveNo }, moveNo);
+                return true;
             }
+            return false;
         } catch (_) {}
     }
+
     _botGameEnd(kind) {
         try {
             if (!this._botGame || !this._cpuBot) return;
-            if (kind === 'win') {
-                this._botSetMood('happy');
-                this._botSay('You got me! Rematch?');
-            } else if (kind === 'loss') {
-                this._botSetMood('angry');
-                this._botSay('Grr... you won this one. REMATCH. Now.');
-            } else {
-                this._botSetMood('straight');
-                this._botSay('A draw — I will take it. One more?');
+            // Endings in character: Alex begs for rematches, Atlas quakes.
+            if (kind === 'win') this._botTalk('endLoss', {});
+            else if (kind === 'loss') this._botTalk('endWin', {});
+            else this._botTalk('endDraw', {});
+        } catch (_) {}
+    }
+
+    /** Lead taunt: when the bot is clearly ahead (or behind) it says so IN
+        CHARACTER — Max menaces, Alex marvels, Atlas thunders. Gated: only
+        from move 8+, at most every 6 moves, and never twice in a row after
+        a verdict (the coach just spoke). Skipped while the game is over. */
+    _botLeadTaunt() {
+        try {
+            const bot = this._cpuBot;
+            if (!bot || !this.game || !this._botGame || this.game.gameOver) return;
+            const st = this._botStory || (this._botStory = { blunders: 0, gifts: 0, checks: 0, taunts: 0, lastTauntMove: -99 });
+            const moveNo = Math.max(1, Math.ceil((this.game.moveHistory || []).length / 2));
+            if (moveNo < 8 || moveNo - st.lastTauntMove < 6) return;
+            let lead = 0; // + = bot (Black) ahead, White perspective inverted
+            try { lead = this._evaluate(this.game); } catch (_) { return; }
+            const trash = (window.DoChessDialogue && DoChessDialogue.PERSONAS[bot.id]
+                && DoChessDialogue.PERSONAS[bot.id].trash) || 1;
+            if (lead >= 200 && Math.random() < 0.25 + trash * 0.2) {
+                st.taunts++; st.lastTauntMove = moveNo;
+                this._botTalk('winning', { n: moveNo }, moveNo);
+            } else if (lead <= -200 && Math.random() < 0.3) {
+                st.taunts++; st.lastTauntMove = moveNo;
+                this._botTalk('losing', { n: moveNo }, moveNo);
             }
         } catch (_) {}
     }
@@ -1297,15 +1275,25 @@ class ChessCourseApp {
     _renderVsBots() {
         const box = document.getElementById('vs-bots-content');
         if (!box) return;
-        const cards = ChessCourseApp.BOTS.map(b => `
+        const cards = ChessCourseApp.BOTS.map(b => {
+            // Roster shows the persona's revealed playstyle (chess.com-style:
+            // you know WHO you face before move one), falling back to blurb.
+            let flavor = b.blurb || '';
+            try {
+                if (window.DoChessDialogue) {
+                    const st = DoChessDialogue.styleFor(b.id);
+                    if (st) flavor = st;
+                }
+            } catch (_) {}
+            return `
             <article class="bot-card" data-bot="${esc(b.id)}">
                 <div class="bot-top">${this._botAvatarHTML(b, 72)}
                     <div class="bot-id"><strong>${esc(b.name)}</strong>
                     <span class="bot-elo">${b.elo} Elo · ${esc(ChessCourseApp.botSkill(b.elo))}</span></div>
                 </div>
-                <p class="bot-blurb">${esc(b.blurb || '')}</p>
+                <p class="bot-blurb">${esc(flavor)}</p>
                 <button class="btn-primary sm" data-action="vs-bot" data-bot="${esc(b.id)}" type="button">Play ${esc(b.name)}</button>
-            </article>`).join('');
+            </article>`; }).join('');
         box.innerHTML = `
             <p class="lobby-hint">Practice against bots from 200 to 2000+ Elo. No account needed — pick your opponent and play a full game as White.</p>
             <div class="bot-grid">${cards}</div>`;
@@ -1387,6 +1375,11 @@ class ChessCourseApp {
             </div>`;
 
         this._initBoard(l);
+        // Persona greeting (chess.com bots introduce themselves in voice).
+        try {
+            if (window.DoChessDialogue) DoChessDialogue.reset(bot.id);
+            this._botTalk('greeting', {}, 1);
+        } catch (_) {}
     }
 
     _buildLessonUI(l) {
@@ -2266,7 +2259,14 @@ class ChessCourseApp {
             // box above owns commentary; this line owns the move number).
             this._fb(this._botGame ? `Move ${num} · Your move (White)` : `Move ${num} — your turn (White)`, 'info');
             // The bot judges its own move too (weak bots fess up).
-            if (this._botGame && this._cpuBot) this._botReactToOwnMove();
+            let reacted = false;
+            if (this._botGame && this._cpuBot) {
+                try { reacted = !!this._botReactToOwnMove(); } catch (_) {}
+            }
+            // Ahead/behind chirps (chess.com bots needle when winning and
+            // squirm when losing): rare, cooldown-gated, persona-scaled —
+            // and never stomping the own-move reaction that just spoke.
+            if (this._botGame && this._cpuBot && !reacted) this._botLeadTaunt();
             // Fresh Stockfish baseline: the position BEFORE White's next
             // move, so the next verdict measures that move alone.
             if (this._botGame && this._cpuBot) { try { this._botSfBaseline(); } catch (_) {} }
