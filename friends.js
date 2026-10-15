@@ -162,6 +162,79 @@
         try { return !!localStorage.getItem(GUEST_ADOPTED_KEY); } catch (_) { return false; }
     }
 
+    /* ── World-server connection (no devtools needed) ───────────
+       GitHub Pages ships no backend, so friends/ranking/hall fall back to
+       labelled device-local lists. This card shows the live connection
+       state and lets anyone paste the API origin once it is deployed
+       (stored as cc_api_base, honoured by every resolver). */
+    const probeCache = {};
+    function apiOverride() {
+        try { return localStorage.getItem('cc_api_base') || ''; } catch (_) { return ''; }
+    }
+    function cleanApiUrl(v) {
+        const s = String(v == null ? '' : v).trim().replace(/\/+$/, '');
+        if (!/^https?:\/\/[A-Za-z0-9.-]+(:\d+)?$/i.test(s)) return null;
+        try {
+            const u = new URL(s);
+            if (/\.github\.io$/i.test(u.hostname)) return null; // Pages hosts no API
+        } catch (_) { return null; }
+        return s;
+    }
+    async function probeApi(base, timeoutMs) {
+        const key = String(base);
+        const hit = probeCache[key];
+        if (hit && Date.now() - hit.at < 60000) return hit.res;
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), timeoutMs || 7000);
+        let res;
+        try {
+            const r = await fetch(key + '/api/health', { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+            if (!r.ok) res = { ok: false, reason: 'HTTP ' + r.status };
+            else {
+                const j = await r.json().catch(() => null);
+                res = { ok: !!(j && j.ok), productionReady: !!(j && j.productionReady), db: j && j.db && j.db.kind };
+            }
+        } catch (e) {
+            const m = String((e && e.message) || e || '');
+            res = /abort/i.test(m) ? { ok: false, reason: 'timed out' } : { ok: false, reason: 'unreachable (network, DNS or CORS)' };
+        } finally { clearTimeout(to); }
+        probeCache[key] = { at: Date.now(), res };
+        return res;
+    }
+    function serverCardHTML() {
+        const ov = apiOverride();
+        return `<section class="fr-apiconn" data-apiconn aria-label="World server connection">
+            <div class="fr-apiconn-main">
+                <strong>World server</strong>
+                <p class="fr-sub" data-api-status>${ov ? 'Checking ' + esc(ov) + '…' : 'Device only — no world server connected. Friends, ranking and hall of fame stay on this browser.'}</p>
+            </div>
+            <div class="fr-apiconn-row">
+                <input id="fr-api-url" class="join-input" placeholder="https://your-api.fly.dev" autocomplete="off" spellcheck="false" maxlength="80" value="${esc(ov)}" aria-label="World server URL">
+                <button class="btn-primary sm" data-faction="api-save" type="button">Connect</button>
+                ${ov ? `<button class="btn-secondary sm" data-faction="api-clear" type="button">Disconnect</button>` : ''}
+            </div>
+        </section>`;
+    }
+    // Fill every status line on screen without re-rendering (probe is async).
+    async function paintApiStatus() {
+        const cards = document.querySelectorAll('[data-apiconn]');
+        if (!cards.length) return;
+        const base = apiBase();
+        if (!base) return; // static device-only text already rendered
+        let res;
+        try { res = await probeApi(base); } catch (_) { res = { ok: false, reason: 'unreachable' }; }
+        cards.forEach((card) => {
+            if (!card.isConnected) return;
+            const el = card.querySelector('[data-api-status]');
+            if (!el) return;
+            try {
+                const host = new URL(base).hostname;
+                el.textContent = res && res.ok
+                    ? `Connected to ${host} — world friends, ranking and hall of fame are live${res.productionReady === false ? ' (server reports dev mode)' : ''}.`
+                    : `Unreachable: ${host} (${(res && res.reason) || 'no answer'}). Check the URL, CORS_ORIGIN on the server, and that the API is running.`;
+            } catch (_) {}
+        });
+    }
     /* ── API base (same rule as matchmaking) ────────────────── */
     function apiBase() {
         try {
@@ -1978,6 +2051,7 @@ let needSnapshot = false;
         const reqs = S.pendingIn;
         box.innerHTML = `
             ${heroHTML()}
+            ${serverCardHTML()}
             <div class="fr-head">
                 <div>
                     <p class="fr-kicker">Friends</p>
@@ -2022,6 +2096,7 @@ let needSnapshot = false;
             grid.innerHTML = rows.length ? rows.map((f) => friendRow(f, pres)).join('') : `<div class="fr-onboard"><h3>Grow your first flame</h3><ol><li><strong>Copy your invite link</strong> — anyone, anywhere.</li><li><strong>Play one game together</strong> — any day, any control.</li><li><strong>+1 every day</strong> you both play. Miss a day and it resets.</li></ol><div class="fr-acts"><button class="btn-primary sm" data-faction="copy-link" type="button">Copy invite link</button><button class="btn-secondary sm" data-faction="goto-search" type="button">Search DoChess players</button></div></div>`;
         };
         paint();
+        try { paintApiStatus(); } catch (_) {}
         // Keep presence truthful while the screen sits open: re-paint the
         // grid (status dots + last-seen) at most every 30 s without touching
         // the search box, which lives outside the grid.
@@ -2176,10 +2251,12 @@ let needSnapshot = false;
         rankLoading = true;
         box.innerHTML = `<div class="fr-head"><div><p class="fr-kicker">Ranking</p><h2>Where you stand</h2></div>
             <div class="fr-cats" role="group" aria-label="Rating category">${RATING_CATS.map((c) => `<button class="btn-secondary sm${c === currentCat ? ' on' : ''}" data-faction="cat" data-cat="${c}" type="button">${c[0].toUpperCase() + c.slice(1)}</button>`).join('')}</div></div>
+            ${serverCardHTML()}
             <div id="fr-rankout"><p class="lobby-hint" role="status">Loading the board…</p></div>`;
         const out = box.querySelector('#fr-rankout');
         const data = await rankBoard(currentCat, { offset });
         rankLoading = false;
+        try { paintApiStatus(); } catch (_) {}
         if (data.error === 'unavailable') {
             stopRankAutoRefresh();
             out.innerHTML = `<p class="fr-empty" role="status">The ranking service is unreachable right now. Nothing is shown rather than a local list pretending to be the global ladder.</p>
@@ -2231,9 +2308,10 @@ let needSnapshot = false;
 
 async function renderHall(box) {
         const offset = hallOffset || 0;
-        box.innerHTML = `<div class="fr-head"><div><p class="fr-kicker">Hall of fame</p><h2>Every player on DoChess</h2></div></div><div id="fr-hallout"><p class="lobby-hint" role="status">Loading the hall…</p></div>`;
+        box.innerHTML = `<div class="fr-head"><div><p class="fr-kicker">Hall of fame</p><h2>Every player on DoChess</h2></div></div>${serverCardHTML()}<div id="fr-hallout"><p class="lobby-hint" role="status">Loading the hall…</p></div>`;
         const out = box.querySelector('#fr-hallout');
         const data = await hallList({ offset });
+        try { paintApiStatus(); } catch (_) {}
         if (data.error === 'unavailable') {
             out.innerHTML = `<p class="fr-empty" role="status">The hall of fame is unreachable right now. Nothing is shown rather than a local list pretending to be global.</p>
                 <div class="fr-pager"><button class="btn-secondary sm" data-faction="hall-refresh" type="button">Try again</button></div>`;
@@ -2399,6 +2477,24 @@ async function renderHall(box) {
         }
         if (a === 'accept') { await acceptFriend(uid); open(currentTab); return; }
         if (a === 'decline') { await declineFriend(uid); open(currentTab); return; }
+        if (a === 'api-save') {
+            const inp = document.getElementById('fr-api-url');
+            const clean = cleanApiUrl(inp && inp.value);
+            if (!clean) {
+                notifyLocal('note', 'That URL will not work', 'Use the API origin only, like https://your-api.fly.dev (https, host, optional port — no path, no trailing slash).');
+                open(currentTab); return;
+            }
+            try { localStorage.setItem('cc_api_base', clean); } catch (_) {}
+            try { Object.keys(probeCache).forEach((k) => delete probeCache[k]); } catch (_) {}
+            try { window.DoChessSync && DoChessSync.notify && DoChessSync.notify(); } catch (_) {}
+            notifyLocal('note', 'World server saved', 'Checking ' + clean + ' — the card above shows whether it answers.');
+            open(currentTab); return;
+        }
+        if (a === 'api-clear') {
+            try { localStorage.removeItem('cc_api_base'); } catch (_) {}
+            try { Object.keys(probeCache).forEach((k) => delete probeCache[k]); } catch (_) {}
+            open(currentTab); return;
+        }
         if (a === 'remove') {
             // Destructive and asymmetric: confirm before deleting, so an
             // accidental tap cannot silently drop a friendship.
