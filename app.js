@@ -315,10 +315,10 @@ class ChessCourseApp {
     ══════════════════════════════════════════════════════════════ */
     // Bump ASSET_V every release so edited artwork can never hide
     // behind the browser image cache. Same rule as the ?v= tags.
-    static assetV() { return 'v24'; }
+    static assetV() { return 'v25'; }
     // App release tag (?v= on scripts). Sent on identity messages so two
     // sides on different releases warn instead of silently misbehaving.
-    static APP_VERSION = 'v39';
+    static APP_VERSION = 'v40';
     _pieceFile(piece) {
         // Piece SET (folder) is chosen once in the Online lobby — see js/pieces.js.
         if (window.DoChessPieces) return DoChessPieces.url(piece, ChessCourseApp.assetV());
