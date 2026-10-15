@@ -4,7 +4,13 @@
 FROM node:22-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund
+# `install` (not `ci`) so a drifted lockfile degrades to a warning-free
+# sync instead of failing the whole deploy with EUSAGE.
+RUN npm install --omit=dev --no-audit --no-fund
+# Containers must bind all interfaces: the platform injects $PORT and
+# routes to it, while 127.0.0.1 would be unreachable from outside.
+# (Explicit HOST env still wins — see server/lib/env.mjs.)
+ENV HOST=0.0.0.0
 COPY server/ server/
 COPY *.js *.html *.css ./
 COPY js/ js/
