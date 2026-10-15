@@ -1980,6 +1980,12 @@ body[data-theme='day'] .dc-trend.down { color: #dc2626; }
 }
 .bot-talk strong { color: var(--accent-bright); white-space: nowrap; }
 .bot-talk span { color: var(--text-main); }
+/* Screen-reader-only speaker tag: the talk box sits right under the bot's
+   face, so sighted users don't need the name repeated a fourth time. */
+.sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 .dc-badge {
     display: inline-flex; align-items: center; gap: .35rem;
     font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;

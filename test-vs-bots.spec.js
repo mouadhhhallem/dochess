@@ -138,8 +138,7 @@ test('engine tactics are intact at every depth (mate + hanging piece)', async ({
     await ctx.close();
 });
 
-test('coach moods, talk and game-end feelings', async ({ browser }) => {
-    const { ctx, page, errors } = await boot(browser, 1280);
+test('coach moods, talk and game-end feelings', async ({ browser }) => {    const { ctx, page, errors } = await boot(browser, 1280);
     // Thresholds of the shared classifier: big swing for the player is
     // brilliant/happy, big drop is blunder/angry, quiet is straight.
     const cats = await page.evaluate(() =>
@@ -179,6 +178,49 @@ test('coach moods, talk and game-end feelings', async ({ browser }) => {
     expect(moods[2]).toMatch(/straight\/bot-2\.png/);
     expect(moods[3]).toMatch(/you got me/i);
     expect(moods[4]).toMatch(/angry\/bot-2\.png/);
+    expect(errors, 'no page errors').toEqual([]);
+    await ctx.close();
+});
+
+test('Stockfish score parsing and verdict merge (no worker needed)', async ({ browser }) => {
+    const { ctx, page, errors } = await boot(browser, 1280);
+    const r = await page.evaluate(() => {
+        const P = window.DoChessBotFish.parseScore;
+        return {
+            // UCI scores are side-to-move relative — the sign MUST flip
+            // for Black to move, or praise and blame swap sides.
+            wPlus: P('info depth 11 seldepth 20 multipv 1 score cp 150 nodes 1 nps 1 time 1 pv e2e4', true),
+            bPlus: P('info depth 11 score cp 150 time 1 pv e7e5', false),
+            wMate: P('info depth 9 score mate 3 pv qh5f7', true),
+            bMated: P('info depth 9 score mate -2 pv a1a8', false),
+            junk: P('info depth 3 nodes 99', true),
+        };
+    });
+    expect(r.wPlus).toEqual({ whiteCp: 150, mate: 0, depth: 11 });
+    expect(r.bPlus).toEqual({ whiteCp: -150, mate: 0, depth: 11 });
+    expect(r.wMate.mate).toBe(3);
+    expect(r.wMate.whiteCp).toBeGreaterThan(9000);
+    // Black to move is mated in 2 => White mates: positive mate, huge cp.
+    expect(r.bMated.mate).toBe(2);
+    expect(r.bMated.whiteCp).toBeGreaterThan(9000);
+    expect(r.junk).toBe(null);
+    // Verdict merge: same mood or near-miss never flips the face.
+    const m = await page.evaluate(() => {
+        const A = window.app;
+        A.startBotGame('alex');
+        return [
+            A._botApplySfVerdict(90, 40, 5),     // both straight, near
+            A._botApplySfVerdict(150, 40, 5),    // happy vs straight but <120 apart
+            A._botApplySfVerdict(-400, 30, 6),   // angry vs straight, far apart
+            document.getElementById('bot-talk')?.innerText || '',
+            document.getElementById('bot-mood-img')?.getAttribute('src') || '',
+        ];
+    });
+    expect(m[0]).toBe(false);
+    expect(m[1]).toBe(false);
+    expect(m[2]).toBe(true);
+    expect(m[3]).toMatch(/second look/i);
+    expect(m[4]).toMatch(/angry\/bot-1\.png/);
     expect(errors, 'no page errors').toEqual([]);
     await ctx.close();
 });
