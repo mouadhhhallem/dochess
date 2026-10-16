@@ -2624,6 +2624,40 @@ body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
     .or-card { animation: none !important; }
 }
 
+/* ── Result modal: pops over the finished board ───────────────────
+   #online-result is empty mid-game (hidden); on game over it becomes a
+   dimmed full-screen veil with the score card centered. Dismiss via ×
+   or backdrop to inspect the final position; the Result pill reopens. */
+#online-result:empty { display: none; }
+#online-screen:not(.or-open) #online-result { display: none; }
+@keyframes frFade { from { opacity: 0; } to { opacity: 1; } }
+#online-screen.or-open #online-result {
+    position: fixed; inset: 0; z-index: 120;
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem;
+    background: rgba(5, 8, 15, .68);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    animation: frFade .18s ease-out;
+}
+#online-screen.or-open .or-card { width: min(460px, 94vw); max-height: 88dvh; overflow-y: auto; }
+.or-close {
+    position: absolute; top: .55rem; right: .55rem; z-index: 2;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(0, 0, 0, .4); color: #fff; font-size: 1.15rem; line-height: 1;
+    border: 1px solid var(--glass-border); cursor: pointer;
+}
+.or-close:hover { border-color: var(--accent); color: var(--accent-bright); }
+#or-reopen {
+    display: none; position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 119;
+    align-items: center; gap: .4rem;
+    font: inherit; font-size: .85rem; font-weight: 800; color: var(--text-main);
+    background: var(--bg-elevated); border: 1px solid var(--accent);
+    border-radius: 999px; padding: .55rem 1.1rem; cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+}
+#online-screen.or-over:not(.or-open) #or-reopen { display: inline-flex; }
+
 /* ── Board skin picker (Online lobby) ── */
 .skin-row { display: flex; gap: .65rem; flex-wrap: wrap; }
 .skin-swatch {

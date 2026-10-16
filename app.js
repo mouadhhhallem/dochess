@@ -281,6 +281,8 @@ class ChessCourseApp {
                 else if (a === 'online-resign-ask') this._onlineResignAsk();
                 else if (a === 'online-leave-ask') this._onlineLeaveAsk();
                 else if (a === 'online-rematch') this._onlineRematch();
+                else if (a === 'online-result-close') this._onlineResultDismiss();
+                else if (a === 'online-result-open') this._onlineResultOpen();
                 else if (a === 'online-review') this._onlineReview();
                 else if (a === 'mute') this.toggleMute();
                 else if (a === 'flip-board') this._flipLessonBoard();
@@ -2935,6 +2937,8 @@ class ChessCourseApp {
     _renderOnlineLobby() {
         const box = document.getElementById('online-content');
         if (!box) return;
+        // Leaving any game view: the result modal state dies with it.
+        try { document.getElementById('online-screen')?.classList.remove('or-open', 'or-over'); } catch (_) {}
         this._stopOnlineTick();
         if (typeof OnlineNet !== 'undefined' && !OnlineNet.available) {
             box.innerHTML = `<div class="feedback info">Loading real-time engine…</div>`;
@@ -3369,7 +3373,18 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
 
     async _quickMatch() {
         if (!this._clerk?.user) { this._onlineLobbyMsg('Sign in to find an opponent.', 'error'); return; }
-        if (this._qm && this._qm.active) return; // already searching
+        // A live search already running: don't stack another.
+        if (this._qm && this._qm.active && !this._qm.done) return;
+        // Stale search state (a finished or orphaned queue ticket) must
+        // never make this a silent no-op.
+        try { this._quickCloseOverlay(); } catch (_) {}
+        this._qm = null;
+        // Queueing from a finished game (e.g. the result card's New game):
+        // drop the dead room silently so matchmaking starts clean — no
+        // lobby flash, and the old clocks/sockets are truly gone.
+        if (this.online && this.online.phase === 'over') {
+            try { this._onlineLeave(false); } catch (_) {}
+        }
         const control = this._onlineControl();
         const elo = OnlineRatings.get(this.userId, control.id);
         this._qm = { active: true, done: false, t0: Date.now(), ticket: null, base: null, mode: null, range: 100, timer: null, pollTimer: null };
@@ -4361,6 +4376,20 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     }
 
     /* ── Online game view ── */
+    _onlineResultDismiss() {
+        try {
+            if (this.online) this.online._resultDismissed = true;
+            document.getElementById('online-screen')?.classList.remove('or-open');
+        } catch (_) {}
+    }
+    _onlineResultOpen() {
+        try {
+            if (this.online) this.online._resultDismissed = false;
+            document.getElementById('online-screen')?.classList.add('or-open');
+            const h = document.querySelector('#online-result .or-card h3');
+            if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: true }); } catch (_) {} }
+        } catch (_) {}
+    }
     _renderOnlineGame() {
         // A quick-match game starting closes the searching room.
         if (this._qm && this.online && this.online.phase === 'play') {
@@ -4408,7 +4437,8 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             const theme = s.result === 'win' ? 'or-win' : s.result === 'loss' ? 'or-loss' : 'or-draw';
             const glyph = s.result === 'win' ? '♛' : s.result === 'loss' ? '♟' : '½';
             const title = s.result === 'win' ? 'You Win!' : s.result === 'loss' ? 'You Lose' : 'Draw';
-            return `<div class="or-card ${theme}" role="status" aria-live="polite">
+            return `<div class="or-card ${theme}" role="dialog" aria-modal="true" aria-label="Game result">
+                <button class="or-close" data-action="online-result-close" type="button" aria-label="Close result and view board">×</button>
                 <div class="or-hero"><span class="or-glyph" aria-hidden="true">${glyph}</span>
                     <div><h3>${title}</h3><p>${esc(this._reasonText(s.reason))} · ${esc(s.control.name)} ${esc(s.control.label)}</p></div>
                     ${deltaPill}
@@ -4442,6 +4472,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                     <div id="online-board-wrapper"><div id="online-board" role="group" aria-label="Online chess board"></div></div>
                     <div id="online-promo" class="promotion-picker hidden"></div>
                     <div id="online-result" role="status" aria-live="polite">${resultLine}</div>
+                    ${over ? `<button id="or-reopen" data-action="online-result-open" type="button"><span aria-hidden="true">♛</span> Result</button>` : ''}
                     <div class="profile-card player" id="oprofile-you">
                         ${this._myAvatarHTML()}
                         <div class="info"><span class="name">You</span><span class="sub">${youSub}</span><div class="captured-row" data-cap="you"></div></div>
@@ -4477,6 +4508,22 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         this._drawOnline();
         this._onlineStatus();
         this._paintOnlineClocks();
+        // Result modal state: popped over the board on game over, dismissed
+        // to inspect the final position (reopen pill), gone otherwise.
+        try {
+            const scr = document.getElementById('online-screen');
+            if (scr) {
+                scr.classList.toggle('or-over', over);
+                scr.classList.toggle('or-open', !!(over && !(s._resultDismissed)));
+            }
+            const orBox = document.getElementById('online-result');
+            if (orBox && !orBox.dataset.veilBound) {
+                orBox.dataset.veilBound = '1';
+                orBox.addEventListener('click', (e) => {
+                    if (e.target === orBox) { try { this._onlineResultDismiss(); } catch (_) {} }
+                });
+            }
+        } catch (_) {}
         this._bindAvatarFallback('#oprofile-opp img.avatar[data-opp-img]');
         this._bindAvatarFallback('#oprofile-you img.avatar[data-my-img]', 'you');
         this._paintVerWarn();
