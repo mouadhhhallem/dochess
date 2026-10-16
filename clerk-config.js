@@ -14,4 +14,4 @@ window.CHESS_CLERK_KEY = 'pk_test_cGF0aWVudC1zZXJ2YWwtMzI1LmNsZXJrLmFjY291bnRzLm
    server feature (friends, ranking, invites, presence, sync) lights up
    in production exactly like on localhost:8787. Public by design: it
    is just an origin, all auth still rides Clerk JWTs per request. */
-window.DOCHESS_API_BASE = '';
+window.DOCHESS_API_BASE = 'https://dochess-api.onrender.com';
