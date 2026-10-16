@@ -111,7 +111,9 @@ test('zero-delta draw renders without a fake +0', async ({ page }) => {
   const result = (await page.locator('#online-result').textContent()).replace(/\s+/g, ' ');
   console.log('draw result:', JSON.stringify(result));
   expect(result).toMatch(/Rating 0 → 800/);
-  expect(result).not.toMatch(/\+0/);
+  // No fake "+0" on the rating displays (the "5+0" time control is legit).
+  expect(await page.locator('.or-delta').textContent()).toBe('0');
+  expect(await page.locator('.or-sub .rate-count').textContent()).toBe('Rating 0 → 800');
   const sub = await page.locator('#oprofile-you .info .sub').textContent();
   console.log('draw sub:', JSON.stringify(sub));
   expect(sub).toMatch(/White · 800 → 800 \(0\)/);

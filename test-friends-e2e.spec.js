@@ -633,8 +633,9 @@ test('the hall of fame lists every registered account with their picture', async
     expect(row, 'a stranger from the database is in the hall by full name').toBeTruthy();
     expect(row.img, 'with their picture').toBe('https://img.example/hall.png');
     expect(r.body.total, 'the hall counts every registered account').toBeGreaterThanOrEqual(7);
-    // Full name and photo — but still no uid, never an email.
-    expect('uid' in row).toBe(false);
+    // Full name and photo, plus the uid so the name opens a dossier (the
+    // id unlocks nothing the hall doesn't already publish) — never an email.
+    expect(typeof row.uid, 'hall rows link to dossiers').toBe('string');
     expect('email' in row).toBe(false);
     expect(JSON.stringify(r.body.board)).not.toContain('@');
 });

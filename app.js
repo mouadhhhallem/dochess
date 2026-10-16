@@ -4373,14 +4373,10 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         const mine = s.myColor === 'white' ? 'White' : 'Black';
         const theirs = s.myColor === 'white' ? 'Black' : 'White';
         const over = s.phase === 'over';
-        const rateBit = (s.ratingDelta !== null && s.ratingDelta !== undefined)
-            ? ` <span class="rate-count" data-from="${s.ratingAfter - s.ratingDelta}" data-to="${s.ratingAfter}">Rating ${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}</span>`
-            : '';
         // Server-ledgered experience for THIS game (win +20, draw +10,
         // loss +5 — same ledger for friend games and quick-match). It lands
         // with the stored record, moments after the card first paints, and
         // the repaint above picks it up.
-        const xpBit = (over && s.xpGained > 0) ? ` <span class="xp-count">+${s.xpGained} XP</span>` : '';
         const guestBit = !this.userId || !s.opp?.id || s.opp.id === 'guest';
         const unratedBit = (over && s.unrated) ? `<div class="feedback info">${guestBit ? 'Guest game — not rated. Sign in to play rated games.' : 'Unrated game — you are playing yourself.'}</div>` : '';
         const shortBit = (over && s.short && !s.unrated) ? `<div class="feedback info">Unrated game — too short to rate.</div>` : '';
@@ -4390,11 +4386,50 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         const youSub = (over && s.ratingDelta !== null && s.ratingDelta !== undefined)
             ? `${mine} · ${s.ratingAfter - s.ratingDelta} → ${s.ratingAfter} (${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta})`
             : `${mine} · ${OnlineRatings.get(this.userId, s.control.id)}`;
-        const resultLine = !over ? '' : s.result === 'win'
-            ? `<div class="feedback success">You win! ${this._reasonText(s.reason)}${rateBit}${xpBit}</div>${unratedBit}${shortBit}`
-            : s.result === 'loss'
-            ? `<div class="feedback error">You lose. ${this._reasonText(s.reason)}${rateBit}${xpBit}</div>${unratedBit}${shortBit}`
-            : `<div class="feedback info">Draw. ${this._reasonText(s.reason)}${rateBit}${xpBit}</div>${unratedBit}${shortBit}`;
+        // Profile-style score card: result hero, the two duelists with the
+        // rating swing, game facts, and every next step (Rematch, New game,
+        // Review, Leave) right where the eyes land. #online-result, the
+        // .rate-count animation hook and all data-actions are preserved.
+        const movesPlayed = (s.engine && s.engine.moveHistory) ? s.engine.moveHistory.length : 0;
+        const hasDelta = over && s.ratingDelta !== null && s.ratingDelta !== undefined;
+        const deltaPill = hasDelta
+            ? `<span class="or-delta ${s.ratingDelta >= 0 ? 'up' : 'down'}">${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta}</span>`
+            : `<span class="or-delta flat">unrated</span>`;
+        const rateLine = hasDelta
+            ? ` <span class="rate-count" data-from="${s.ratingAfter - s.ratingDelta}" data-to="${s.ratingAfter}">Rating ${s.ratingDelta > 0 ? '+' : ''}${s.ratingDelta} → ${s.ratingAfter}</span>`
+            : '';
+        const xpLine = (over && s.xpGained > 0) ? ` <span class="xp-count">+${s.xpGained} XP</span>` : '';
+        const noteLine = (over && (s.unrated || s.short))
+            ? `<p class="or-note">${s.unrated
+                ? (guestBit ? 'Guest game — not rated. Sign in to play rated games.' : 'Unrated game — you were playing yourself.')
+                : 'Unrated game — too short to rate.'}</p>`
+            : '';
+        const resultCard = (!over || !s.result) ? '' : (() => {
+            const theme = s.result === 'win' ? 'or-win' : s.result === 'loss' ? 'or-loss' : 'or-draw';
+            const glyph = s.result === 'win' ? '♛' : s.result === 'loss' ? '♟' : '½';
+            const title = s.result === 'win' ? 'You Win!' : s.result === 'loss' ? 'You Lose' : 'Draw';
+            return `<div class="or-card ${theme}" role="status" aria-live="polite">
+                <div class="or-hero"><span class="or-glyph" aria-hidden="true">${glyph}</span>
+                    <div><h3>${title}</h3><p>${esc(this._reasonText(s.reason))} · ${esc(s.control.name)} ${esc(s.control.label)}</p></div>
+                    ${deltaPill}
+                </div>
+                <div class="or-duel">
+                    <div class="or-side you">${this._myAvatarHTML()}<div><strong>You</strong><span>${hasDelta ? `${s.ratingAfter - s.ratingDelta} → ${s.ratingAfter}` : esc(String(OnlineRatings.get(this.userId, s.control.id)))}</span></div></div>
+                    <div class="or-vs" aria-hidden="true">vs</div>
+                    <div class="or-side foe">${this._oppCardAvatarHTML()}<div><strong>${esc(s.opp?.name || 'Opponent')}</strong><span>${esc(String(s.opp?.rating ?? '')) || esc(theirs)}</span></div></div>
+                </div>
+                <p class="or-sub">${rateLine}${xpLine} <span class="or-moves">${movesPlayed} moves</span></p>
+                ${noteLine}
+                <div class="or-actions">
+                    <button class="btn-primary sm" data-action="online-rematch" type="button">${ChessCourseApp.ACT_ICONS.rematch}<span class="btn-act-tx">Rematch</span></button>
+                    ${this._clerk?.user ? `<button class="btn-secondary sm" data-action="online-quick" type="button"><span class="btn-icon">▶</span><span class="btn-act-tx">New game</span></button>` : ''}
+                    <button class="btn-secondary sm" data-action="online-review" type="button">${ChessCourseApp.ACT_ICONS.review}<span class="btn-act-tx">Review</span></button>
+                    <button class="btn-secondary sm" data-action="online-leave" type="button">${ChessCourseApp.ACT_ICONS.lobby}<span class="btn-act-tx">Leave</span></button>
+                </div>
+            </div>`;
+        })();
+        const resultLine = !over ? '' : (resultCard
+            || `<div class="feedback info">Draw. ${this._reasonText(s.reason)}${rateLine}${xpLine}</div>${unratedBit}${shortBit}`);
         box.innerHTML = `
             <div class="lesson-content">
                 <div class="arena">
@@ -5403,14 +5438,18 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     }
 
     /* ── Board skins: square colors for every board, chosen in the
-       Online lobby. CSS vars on body[data-board-skin] do the painting. ── */
+       Online lobby. CSS vars on body[data-board-skin] do the painting.
+       ids are IMMUTABLE (stored in localStorage) — only add, never rename. */
     static BOARD_SKINS = [
         { id: 'brown',  name: 'Brown',  light: '#F0D9B5', dark: '#B58863' },
-        { id: 'blue',   name: 'Blue',   light: '#DEE3E6', dark: '#8CA2AD' },
-        { id: 'green',  name: 'Green',  light: '#FFFFDD', dark: '#86A666' },
-        { id: 'gray',   name: 'Gray',   light: '#F0F0F0', dark: '#999999' },
-        { id: 'wood',   name: 'Wood',   light: '#E8C9A0', dark: '#A17A56' },
-        { id: 'purple', name: 'Purple', light: '#E0D3E8', dark: '#9070A8' },
+        { id: 'blue',   name: 'Blue',   light: '#DCE6EC', dark: '#7A99AD' },
+        { id: 'green',  name: 'Green',  light: '#EDF2D7', dark: '#82A35F' },
+        { id: 'gray',   name: 'Gray',   light: '#EAEAEA', dark: '#8A8A8A' },
+        { id: 'wood',   name: 'Wood',   light: '#EBCD9D', dark: '#9C6B43' },
+        { id: 'purple', name: 'Purple', light: '#E3D6EC', dark: '#8B5FA6' },
+        { id: 'midnight', name: 'Midnight', light: '#46536E', dark: '#232A3D' },
+        { id: 'emerald',  name: 'Emerald',  light: '#EEEED2', dark: '#769656' },
+        { id: 'crimson',  name: 'Crimson',  light: '#F3E2DA', dark: '#9E3D34' },
         // Party boards: same readable contrast, loud personalities. The
         // artwork is pure CSS/SVG tilework (see styles.css) — no downloads.
         { id: 'lovely', name: 'Lovely', light: '#FBE3EC', dark: '#E75480' },

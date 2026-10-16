@@ -1266,7 +1266,10 @@ export function createSocialStore(getDb) {
      * FULL display names and avatars, out in the open for every signed-in
      * player. This is a deliberate product decision by the owner (a hall of
      * fame you cannot read is no hall of fame): unlike the ladder, hall rows
-     * are never blurred or first-named. No uid, email or internal id is
+     * are never blurred or first-named. Rows carry the account uid so names
+     * open dossiers — the id unlocks nothing beyond what the hall and
+     * directory search already publish (name + photo), and /api/profile
+     * still withholds presence from strangers. No email or internal id is
      * included — names + public avatars only, which `/api/directory`
      * already serves per search to any signed-in account.
      */
@@ -1276,10 +1279,14 @@ export function createSocialStore(getDb) {
             img: row.img || null, rating: row.rating, tier: tierOf(row.rating),
             self: !!(viewerUid && row.uid === viewerUid),
             friend: friends.has(row.uid),
+            // The uid rides along for EVERY hall row so names open dossiers.
+            // Owner-approved: the hall already publishes full name + photo
+            // for everyone, and directory search already serves uid + name +
+            // photo to any signed-in account — the id alone unlocks nothing
+            // new (presence stays friends/self-only via /api/profile, and the
+            // ladder still withholds uid from first-named strangers).
+            uid: row.uid,
         };
-        // Friends keep their uid so the hall can link to profiles/invites;
-        // everyone else is name + face only.
-        if (out.self || out.friend) out.uid = row.uid;
         return out;
     }
     async function hallPage({ cat = 'blitz', viewerUid, limit = 50, offset = 0, extraIdentities = [] } = {}) {

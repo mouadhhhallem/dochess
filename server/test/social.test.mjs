@@ -440,7 +440,8 @@ test('a caller cannot unlock a stranger by claiming them as a friend', async () 
 // The user-facing requirement: the hall lists the FIRST 1000 registered
 // accounts with FULL names and pictures, out in the open — no blurry
 // strangers. Explicit owner decision: a hall of fame you cannot read is no
-// hall of fame. No uid or email is included for anyone but self/friends.
+// hall of fame. Rows carry the uid so names open dossiers (same public
+// info the hall already publishes); never an email.
 test('the hall lists every registered account, with full names and avatars', async () => {
     const withPhoto = await register('user_hallphoto001', 'Hall Photo');
     await db().updateUser(withPhoto, { s: { updatedAt: Date.now(), data: 1 } },
@@ -455,7 +456,7 @@ test('the hall lists every registered account, with full names and avatars', asy
     const photo = hall.board.find((r) => r.name === 'Hall Photo');
     assert.ok(photo, 'strangers appear by FULL name');
     assert.equal(photo.img, 'https://img.example/hall.png', 'the hall carries a profile picture');
-    assert.equal('uid' in photo, false, 'still no uid for a stranger');
+    assert.ok(typeof photo.uid === 'string', 'hall rows carry uid so names open dossiers');
     assert.equal('email' in photo, false, 'never an email');
     const me = hall.board.find((r) => r.self);
     assert.ok(me, 'the viewer is marked on the hall');

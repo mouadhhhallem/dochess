@@ -1109,10 +1109,10 @@ body {
     width: min(100%, calc(100dvh - 250px), 840px);
     margin: 0 auto;
     padding: 12px;
-    background: var(--bg-card);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(145deg, #4a4238, #2b2723 60%, #211e1b);
+    border: 1px solid rgba(224, 179, 90, 0.28);
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.09);
     min-width: 0;
 }
 
@@ -1202,8 +1202,12 @@ body {
 .chess-square.white { background-color: var(--board-light); }
 .chess-square.black { background-color: var(--board-dark); }
 
-.chess-square.selected  { background-color: var(--board-selected) !important; }
-.chess-square.last-move { background-color: var(--board-last) !important; }
+/* Selected: wash + luminous ring so the pick reads on every skin. */
+.chess-square.selected  { background-color: var(--board-selected) !important;
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .75), inset 0 0 18px rgba(224, 179, 90, .55); }
+/* Last move: wash + soft inner edge. */
+.chess-square.last-move { background-color: var(--board-last) !important;
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .28); }
 /* Check must not rely on color alone (a11y): glow + outline + king glyph
    gets an aria-label suffix ", check" in JS. */
 .chess-square.in-check  {
@@ -1217,25 +1221,26 @@ body {
     filter: brightness(1.07);
 }
 
-/* Legal move dot */
+/* Legal move dot: deep ink core, haloed so it reads on dark skins too. */
 .legal-dot {
     position: absolute;
-    width: 28%;
-    height: 28%;
+    width: 26%;
+    height: 26%;
     border-radius: 50%;
-    background: rgba(0,0,0,0.22);
+    background: radial-gradient(circle, rgba(20, 16, 10, 0.34) 0 62%, rgba(20, 16, 10, 0.12) 63%, transparent 70%);
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     pointer-events: none;
     animation: dotPopCenter 0.15s ease-out;
 }
 
-/* Legal capture ring */
+/* Legal capture ring: slim gold halo hugging the victim. */
 .legal-ring {
     position: absolute;
-    inset: 4%;
+    inset: 5%;
     border-radius: 50%;
-    border: 5px solid rgba(0,0,0,0.22);
+    border: 4px solid rgba(224, 179, 90, 0.75);
+    box-shadow: 0 0 10px rgba(224, 179, 90, 0.35), inset 0 0 8px rgba(224, 179, 90, 0.25);
     pointer-events: none;
     animation: ringPop 0.15s ease-out;
 }
@@ -1281,16 +1286,18 @@ body {
     will-change: transform;
 }
 
-/* Coordinate labels */
+/* Coordinate labels: engraved type, tuned per square color. */
 .coord-file, .coord-rank {
     position: absolute;
-    font-size: 0.65rem;
-    font-weight: 700;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: .02em;
     pointer-events: none;
     z-index: 5;
     font-family: 'Inter', sans-serif;
     text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     line-height: 1;
+    opacity: .92;
 }
 
 .coord-file { bottom: 2px; right: 4px; }
@@ -1618,11 +1625,27 @@ body[data-theme='night'] { color-scheme: dark; }
 
 /* ── Board skins (picked in the Online lobby) — override the square
    colors for every board in the app. Brown is the default. ── */
-body[data-board-skin='blue']   { --board-light: #DEE3E6; --board-dark: #8CA2AD; --board-selected: rgba(110, 145, 165, 0.5); --board-last: #93AFBA; }
-body[data-board-skin='green']  { --board-light: #FFFFDD; --board-dark: #86A666; --board-selected: rgba(120, 160, 90, 0.5);  --board-last: #AAC86E; }
-body[data-board-skin='gray']   { --board-light: #F0F0F0; --board-dark: #999999; --board-selected: rgba(140, 140, 140, 0.5); --board-last: #B3B3B3; }
-body[data-board-skin='wood']   { --board-light: #E8C9A0; --board-dark: #A17A56; --board-selected: rgba(170, 120, 70, 0.5);  --board-last: #D4A373; }
-body[data-board-skin='purple'] { --board-light: #E0D3E8; --board-dark: #9070A8; --board-selected: rgba(140, 105, 170, 0.5); --board-last: #B090C8; }
+body[data-board-skin='blue']   { --board-light: #DCE6EC; --board-dark: #7A99AD; --board-selected: rgba(84, 134, 165, 0.52); --board-last: #9DB9C6; }
+body[data-board-skin='green']  { --board-light: #EDF2D7; --board-dark: #82A35F; --board-selected: rgba(104, 146, 74, 0.52);  --board-last: #A9C46B; }
+body[data-board-skin='gray']   { --board-light: #EAEAEA; --board-dark: #8A8A8A; --board-selected: rgba(120, 120, 120, 0.52); --board-last: #B5B5B5; }
+body[data-board-skin='wood']   { --board-light: #EBCD9D; --board-dark: #9C6B43; --board-selected: rgba(178, 128, 66, 0.52);  --board-last: #D9A45F; }
+body[data-board-skin='purple'] { --board-light: #E3D6EC; --board-dark: #8B5FA6; --board-selected: rgba(138, 96, 172, 0.52); --board-last: #B48ACD; }
+/* ── Tournament + night-desk additions ── */
+body[data-board-skin='midnight'] { --board-light: #46536E; --board-dark: #232A3D; --board-selected: rgba(224, 179, 90, 0.55); --board-last: #55688F; }
+body[data-board-skin='midnight'] .chess-square.black { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='42'%3E%3Ccircle cx='10' cy='11' r='1.4' fill='%23FFFFFF' fill-opacity='0.5'/%3E%3Ccircle cx='30' cy='27' r='1' fill='%23E8C86A' fill-opacity='0.55'/%3E%3Ccircle cx='22' cy='34' r='0.8' fill='%23FFFFFF' fill-opacity='0.4'/%3E%3C/svg%3E"); background-size: 42px 42px; }
+body[data-board-skin='midnight'] .chess-square.white .coord-file,
+body[data-board-skin='midnight'] .chess-square.white .coord-rank { color: #1A2130; }
+body[data-board-skin='midnight'] .chess-square.black .coord-file,
+body[data-board-skin='midnight'] .chess-square.black .coord-rank { color: #E8C86A; }
+body[data-board-skin='emerald'] { --board-light: #EEEED2; --board-dark: #769656; --board-selected: rgba(100, 150, 86, 0.52); --board-last: #A8C169; }
+body[data-board-skin='crimson'] { --board-light: #F3E2DA; --board-dark: #9E3D34; --board-selected: rgba(200, 84, 72, 0.5); --board-last: #D27A6B; }
+body[data-board-skin='crimson'] .chess-square.white .coord-file,
+body[data-board-skin='crimson'] .chess-square.white .coord-rank { color: #7A2E28; }
+body[data-board-skin='crimson'] .chess-square.black .coord-file,
+body[data-board-skin='crimson'] .chess-square.black .coord-rank { color: #F6E3DC; }
+/* Whisper grain so the wood reads as timber, not plastic. */
+body[data-board-skin='wood'] .chess-square.white { background-image: repeating-linear-gradient(93deg, rgba(120, 72, 30, 0.05) 0 2px, transparent 2px 9px); }
+body[data-board-skin='wood'] .chess-square.black { background-image: repeating-linear-gradient(93deg, rgba(0, 0, 0, 0.09) 0 2px, transparent 2px 9px); }
 
 /* ── Party boards: flat readable colors PLUS a whisper-quiet SVG tile, so
    pieces stay perfectly legible while the board has a personality. Tiles
@@ -2403,15 +2426,16 @@ body[data-theme='day'] .dc-ach-item.on .dc-ach-h { color: #8A6416; }
         scroll-margin-top: 120px;
     }
     /* Flat Lumichess-style frame: board fills the wrapper, deep soft
-       shadow, no card chrome around it. */
+       shadow, no card chrome around it — with a hairline gold edge so the
+       board sits crisply on the page. */
     #lesson-screen #chess-board-wrapper,
     #learn-screen #play-board-wrap,
     #online-screen #online-board-wrapper {
         padding: 0;
         background: transparent;
-        border: none;
-        border-radius: 6px;
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(224, 179, 90, 0.22);
+        border-radius: 8px;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
     }
     #lesson-screen #chess-board,
     #learn-screen #play-board,
@@ -2517,9 +2541,10 @@ body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
     max-width: 560px;
     margin: 0 auto;
     padding: 12px;
-    background: var(--bg-card);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
+    background: linear-gradient(145deg, #4a4238, #2b2723 60%, #211e1b);
+    border: 1px solid rgba(224, 179, 90, 0.28);
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }
 
 #online-board {
@@ -2536,6 +2561,69 @@ body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
     touch-action: manipulation;
 }
 
+/* ── Online result: profile-style score card ────────────────────
+   Dossier language (tinted hero, duel rows, stat pills) carrying the game
+   result: hero, both armies with the rating swing, facts, next steps. */
+.or-card {
+    background: var(--bg-card); border: 1px solid var(--glass-border);
+    border-radius: 18px; padding: 1rem 1.1rem;
+    display: flex; flex-direction: column; gap: .8rem;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .45);
+    animation: orIn .32s cubic-bezier(.2,.9,.3,1.1);
+    position: relative; overflow: hidden;
+}
+@keyframes orIn { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+.or-card::before {
+    content: ''; position: absolute; inset: 0 0 auto 0; height: 4px;
+    background: var(--or-accent, var(--accent));
+}
+.or-card.or-win { --or-accent: #E8B84B; }
+.or-card.or-loss { --or-accent: #f87171; }
+.or-card.or-draw { --or-accent: #8a8f98; }
+.or-hero { display: flex; align-items: center; gap: .8rem; }
+.or-glyph {
+    width: 52px; height: 52px; flex: none; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; font-weight: 800;
+    background: rgba(224, 179, 90, .14);
+    background: color-mix(in srgb, var(--or-accent) 16%, transparent);
+    border: 2px solid var(--or-accent); color: var(--or-accent);
+    box-shadow: 0 0 18px rgba(224, 179, 90, .3);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--or-accent) 35%, transparent);
+}
+.or-hero h3 { margin: 0; font-size: 1.25rem; color: var(--text-main); }
+.or-hero p { margin: .15rem 0 0; font-size: .8rem; color: var(--text-muted); }
+.or-delta {
+    margin-left: auto; flex: none; font-size: 1rem; font-weight: 800;
+    font-variant-numeric: tabular-nums; border-radius: 999px; padding: .3rem .8rem;
+    border: 1px solid var(--glass-border);
+}
+.or-delta.up { color: #4ade80; border-color: rgba(74, 222, 128, .5); background: rgba(74, 222, 128, .08); }
+.or-delta.down { color: #f87171; border-color: rgba(248, 113, 113, .5); background: rgba(248, 113, 113, .08); }
+.or-delta.flat { color: var(--text-muted); }
+.or-duel { display: grid; grid-template-columns: 1fr auto 1fr; gap: .6rem; align-items: center; }
+.or-side { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.or-side.foe { flex-direction: row-reverse; text-align: right; }
+.or-side .avatar, .or-side .avatar-letter { width: 40px; height: 40px; flex: none; font-size: 1.1rem; }
+.or-actions .btn-icon { font-size: .85rem; line-height: 1; }
+.or-side strong { display: block; font-size: .9rem; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.or-side span { font-size: .74rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.or-vs { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted-dim); }
+.or-sub { margin: 0; font-size: .82rem; color: var(--text-muted); display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.or-sub .rate-count { color: var(--accent-bright); font-weight: 800; font-variant-numeric: tabular-nums; }
+.or-sub .xp-count { color: #7dd3fc; font-weight: 700; }
+.or-sub .or-moves { margin-left: auto; font-variant-numeric: tabular-nums; }
+.or-note { margin: 0; font-size: .76rem; color: var(--text-muted-dim); }
+.or-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.or-actions .btn-primary.sm, .or-actions .btn-secondary.sm {
+    display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+    min-height: 42px; white-space: nowrap;
+}
+.or-actions .btn-act-ic { width: 17px; height: 17px; }
+@media (prefers-reduced-motion: reduce) {
+    .or-card { animation: none !important; }
+}
+
 /* ── Board skin picker (Online lobby) ── */
 .skin-row { display: flex; gap: .65rem; flex-wrap: wrap; }
 .skin-swatch {
@@ -2544,11 +2632,12 @@ body[data-theme='day'] #gameover-card h3 { color: var(--text-main); }
     padding: .55rem .6rem; cursor: pointer; color: var(--text-muted); font: inherit; font-size: .74rem; font-weight: 700;
     transition: border-color .15s ease, color .15s ease;
 }
-.skin-swatch:hover { border-color: var(--accent); color: var(--text-main); }
-.skin-swatch.on { border-color: var(--accent); color: var(--text-main); box-shadow: 0 0 0 1px var(--accent); }
+.skin-swatch:hover { border-color: var(--accent); color: var(--text-main); transform: translateY(-1px); }
+.skin-swatch.on { border-color: var(--accent); color: var(--text-main); box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(212, 164, 75, .35); }
 .skin-prev {
-    display: grid; grid-template-columns: 1fr 1fr; width: 46px; height: 46px;
-    border-radius: 6px; overflow: hidden; border: 1px solid rgba(0, 0, 0, 0.3);
+    display: grid; grid-template-columns: 1fr 1fr; width: 52px; height: 52px;
+    border-radius: 8px; overflow: hidden; border: 1px solid rgba(0, 0, 0, 0.35);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, .35);
 }
 .skin-prev i { display: block; }
 

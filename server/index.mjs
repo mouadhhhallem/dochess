@@ -675,7 +675,8 @@ async function handleNotifyAck(req, res, userId) {
  *
  * The hall of fame: the FIRST 1000 registered accounts by rating, with FULL
  * display names and avatars, out in the open — an explicit product decision
- * by the owner (see SOC.hallPage). No uid, email or internal id is included.
+ * by the owner (see SOC.hallPage). Rows carry the account uid so names open
+ * dossiers (same public info the hall and directory search already serve).
  * The account universe is the users collection PLUS every Clerk-registered
  * account (even never-synced ones); `scope` says honestly which it is.
  */
