@@ -79,7 +79,7 @@ test('clerkdir: clerkListUsers paginates the whole registry, public fields only'
     const { list, complete } = await clerkListUsers({ fetchImpl: stub });
     assert.equal(complete, true, 'all pages fetched');
     assert.equal(list.length, 101, 'every registered account is listed');
-    assert.deepEqual(Object.keys(list[0]).sort(), ['img', 'name', 'uid'], 'no emails, no phones, nothing private');
+    assert.deepEqual(Object.keys(list[0]).sort(), ['img', 'joined', 'name', 'uid'], 'no emails, no phones, nothing private (joined = public member-since)');
     assert.equal(list[0].name, 'Mohamed J0');
     assert.equal(list[100].name, 'Mossab Hallem');
 });

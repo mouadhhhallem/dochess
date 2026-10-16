@@ -1055,7 +1055,30 @@ export function createSocialStore(getDb) {
      * level, starting at 1.
      */
     const PROFILE_LEVEL_XP = 150;
-    async function publicProfile(viewerUid, targetUid) {
+    // Live identity-provider lookup, behind a dynamic import so this
+    // module stays import-free (and tests can inject a stub via deps).
+    function defaultClerkList() {
+        return import('./clerkdir.mjs').then((m) => m.clerkListUsers()).catch(() => ({ list: [] }));
+    }
+    function profileEmptyRatings() {
+        const r = {};
+        for (const cat of RANK_CATS) r[cat] = { rating: START_RATING, tier: tierOf(START_RATING), games: 0 };
+        return r;
+    }
+    function profileBasicDossier(name, img, joined, extra) {
+        return {
+            name: cleanName(name), img: cleanImg(img),
+            self: false, friend: false, relation: 'stranger',
+            joined: joined || null,
+            level: 1, xp: { total: 0, intoLevel: 0, perLevel: PROFILE_LEVEL_XP },
+            ratings: profileEmptyRatings(),
+            best: { cat: 'rapid', rating: START_RATING, tier: tierOf(START_RATING) },
+            record: { win: 0, loss: 0, draw: 0, games: 0, winRate: null },
+            form: [], streak: 0, badges: [],
+            ...(extra || {}),
+        };
+    }
+    async function publicProfile(viewerUid, targetUid, deps) {
         viewerUid = cleanUid(viewerUid);
         targetUid = cleanUid(targetUid);
         if (!targetUid) return { error: 'bad-player' };
@@ -1081,7 +1104,21 @@ export function createSocialStore(getDb) {
             if (pn !== 'Player') name = pn;
             if (!img) img = cleanImg(presenceRow.img);
         }
-        if (!user && !presenceRow) return { error: 'unknown-player' };
+        if (!user && !presenceRow) {
+            // Registered-but-never-synced account (the directory and the
+            // hall surface these from the identity provider): serve the
+            // honest BASIC dossier instead of a dead end. deps.clerkList is
+            // injectable so tests never touch the network.
+            try {
+                const listFn = (deps && deps.clerkList) || defaultClerkList;
+                const reg = await listFn().catch(() => ({ list: [] }));
+                const hit = ((reg && reg.list) || []).find((e) => e && e.uid === targetUid);
+                if (hit) {
+                    return { ok: true, profile: { ...profileBasicDossier(hit.name, hit.img, hit.joined), uid: targetUid } };
+                }
+            } catch (_) {}
+            return { error: 'unknown-player' };
+        }
         const self = !!(viewerUid && viewerUid === targetUid);
         const friendRow = (friendRows || []).find((f) => f && f.uid === targetUid);
         const friend = !!friendRow;

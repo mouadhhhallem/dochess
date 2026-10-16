@@ -59,8 +59,15 @@ const LIST_MAX_PAGES = 50; // 5000 accounts — beyond that, paginate the API ke
 
 function parseUserList(body) {
     const data = Array.isArray(body) ? body : (body && Array.isArray(body.data) ? body.data : []);
-    return data.map((u) => ({ uid: cleanUid(u && u.id), name: displayName(u), img: cleanImg(u && u.image_url) }))
+    return data.map((u) => ({ uid: cleanUid(u && u.id), name: displayName(u), img: cleanImg(u && u.image_url), joined: clerkJoined(u) }))
         .filter((r) => r.uid);
+}
+
+// Clerk timestamps arrive as milliseconds; tolerate seconds defensively.
+function clerkJoined(u) {
+    const t = Number(u && u.created_at);
+    if (!Number.isFinite(t) || t <= 0) return 0;
+    return t < 1e12 ? Math.round(t * 1000) : Math.round(t);
 }
 
 export async function clerkListUsers({ fetchImpl = fetch } = {}) {

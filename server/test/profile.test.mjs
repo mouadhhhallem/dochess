@@ -63,9 +63,28 @@ async function record(uid, result, cat, day, n) {
 }
 
 test('unknown and malformed uids are rejected, never empty-shaped', async () => {
-    assert.equal((await SOC.publicProfile(A, 'user_nonexistent999')).error, 'unknown-player');
+    const noClerk = { clerkList: async () => ({ list: [], complete: true }) };
+    assert.equal((await SOC.publicProfile(A, 'user_nonexistent999', noClerk)).error, 'unknown-player');
     assert.equal((await SOC.publicProfile(A, '!!!')).error, 'bad-player');
     assert.equal((await SOC.publicProfile(A, '')).error, 'bad-player');
+});
+
+test('never-synced registry account gets an honest basic dossier, not a 404', async () => {
+    const stub = { clerkList: async () => ({ list: [{ uid: 'user_clerkonly0001', name: 'Reggie Rookie', img: null, joined: 1791000000000 }], complete: true }) };
+    const r = await SOC.publicProfile(A, 'user_clerkonly0001', stub);
+    assert.equal(r.ok, true);
+    const p = r.profile;
+    assert.equal(p.name, 'Reggie Rookie');
+    assert.equal(p.relation, 'stranger');
+    assert.equal(p.uid, 'user_clerkonly0001');
+    assert.equal(p.joined, 1791000000000);
+    assert.ok(!('presence' in p), 'registry accounts expose no presence');
+    assert.equal(p.record.games, 0);
+    assert.equal(p.record.winRate, null);
+    assert.deepEqual(p.form, []);
+    assert.equal(p.level, 1);
+    assert.deepEqual(p.badges, []);
+    for (const cat of ['bullet', 'blitz', 'rapid']) assert.equal(p.ratings[cat].rating, START_RATING);
 });
 
 test('fresh account reads basic: default ratings, 0-0-0, level 1, no badges', async () => {
