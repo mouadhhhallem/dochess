@@ -328,7 +328,7 @@ class ChessCourseApp {
     static assetV() { return 'v25'; }
     // App release tag (?v= on scripts). Sent on identity messages so two
     // sides on different releases warn instead of silently misbehaving.
-    static APP_VERSION = 'v40';
+    static APP_VERSION = 'v41';
     _pieceFile(piece) {
         // Piece SET (folder) is chosen once in the Online lobby — see js/pieces.js.
         if (window.DoChessPieces) return DoChessPieces.url(piece, ChessCourseApp.assetV());
