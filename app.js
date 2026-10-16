@@ -330,10 +330,15 @@ class ChessCourseApp {
         const kind = names[piece.toLowerCase()] || 'pawn';
         return `assets/pieces/pieces-second/${white ? 'white' : 'black'}-${kind}.svg?${ChessCourseApp.assetV()}`;
     }
+    _pieceLabel(piece) {
+        const white = piece === piece.toUpperCase();
+        const kind = { k: 'King', q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight', p: 'Pawn' }[piece.toLowerCase()] || 'Piece';
+        return `${white ? 'White' : 'Black'} ${kind}`;
+    }
     _svg(piece) {
         const white = piece === piece.toUpperCase();
         const src = this._pieceFile(piece);
-        const label = `${white ? 'White' : 'Black'} ${src.split('-').pop().split('.')[0]}`;
+        const label = this._pieceLabel(piece);
         return `<img src="${src}" class="chess-piece ${white ? 'white' : 'black'}" alt="${label}" width="45" height="45"
             decoding="async" draggable="false" data-fallback-piece="${piece}">`;
     }
@@ -1572,6 +1577,7 @@ class ChessCourseApp {
 
     _initBoard(l) {
         this._searchEpoch = (this._searchEpoch || 0) + 1;
+        this._drawnMoves = 0; // fresh game: the first move glides again
         this.exerciseDone    = false;
         this.isFreeGame      = l.type === 'free-game';
         this.cpuBusy         = false;
@@ -1652,12 +1658,20 @@ class ChessCourseApp {
             else sq.removeAttribute('aria-selected');
             if ((lastFrom && lastFrom[0] === r && lastFrom[1] === c) || (lastTo && lastTo[0] === r && lastTo[1] === c)) sq.classList.add('last-move');
             if (isKingInCheck) sq.classList.add('in-check');
-            // Piece <img>: reuse the node, only swap src when the piece changed.
+            // Piece <img>: the node is FOREVER — only its pixels change.
+            // Swapping src on the live node keeps the old bitmap painted
+            // until the new one decodes (no blank frame); replacing the
+            // node (replaceWith) flashes empty for a frame on every
+            // capture, which reads as pieces blinking out and back.
             let img = sq.querySelector('img.chess-piece, svg.chess-piece');
             if (piece) {
                 const wantSrc = this._pieceFile(piece);
                 if (img && img.tagName === 'IMG' && img.dataset.fallbackPiece === piece && img.getAttribute('src') === wantSrc) {
                     // unchanged — keep node (no re-decode)
+                } else if (img && img.tagName === 'IMG') {
+                    img.setAttribute('src', wantSrc);
+                    img.dataset.fallbackPiece = piece;
+                    try { img.alt = this._pieceLabel(piece); } catch (_) {}
                 } else {
                     const w = document.createElement('div');
                     w.innerHTML = this._svg(piece);
@@ -1725,7 +1739,9 @@ class ChessCourseApp {
                 return { src: el.getAttribute('src'), cls: el.getAttribute('class') || 'chess-piece', x: r.left - brect.left, y: r.top - brect.top, size: r.width };
             };
             const push = (from, to) => { const s = snap(from); if (s) flyers.push({ ...s, to }); };
-            push(lastHist.from, lastHist.to);
+            // Promotion swaps the glyph mid-glide (a pawn clone gliding over
+            // the fresh queen): skip the glide there, the piece just appears.
+            if (!lastHist.promotion) push(lastHist.from, lastHist.to);
             if (lastHist.specialMove === 'castling') {
                 const rank = lastHist.to[1];
                 if (lastHist.to[0] === 'g') push('h' + rank, 'f' + rank);
@@ -1746,8 +1762,12 @@ class ChessCourseApp {
                 if (!(dr.width > 0 && dr.height > 0) || !isFinite(dr.left + dr.top)) return;
                 const cx = dr.left - brect.left + (dr.width - f.size) / 2;
                 const cy = dr.top - brect.top + (dr.height - f.size) / 2;
-                const ghost = dest.querySelector('img.chess-piece');
-                if (ghost) ghost.style.visibility = 'hidden';
+                // The arrived piece is ALREADY painted in place by the sync
+                // above; the clone glides over it and is removed on landing.
+                // (An older revision hid the destination piece for the
+                // flight — any overlapping draw left it hidden, which read
+                // as pieces blinking out and back. Never hide board state
+                // for decoration.)
                 const img = document.createElement('img');
                 img.src = f.src;
                 img.className = (f.cls + ' fly-piece').trim();
@@ -1756,14 +1776,19 @@ class ChessCourseApp {
                 img.style.top = f.y + 'px';
                 img.style.width = f.size + 'px';
                 img.style.height = f.size + 'px';
+                img.dataset.flyClone = '1';
                 board.appendChild(img);
                 const anim = img.animate(
                     [{ transform: 'translate(0, 0)' }, { transform: `translate(${cx - f.x}px, ${cy - f.y}px)` }],
                     { duration: 240, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)' }
                 );
-                const land = () => { img.remove(); if (ghost) ghost.style.visibility = ''; };
-                anim.onfinish = land;
-                // Safety net: never leave a hidden piece or stray clone behind.
+                let landed = false;
+                const land = () => { if (landed) return; landed = true; img.remove(); };
+                try {
+                    anim.onfinish = land;
+                    if (anim.finished && anim.finished.catch) anim.finished.catch(() => land());
+                } catch (_) {}
+                // Safety net: never leave a stray clone behind.
                 setTimeout(land, 600);
             });
         }
@@ -2294,9 +2319,9 @@ class ChessCourseApp {
             if (this.game !== g || epoch !== this._searchEpoch || g.gameOver) { this.cpuBusy = false; this._updateTurnUI(); return; }
             if (capMs && scored.length && Date.now() - tStart > capMs) { i = ordered.length; }
             const t0 = Date.now();
-            // 20ms slices: long enough to make progress, short enough that
+            // 12ms slices: long enough to make progress, short enough that
             // every frame still renders while the computer is thinking.
-            while (i < ordered.length && Date.now() - t0 < 20) {
+            while (i < ordered.length && Date.now() - t0 < 12) {
                 const mv = ordered[i++];
                 const snap = g.snapshot();
                 g.movePiece(mv.from, mv.to, mv.promo || null);
