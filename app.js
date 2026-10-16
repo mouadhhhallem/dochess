@@ -934,9 +934,12 @@ class ChessCourseApp {
         try {
             const hist = Array.isArray(moveHistory) ? moveHistory : [];
             if (!hist.length || typeof ChessGame === 'undefined') return out;
+            // Depth-1 + quiescence: sees hanging pieces and captures (the
+            // blunders that matter) at a fraction of depth-2 cost, so the
+            // result card never hangs the phone on a 60-move game.
+            const score = (g) => { try { return this._botSearchPov(g, 'white', 1); } catch (_) { return 0; } };
             const g = new ChessGame();
-            let prev = 0;
-            try { prev = this._botSearchPov(g, 'white', 2); } catch (_) { prev = 0; }
+            let prev = score(g);
             let started = true;
             const mine = { brilliant: 0, great: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0, total: 0 };
             hist.forEach((m, i) => {
@@ -949,13 +952,23 @@ class ChessCourseApp {
                     if (promo && mover === 'black') promo = String(promo).toLowerCase();
                     g.movePiece(from, to, promo);
                     let cur = prev;
-                    try { cur = this._botSearchPov(g, 'white', 2); } catch (_) {}
+                    try { cur = this._botSearchPov(g, 'white', 1); } catch (_) {}
                     const whiteDelta = cur - prev;
                     const delta = mover === 'white' ? whiteDelta : -whiteDelta;
                     prev = cur;
-                    const cat = delta >= 250 ? 'brilliant' : delta >= 150 ? 'great'
-                        : delta >= 60 ? 'good' : delta <= -300 ? 'blunder'
-                        : delta <= -150 ? 'mistake' : delta <= -60 ? 'inaccuracy' : null;
+                    // Depth-1 scores run hotter than depth-2, so the review
+                    // bands are wider than the live coach's (quiet beginners
+                    // should not see "inaccuracy" on 1.e4). Mate-in-1 already
+                    // scored is credited to the FINISHER, not the position:
+                    // the move that delivers checkmate is always brilliant,
+                    // and stalemating is always a mistake.
+                    const st = g.getGameStatus();
+                    let cat = null;
+                    if (st === `checkmate-${mover}`) cat = 'brilliant';
+                    else if (st === 'stalemate') cat = 'mistake';
+                    else cat = delta >= 300 ? 'brilliant' : delta >= 180 ? 'great'
+                        : delta >= 80 ? 'good' : delta <= -400 ? 'blunder'
+                        : delta <= -200 ? 'mistake' : delta <= -100 ? 'inaccuracy' : null;
                     if (cat) {
                         out[cat]++;
                         if (!myColor || mover === myColor) mine[cat]++;

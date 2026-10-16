@@ -4630,13 +4630,15 @@ body[data-theme="day"] .ms-link.active, body[data-theme="day"] .ms-link.active:h
 }
 @keyframes frFade { from { opacity: 0; } to { opacity: 1; } }
 .fr-psheet {
-    position: relative; width: min(540px, 94vw); max-height: 88dvh; overflow-y: auto;
+    position: relative; width: min(540px, 94vw); max-height: 88dvh; overflow-y: auto; overflow-x: hidden;
     background: linear-gradient(180deg, var(--bg-elevated, #141c2e), var(--bg-card));
     border: 1px solid var(--glass-border); border-radius: 20px;
     box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
     animation: frPop .22s cubic-bezier(.2,.9,.3,1.2);
-    scrollbar-width: thin;
+    /* No visible scrollbar (it stays scrollable via touch/wheel). */
+    scrollbar-width: none; -ms-overflow-style: none;
 }
+.fr-psheet::-webkit-scrollbar { display: none; width: 0; }
 @keyframes frPop { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
 .fr-pclose {
     position: absolute; top: .6rem; right: .6rem; z-index: 2;
@@ -5028,13 +5030,9 @@ body.is-playing { padding-bottom: 0 !important; }
 body.is-playing #more-sheet, body.is-playing #more-scrim { display: none !important; }
 /* Result card is scrollable chrome, never a hidden scrollbar trap. */
 .or-card, #gameover-card, .profile-card, .dc-panel {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(224,179,90,.45) transparent;
+  scrollbar-width: none; -ms-overflow-style: none;
 }
-.or-card::-webkit-scrollbar, #gameover-card::-webkit-scrollbar { width: 6px; }
-.or-card::-webkit-scrollbar-thumb, #gameover-card::-webkit-scrollbar-thumb {
-  background: rgba(224,179,90,.45); border-radius: 3px;
-}
+.or-card::-webkit-scrollbar, #gameover-card::-webkit-scrollbar { display: none; width: 0; }
 /* Avatars: never broken-image icons, always round, ringed. */
 .avatar, img.avatar {
   object-fit: cover; border-radius: 50%;
