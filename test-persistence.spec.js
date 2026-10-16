@@ -12,6 +12,9 @@ async function boot(browser, vp) {
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.app && !!window.DoChessFriends, null, { timeout: 15000 });
+    // Identity-shelf tests are local-first: neutralize the committed
+    // production API default so no request ever leaves the browser.
+    await page.evaluate(() => { window.DOCHESS_API_BASE = ''; });
     return page;
 }
 async function signInAs(page, uid, name) {

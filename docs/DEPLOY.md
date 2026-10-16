@@ -7,8 +7,9 @@ itself — every step below is manual and reviewable.
 ## Fast path: Fly.io (2026-10-15, ready to run)
 
 `fly.toml` + `Dockerfile` are committed. The frontend already honours
-`window.DOCHESS_API_BASE` (clerk-config.js, currently empty) in all three
-API resolvers, and the CSP already allows `https://*.fly.dev`.
+`window.DOCHESS_API_BASE` (clerk-config.js — set to the Render URL since
+the 2026-10-16 deploy) in all three API resolvers, and the CSP already
+allows `https://*.fly.dev` (plus Railway/Render wildcards).
 
 ```sh
 flyctl auth login
@@ -28,7 +29,19 @@ Before that, in MongoDB Atlas → Network Access, allow `0.0.0.0/0`
 (Fly has no static egress IPs), with a least-privilege DB user scoped
 to `dochess` only.
 
-## ⚠️ Status as of the 2026-10-13 audit: NOT DEPLOYED
+## Status as of 2026-10-16: DEPLOYED (Render)
+
+The API is live at `https://dochess-api.onrender.com` (Docker, free tier,
+auto-deploy from `master`) with `/api/health` reporting
+`productionReady: true` and `db.kind: mongo`. The Pages frontend points at
+it via `window.DOCHESS_API_BASE`, so friends, ranking, hall of fame and
+sync behave like localhost. Notes that remain true: free-tier cold starts
+(~50 s after 15 idle minutes), Atlas Network Access must stay `0.0.0.0/0`,
+and test suites must never touch the live database (see Test quarantine
+in `server/lib/db.mjs` — set after test rows were once written to Atlas
+by local runs and cleaned up).
+
+## Previous status (2026-10-13 audit, kept for the record): NOT DEPLOYED
 
 This document has described a Railway deployment since it was written, but
 **no API has ever been deployed**. Verified during the audit:

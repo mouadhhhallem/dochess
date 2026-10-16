@@ -1034,6 +1034,132 @@ export function createSocialStore(getDb) {
         return rows;
     }
 
+    /* ── public player profile ─────────────────────────────── */
+
+    /**
+     * One player's public dossier: identity, ratings, record, level,
+     * milestone badges, recent form. Everything in it is VERIFIABLE from
+     * stored rows (recorded games, XP ledger, account age, rating replay)
+     * — nothing is asserted, so a fresh account honestly reads basic.
+     *
+     * Privacy mirrors the ladder/hall contracts: full name + photo are
+     * public (the hall already shows them; directory search already serves
+     * uid + name + photo to any signed-in account, so echoing the queried
+     * uid reveals nothing new — uids are unguessable and cannot be
+     * enumerated through this endpoint), but presence (online/lastSeen)
+     * is friends + self only — presence stays non-enumerable like
+     * everywhere else. No email or internal id exists on these documents
+     * to leak.
+     *
+     * Level uses the client's formula (friends.js xpSummary): 150 XP per
+     * level, starting at 1.
+     */
+    const PROFILE_LEVEL_XP = 150;
+    async function publicProfile(viewerUid, targetUid) {
+        viewerUid = cleanUid(viewerUid);
+        targetUid = cleanUid(targetUid);
+        if (!targetUid) return { error: 'bad-player' };
+        const db = getDb();
+        const [user, presenceRow, friendRows, reqRows, table, xp, record, head] = await Promise.all([
+            db.getUser(targetUid).catch(() => null),
+            db.getDoc('presence', targetUid).catch(() => null),
+            viewerUid ? listFriends(viewerUid).catch(() => []) : [],
+            viewerUid ? listRequests(viewerUid).catch(() => ({ inbound: [], outbound: [] })) : { inbound: [], outbound: [] },
+            ratingTable().catch(() => new Map()),
+            getXp(targetUid).catch(() => ({ total: 0, games: 0, puzzles: 0, streaks: 0 })),
+            (typeof db.countGamesByResult === 'function'
+                ? db.countGamesByResult(targetUid)
+                : Promise.resolve({ total: { win: 0, loss: 0, draw: 0 }, cats: {} })
+            ).catch(() => ({ total: { win: 0, loss: 0, draw: 0 }, cats: {} })),
+            db.listGames(targetUid, { limit: 200 }).catch(() => []),
+        ]);
+        const prof = (user && user.profile) || {};
+        let name = cleanName(prof.name);
+        let img = cleanImg(prof.image);
+        if ((!prof.name || name === 'Player') && presenceRow) {
+            const pn = cleanName(presenceRow.name);
+            if (pn !== 'Player') name = pn;
+            if (!img) img = cleanImg(presenceRow.img);
+        }
+        if (!user && !presenceRow) return { error: 'unknown-player' };
+        const self = !!(viewerUid && viewerUid === targetUid);
+        const friendRow = (friendRows || []).find((f) => f && f.uid === targetUid);
+        const friend = !!friendRow;
+        const inReq = ((reqRows && reqRows.inbound) || []).some((r) => r && r.uid === targetUid);
+        const outReq = ((reqRows && reqRows.outbound) || []).some((r) => r.uid === targetUid);
+        const relation = self ? 'self' : friend ? 'friend'
+            : inReq ? 'pending-in' : outReq ? 'pending-out' : 'stranger';
+        const perCat = (table && table.get(targetUid)) || null;
+        const ratings = {};
+        let best = { cat: 'rapid', rating: START_RATING, tier: tierOf(START_RATING) };
+        for (const cat of RANK_CATS) {
+            const rating = (perCat && perCat.get(cat)) || START_RATING;
+            const c = (record && record.cats && record.cats[cat]) || { win: 0, loss: 0, draw: 0 };
+            ratings[cat] = {
+                rating, tier: tierOf(rating),
+                games: (c.win || 0) + (c.loss || 0) + (c.draw || 0),
+            };
+            if (rating > best.rating) best = { cat, rating, tier: tierOf(rating) };
+        }
+        const t = (record && record.total) || { win: 0, loss: 0, draw: 0 };
+        const games = (t.win || 0) + (t.loss || 0) + (t.draw || 0);
+        const ordered = (Array.isArray(head) ? head : []).slice().sort((a, b) => (b.date || 0) - (a.date || 0));
+        const form = [];
+        for (const h of ordered) {
+            const r = String((h && h.result) || '').toLowerCase();
+            if (r !== 'win' && r !== 'loss' && r !== 'draw') continue;
+            if (form.length < 5) form.push(r === 'win' ? 'W' : r === 'loss' ? 'L' : 'D');
+            else break;
+        }
+        // Current win streak: consecutive wins at the date-ordered head.
+        let run = 0;
+        for (const h of ordered) {
+            const r = String((h && h.result) || '').toLowerCase();
+            if (r === 'win') run++;
+            else if (r === 'loss' || r === 'draw') break;
+        }
+        run = Math.min(run, 200);
+        const xpTotal = (xp && xp.total) || 0;
+        const joined = (user && user.createdAt) || 0;
+        const ageDays = joined ? (Date.now() - joined) / 86400000 : 0;
+        const badges = [];
+        const wins = t.win || 0;
+        if (wins >= 1) badges.push({ id: 'first-victory', name: 'First Victory', desc: 'Won a rated game', glyph: '♟' });
+        if (games >= 25) badges.push({ id: 'grinder', name: 'Grinder', desc: '25+ rated games', glyph: '♜' });
+        if (games >= 100) badges.push({ id: 'centurion', name: 'Centurion', desc: '100+ rated games', glyph: '♖' });
+        if (run >= 3) badges.push({ id: 'hot-streak', name: 'Hot Streak', desc: run + ' wins in a row right now', glyph: '♞' });
+        if (best.rating >= 2000) badges.push({ id: 'elite', name: 'Elite', desc: '2000+ rating', glyph: '♛' });
+        else if (best.rating >= 1600) badges.push({ id: 'sharp', name: 'Sharp', desc: '1600+ rating', glyph: '♝' });
+        if (ageDays >= 30) badges.push({ id: 'veteran', name: 'Veteran', desc: 'On DoChess 30+ days', glyph: '♚' });
+        if ((xp && xp.puzzles) > 0) badges.push({ id: 'solver', name: 'Puzzle Solver', desc: 'Solved tactics puzzles', glyph: '★' });
+        const out = {
+            name, img: img || null,
+            self, friend, relation,
+            joined: joined || null,
+            level: 1 + Math.floor(xpTotal / PROFILE_LEVEL_XP),
+            xp: { total: xpTotal, intoLevel: xpTotal % PROFILE_LEVEL_XP, perLevel: PROFILE_LEVEL_XP },
+            ratings, best,
+            record: { win: t.win || 0, loss: t.loss || 0, draw: t.draw || 0, games,
+                winRate: games ? Math.round((100 * (t.win || 0)) / games) : null },
+            form,
+            streak: run,
+            badges,
+        };
+        // Echo the queried uid: the caller already knew it to ask (directory
+        // search serves uid + name + photo to any signed-in account, and
+        // uids are unguessable, so this reveals nothing new and cannot be
+        // used to enumerate). Presence stays friends + self only.
+        out.uid = targetUid;
+        if (friendRow && friendRow.since) out.since = friendRow.since;
+        if (self || friend) {
+            try {
+                const st = await status([targetUid]);
+                if (st && st[targetUid]) out.presence = st[targetUid];
+            } catch (_) {}
+        }
+        return { ok: true, profile: out };
+    }
+
     /* ── the global ladder ───────────────────────────────────────── */
 
     /**
@@ -1286,7 +1412,9 @@ export function createSocialStore(getDb) {
         // inbox
         notify, notifyFriendEvent, inbox, ackInbox,
         // ranking
-        rankPage, hallPage,
+        rankPage, hallPage, publicProfile,
+        // rating cache control (fresh ladder/profile right after games land)
+        invalidateRatings,
         // housekeeping
         invalidateRatings
     };

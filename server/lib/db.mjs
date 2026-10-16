@@ -274,6 +274,32 @@ class MongoStore {
 
     async countGames(userId) { return this.games.countDocuments({ userId }); }
 
+    /** Full W/L/D record + per-category splits. Unbounded (unlike listGames'
+        100-row view window) so grinders get honest totals. Unknown result
+        strings are ignored, never counted as losses. */
+    async countGamesByResult(userId) {
+        const rows = await this.games.aggregate([
+            { $match: { userId } },
+            { $group: {
+                _id: { result: '$result', cat: { $ifNull: ['$control.id', ''] } },
+                n: { $sum: 1 },
+            } },
+        ]).toArray();
+        const total = { win: 0, loss: 0, draw: 0 };
+        const cats = {};
+        for (const r of rows || []) {
+            const res = String((r && r._id && r._id.result) || '').toLowerCase();
+            if (res !== 'win' && res !== 'loss' && res !== 'draw') continue;
+            const n = (r && Number.isFinite(r.n)) ? r.n : 0;
+            total[res] += n;
+            const cat = String((r && r._id && r._id.cat) || '');
+            if (!cat) continue;
+            if (!cats[cat]) cats[cat] = { win: 0, loss: 0, draw: 0 };
+            cats[cat][res] += n;
+        }
+        return { total, cats };
+    }
+
     /** Every recorded game (rating derivation reads this). */
     async listAllGames() { return this.games.find({}).toArray(); }
 
@@ -408,6 +434,24 @@ class FileStore {
 
     async countGames(userId) { return (this._read(this._gamesFile(userId)) || []).length; }
 
+    /** Full W/L/D record + per-category splits (file-store twin of the
+        Mongo aggregation above: same shape, same unknown-result rule). */
+    async countGamesByResult(userId) {
+        const list = this._read(this._gamesFile(userId)) || [];
+        const total = { win: 0, loss: 0, draw: 0 };
+        const cats = {};
+        for (const g of list) {
+            const res = String((g && g.result) || '').toLowerCase();
+            if (res !== 'win' && res !== 'loss' && res !== 'draw') continue;
+            total[res] += 1;
+            const cat = String((g && g.control && g.control.id) || '');
+            if (!cat) continue;
+            if (!cats[cat]) cats[cat] = { win: 0, loss: 0, draw: 0 };
+            cats[cat][res] += 1;
+        }
+        return { total, cats };
+    }
+
     /** Every recorded game (rating derivation reads this). */
     async listAllGames() {
         const out = [];
@@ -533,7 +577,12 @@ let storeError = null;
 
 export async function initDb() {
     if (store) return store;
-    if (config.mongoUri) {
+    // Test quarantine (read LIVE, not from the frozen config, so suites can
+    // set it after imports): test processes must NEVER touch a real
+    // database, even when MONGODB_URI is configured in .env. Every suite
+    // under server/test/ and every spawned test server sets this.
+    const forceFile = process.env.DOCHESS_FORCE_FILE_STORE === '1';
+    if (config.mongoUri && !forceFile) {
         try {
             const s = new MongoStore(config.mongoUri, config.mongoDb);
             await s.connect();

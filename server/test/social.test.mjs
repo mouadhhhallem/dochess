@@ -22,6 +22,9 @@ import { createSocialStore, replayRating, resolveControl, TIME_CONTROLS, tierOf,
 // A temp data dir so the suite never touches server/.data.
 process.env.DOCHESS_DEV_FILE_STORE = '1';
 process.env.DOCHESS_DEV_NO_AUTH = '0';
+// Test quarantine: never touch a real database, even when MONGODB_URI is
+// configured in .env (initDb reads this flag live). See db.mjs initDb.
+process.env.DOCHESS_FORCE_FILE_STORE = '1';
 
 let DIR;
 let SOC;

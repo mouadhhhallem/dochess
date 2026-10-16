@@ -687,6 +687,9 @@ test('15: with no backend the app says so and shows no fake global ladder', asyn
     await page.route('file://**/api/**', (r) => r.abort());
     await page.goto('index.html');
     await page.waitForFunction(() => !!window.app && !!window.DoChessFriends, null, { timeout: 30000 });
+    // Simulate "no backend configured" regardless of the committed
+    // production default: this test proves the device-local fallback UI.
+    await page.evaluate(() => { window.DOCHESS_API_BASE = ''; });
     expect(await page.evaluate(() => window.DoChessFriends.apiBase()), 'no backend is configured').toBe(null);
 
     await page.evaluate(() => {

@@ -208,9 +208,12 @@ test('H2: logout restores guest continuity instead of stranding state', async ({
   await page.evaluate(() => {
     localStorage.clear();
     localStorage.setItem('dochess:v1', JSON.stringify({ xp: 50, stars: {} }));
-    window.DoChessSync.start({ userId: 'u_X' });   // sign-in: guest stashed, live cleared
+    window.DoChessSync.start({ userId: 'u_X' });   // sign-in: guest stashed…
   });
-  expect(await page.evaluate(() => localStorage.getItem('dochess:v1'))).toBeNull();
+  // …and a brand-new account adopts the guest live state (same adoption a
+  // first real sign-in performs); the guest original stays safe in its stash.
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('dochess:v1'))).xp).toBe(50);
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('dochess:stash:guest:dochess:v1'))).xp).toBe(50);
   await page.evaluate(() => {
     localStorage.setItem('dochess:v1', JSON.stringify({ xp: 9000, stars: {} })); // account X state
     window.DoChessSync.stop();                     // logout: stash X, restore guest

@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Full-stack proof (dev-auth API + file store, no mongo needed): two
 // strangers register via heartbeat; one finds the other by name with
@@ -7,11 +10,15 @@ import { spawn } from 'node:child_process';
 const E2E_PORT = 8898;
 const E2E_API = `http://127.0.0.1:${E2E_PORT}`;
 let apiProc = null;
+let E2E_DIR = null;
 async function startDevApi() {
     if (apiProc) return;
+    // Blank MONGODB_URI + temp dir: this dev server must NEVER touch a
+    // real database or the developer's server/.data (it reads .env).
+    E2E_DIR = mkdtempSync(join(tmpdir(), 'dochess-friends-spec-'));
     apiProc = spawn('node', ['server/index.mjs'], {
         cwd: process.cwd(),
-        env: { ...process.env, PORT: String(E2E_PORT), DOCHESS_DEV_NO_AUTH: '1', DOCHESS_DEV_FILE_STORE: '1' },
+        env: { ...process.env, PORT: String(E2E_PORT), DOCHESS_DEV_NO_AUTH: '1', DOCHESS_DEV_FILE_STORE: '1', MONGODB_URI: '', DOCHESS_DATA_DIR: E2E_DIR },
         stdio: 'ignore',
     });
     const deadline = Date.now() + 30000;
@@ -26,6 +33,7 @@ async function startDevApi() {
 }
 async function stopDevApi() {
     if (apiProc) { try { apiProc.kill(); } catch (_) {} apiProc = null; }
+    if (E2E_DIR) { try { rmSync(E2E_DIR, { recursive: true, force: true }); } catch (_) {} E2E_DIR = null; }
 }
 
 test('global search end-to-end: stranger found by name with photo, added', async ({ browser }) => {
@@ -90,6 +98,9 @@ async function freshPage(browser, vp) {
     await page.waitForFunction(() => !!window.app && !!window.DoChessFriends, null, { timeout: 15000 });
     await page.evaluate(() => {
         localStorage.clear();
+        // Local-first file: neutralize the committed production API
+        // default so file:// genuinely means "no backend" here.
+        window.DOCHESS_API_BASE = '';
         window.app._clerk = { user: { id: 'fr_u1', fullName: 'FriendOne' }, openSignIn() {}, signOut() {}, addListener() {}, mountUserButton() {} };
         window.app._setUser('fr_u1');
     });

@@ -1581,8 +1581,11 @@ let needSnapshot = false;
             // A live backend that errors must NOT silently degrade to the
             // device board: that would present a two-player local list as if
             // it were the global ladder. Say it is unavailable instead.
+            // EXCEPTION: signed-out (or 401) means there is no session to
+            // query with at all — then the honest view is the labelled
+            // device board, same as no-backend mode.
             const m = String((e && e.message) || '');
-            if (m && !/no-api|empty-board/.test(m)) {
+            if (m && !/no-api|empty-board/.test(m) && !/http-401/.test(m) && !isSignedOut()) {
                 return { server: true, error: 'unavailable', total: 0, offset: 0, hasMore: false, myRank: null, friends: [], board: [] };
             }
         }
@@ -1640,8 +1643,10 @@ let needSnapshot = false;
             }
             throw new Error('empty-hall');
         } catch (e) {
+            // Same rule as the ladder: signed-out/401 falls back to the
+            // labelled local hall; any other live-backend error stays loud.
             const m = String((e && e.message) || '');
-            if (m && !/no-api|empty-hall/.test(m)) {
+            if (m && !/no-api|empty-hall/.test(m) && !/http-401/.test(m) && !isSignedOut()) {
                 return { server: true, error: 'unavailable', total: 0, offset: 0, hasMore: false, hall: [], friends: [] };
             }
         }
@@ -1956,7 +1961,7 @@ let needSnapshot = false;
             <div class="fr-top">
                 ${avatarHTML(f.name, null, f.img)}
                 <div class="fr-id">
-                    <strong>${esc(f.name)}${f.confirmed ? '' : ' <span class="fr-unconf" title="Not yet mutual">· new</span>'}</strong>
+                    <div class="fr-namerow">${profileNameBtn(f.uid, f.name)}${f.confirmed ? '' : ' <span class="fr-unconf" title="Not yet mutual">· new</span>'}</div>
                     <span class="fr-sub"><i class="fr-dot ${dotCls}"></i>${esc(seenTxt)} · ${esc(gamesTxt)}</span>
                 </div>
                 ${st > 0 ? `<span class="fr-flame-sm" title="${st}-day streak">${FLAME}<b>${st}</b></span>` : ''}
@@ -2055,7 +2060,7 @@ let needSnapshot = false;
             out.innerHTML = all.length ? '<div class="fr-grid">' + all.map((p) => {
                 const tag = p.pending ? 'requested' : (p.friend ? (p.outbound ? 'requested' : 'friend') : (p.fromServer ? 'DoChess' : 'met over the board'));
                 const hideAdd = p.friend || p.uid === uidOf() || p.outbound;
-                return '<div class="fr-card mini">' + avatarHTML(p.name, null, p.img) + '<div class="fr-id"><strong>' + esc(p.name) + '</strong>'
+                return '<div class="fr-card mini">' + avatarHTML(p.name, null, p.img) + '<div class="fr-id">' + profileNameBtn(p.uid, p.name)
                     + '<span class="fr-sub">' + tag + (p.rating ? ' · ' + p.rating : '') + '</span></div>'
                     + (hideAdd ? '' : '<button class="btn-secondary sm" data-faction="add" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '"' + (p.img ? ' data-img="' + esc(p.img) + '"' : '') + ' type="button">Add</button>') + '</div>';
             }).join('') + '</div>'
@@ -2131,7 +2136,7 @@ let needSnapshot = false;
         return `<div class="fr-brow${r.self ? ' me' : ''}${blur ? ' blurry' : ''}">`
             + `<span class="fr-rank">${r.rank}</span>`
             + (r.name ? avatarHTML(r.name, null, img) : '<span class="fr-ava ghost" aria-hidden="true">?</span>')
-            + `<span class="fr-bname"${blur ? ' title="A stranger on DoChess"' : ''}>${r.name ? esc(r.name) : 'a quiet rival'}</span>`
+            + `<span class="fr-bname"${blur ? ' title="A stranger on DoChess"' : ''}>${r.name ? (r.uid ? profileNameBtn(r.uid, r.name) : esc(r.name)) : 'a quiet rival'}</span>`
             + (r.rating != null ? tierChip(r.rating) : '')
             + `<span class="fr-brating">${r.rating != null ? r.rating : '–'}</span></div>`;
     }
@@ -2246,8 +2251,8 @@ async function renderHall(box) {
         const hallRow = (h) => {
             const img = h.img || (h.uid && (S.friends[h.uid] || {}).img) || null;
             return `<div class="fr-hof${h.self ? ' me' : ''}">`
-                + avatarHTML(h.name, null, img)
-                + `<div class="fr-id"><strong>#${h.position} ${esc(h.name)}</strong>`
+            + avatarHTML(h.name, null, img)
+            + `<div class="fr-id">${h.uid ? profileNameBtn(h.uid, '#' + h.position + ' ' + h.name) : `<strong>#${h.position} ${esc(h.name)}</strong>`}`
                 + `<span class="fr-sub">${h.rating != null ? h.rating : '–'}${h.rating != null ? ' · ' + tierOf(h.rating).name : ''}</span></div></div>`;
         };
         out.innerHTML = `
@@ -2345,6 +2350,126 @@ async function renderHall(box) {
         } catch (_) {}
         done();
     }
+
+    /* ── Public player profiles ─────────────────────────────────
+       Tapping a name anywhere (friends, search, ladder, hall) opens a
+       dossier sheet: identity, level, ratings, record, form, badges and
+       relation actions. Every number comes from GET /api/profile, i.e.
+       from server-verified rows only — a fresh account honestly reads
+       basic. Strangers show the public face, never uid or presence. */
+    const profileCache = {};
+    let profileOpener = null;
+    const TIER_CLS = { diamond: 't-dia', platinum: 't-pla', gold: 't-gld', silver: 't-slv', bronze: 't-brz' };
+    function profileNameBtn(uid, label) {
+        if (!uid) return `<strong>${esc(label)}</strong>`;
+        return `<button type="button" class="fr-namebtn" data-faction="profile" data-uid="${esc(uid)}" title="View profile">${esc(label)}</button>`;
+    }
+    function profileCloseBtn() {
+        return `<button class="fr-pclose" data-faction="profile-close" type="button" aria-label="Close profile">×</button>`;
+    }
+    function closeProfile(silent) {
+        try {
+            const veil = document.querySelector('[data-pveil]');
+            if (veil) veil.remove();
+            if (!silent && profileOpener && profileOpener.isConnected) {
+                try { profileOpener.focus({ preventScroll: true }); } catch (_) {}
+            }
+        } catch (_) {}
+        profileOpener = silent ? profileOpener : null;
+    }
+    function profileSheetHTML(p) {
+        const tierCls = TIER_CLS[p.best.tier] || 't-brz';
+        const pres = p.presence || null;
+        const ring = pres ? (pres.online ? 'on' : 'warm') : '';
+        const seenTxt = pres ? (pres.online ? 'online now' : (pres.lastSeen ? 'last seen ' + ago(pres.lastSeen) : 'all quiet')) : null;
+        const joinedTxt = p.joined ? new Date(p.joined).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : null;
+        const rec = p.record || { win: 0, loss: 0, draw: 0, games: 0, winRate: null };
+        const recLine = rec.games
+            ? `<strong>${rec.win}W · ${rec.loss}L · ${rec.draw}D</strong>${rec.winRate != null ? `<span class="fr-pchip">▲ ${rec.winRate}%</span>` : ''}`
+            : `<span class="fr-psoft">No rated games yet — a fresh account. Be kind.</span>`;
+        const formDots = (p.form && p.form.length)
+            ? `<span class="fr-pform" title="Last ${p.form.length} rated games">` + p.form.map((r) => `<i class="${r === 'W' ? 'w' : r === 'L' ? 'l' : 'd'}" title="${r === 'W' ? 'Win' : r === 'L' ? 'Loss' : 'Draw'}"></i>`).join('') + `</span>`
+            : '';
+        const cats = ['rapid', 'blitz', 'bullet'];
+        const pills = cats.map((c) => {
+            const r = (p.ratings && p.ratings[c]) || { rating: 800, tier: 'bronze', games: 0 };
+            return `<div class="fr-prate"><span class="fr-psub2">${c}</span><strong>${r.rating}</strong><span class="fr-tier ${TIER_CLS[r.tier] || 't-brz'}">${esc(r.tier)}</span><span class="fr-psub2">${r.games} games</span></div>`;
+        }).join('');
+        const xpPct = p.xp && p.xp.perLevel ? Math.min(100, Math.round((100 * (p.xp.intoLevel || 0)) / p.xp.perLevel)) : 0;
+        const badges = (p.badges && p.badges.length)
+            ? `<div class="fr-pbadges">` + p.badges.map((b) => `<div class="fr-pbadge" title="${esc(b.desc || '')}"><span aria-hidden="true">${esc(b.glyph || '★')}</span><div><strong>${esc(b.name)}</strong><span>${esc(b.desc || '')}</span></div></div>`).join('') + `</div>`
+            : `<p class="fr-psoft">No badges yet — every badge is earned in rated games.</p>`;
+        const relChip = p.self ? 'You' : p.relation === 'friend' ? 'Friend'
+            : p.relation === 'pending-in' ? 'Wants to be friends' : p.relation === 'pending-out' ? 'Requested' : 'Stranger';
+        let action = '';
+        if (p.self) action = `<p class="fr-psoft">That's you — looking sharp.</p>`;
+        else if (p.relation === 'friend' && p.uid) action = `<button class="btn-primary sm" data-faction="play" data-uid="${esc(p.uid)}" type="button">Invite to play</button>`;
+        else if ((p.relation === 'stranger' || p.relation === 'pending-out') && p.uid) {
+            action = p.relation === 'stranger'
+                ? `<button class="btn-primary sm" data-faction="profile-add" data-uid="${esc(p.uid)}" data-name="${esc(p.name)}"${p.img ? ` data-img="${esc(p.img)}"` : ''} type="button">Add friend</button>`
+                : `<button class="btn-secondary sm" type="button" disabled>Request sent</button>`;
+        } else if (p.relation === 'pending-in') action = `<p class="fr-psoft">They want to be friends — answer in your circle.</p>`;
+        return `${p.img ? `<div class="fr-pcover" aria-hidden="true" style="background-image:url(&quot;${esc(p.img)}&quot;)"></div>` : `<div class="fr-pcover ${tierCls}" aria-hidden="true"></div>`}
+            <div class="fr-ptop">
+                <span class="fr-pava ${ring}">${p.img ? `<img src="${esc(p.img)}" alt="" loading="lazy">` : esc((p.name || 'P')[0].toUpperCase())}</span>
+                <div class="fr-pid">
+                    <h3>${esc(p.name)}</h3>
+                    <p class="fr-psub">${relChip}${p.since ? ' · friends since ' + new Date(p.since).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : ''}${joinedTxt ? ' · joined ' + esc(joinedTxt) : ''}${seenTxt ? ' · ' + esc(seenTxt) : ''}</p>
+                </div>
+                <span class="fr-plvl" title="${(p.xp && p.xp.total) || 0} XP">LVL ${p.level}</span>
+            </div>
+            <div class="fr-pxpbar" aria-hidden="true"><i style="width:${xpPct}%"></i></div>
+            <div class="fr-prates">${pills}</div>
+            <div class="fr-prec">${recLine}${formDots}</div>
+            <div class="fr-pstats">
+                <div><strong>${rec.games}</strong><span>rated games</span></div>
+                <div><strong>${p.streak || 0}</strong><span>win streak</span></div>
+                <div><strong>${p.best.rating}</strong><span>best · ${esc(p.best.cat)}</span></div>
+            </div>
+            <h4 class="fr-psubhead">Badges</h4>
+            ${badges}
+            <div class="fr-pacts">${action}</div>`;
+    }
+    async function openProfile(uid, opener) {
+        uid = String(uid || '');
+        if (!uid) return;
+        profileOpener = opener && opener.isConnected ? opener : null;
+        closeProfile(true);
+        const veil = document.createElement('div');
+        veil.className = 'fr-pveil';
+        veil.setAttribute('data-pveil', '');
+        veil.innerHTML = `<div class="fr-psheet" role="dialog" aria-modal="true" aria-label="Player profile">${profileCloseBtn()}<div class="fr-pskel" role="status">Loading player…</div></div>`;
+        document.body.appendChild(veil);
+        veil.addEventListener('click', (e) => { if (e.target === veil) closeProfile(); });
+        const sheet = veil.querySelector('.fr-psheet');
+        try {
+            let data = null;
+            const hit = profileCache[uid];
+            if (hit && Date.now() - hit.at < 60000) data = hit.data;
+            else {
+                const r = await api('profile?uid=' + encodeURIComponent(uid));
+                data = r && r.profile ? r.profile : null;
+                if (data) profileCache[uid] = { at: Date.now(), data };
+            }
+            if (!veil.isConnected || !sheet.isConnected) return;
+            if (!data) throw new Error('empty-profile');
+            sheet.innerHTML = profileCloseBtn() + profileSheetHTML(data);
+            const c = sheet.querySelector('.fr-pclose');
+            if (c) { try { c.focus({ preventScroll: true }); } catch (_) {} }
+        } catch (e) {
+            if (!veil.isConnected || !sheet.isConnected) return;
+            const m = String((e && e.message) || '');
+            const signedOut = /signed-out|401|http-401/.test(m);
+            sheet.innerHTML = profileCloseBtn() + `<div class="fr-perr" role="alert"><h3>${signedOut ? 'Sign in to see profiles' : 'Could not load this profile'}</h3>`
+                + `<p class="fr-psoft">${signedOut ? 'Player profiles live on the world server — sign in first.' : 'The player may be gone, or the server hiccuped.'}</p>`
+                + `<button class="btn-primary sm" data-faction="profile" data-uid="${esc(uid)}" type="button">Try again</button></div>`;
+        }
+    }
+    document.addEventListener('keydown', (e) => {
+        try {
+            if (e && e.key === 'Escape' && document.querySelector('[data-pveil]')) closeProfile();
+        } catch (_) {}
+    });
 
     async function onFaction(e) {
         // Activity-feed game invites (Accept & play / Decline) live inside
@@ -2500,6 +2625,17 @@ async function renderHall(box) {
         if (a === 'goto-search') {
             const si = document.getElementById('fr-search');
             if (si) { try { si.scrollIntoView({ block: 'center' }); } catch (_) {} try { si.focus({ preventScroll: true }); } catch (_) {} }
+            return;
+        }
+        if (a === 'profile') { try { openProfile(uid, el); } catch (_) {} return; }
+        if (a === 'profile-close') { try { closeProfile(); } catch (_) {} return; }
+        if (a === 'profile-add') {
+            // Request, then refresh the sheet itself so it reads Requested.
+            try {
+                await requestFriend(uid, el.dataset.name || 'Player', 'search', el.dataset.img || null);
+                delete profileCache[uid];
+                await openProfile(uid, el);
+            } catch (_) {}
             return;
         }
 

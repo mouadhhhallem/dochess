@@ -697,6 +697,23 @@ async function handleHall(req, res, userId) {
 
 /* --- ranking --- */
 
+/**
+ * GET /api/profile?uid= — one player's public dossier. Signed-in only
+ * (router-enforced). See SOC.publicProfile for the privacy contract:
+ * identity + ratings + record + level + badges for everyone, uid and
+ * presence only for self/friends/pending. 400 on malformed uid, 404 on
+ * users the server has never seen.
+ */
+async function handleProfile(req, res, userId) {
+    try {
+        const q = query(req);
+        const r = await SOC.publicProfile(userId, typeof q.uid === 'string' ? q.uid : '');
+        if (r && r.error === 'bad-player') { sendError(res, 400, 'bad-player'); return; }
+        if (r && r.error === 'unknown-player') { sendError(res, 404, 'unknown-player'); return; }
+        sendJson(res, 200, r);
+    } catch (e) { fail(res, 'profile', e); }
+}
+
 async function handleRank(req, res, userId) {
     try {
         const q = query(req);
@@ -783,6 +800,7 @@ async function handleApi(req, res) {
 
     if (p === '/api/rank' && req.method === 'GET') { await handleRank(req, res, id.userId); return; }
     if (p === '/api/hall' && req.method === 'GET') { await handleHall(req, res, id.userId); return; }
+    if (p === '/api/profile' && req.method === 'GET') { await handleProfile(req, res, id.userId); return; }
     if (p === '/api/events/ticket' && req.method === 'POST') { sendJson(res, 200, { ok: true, ticket: EV.mintTicket(id.userId) }); return; }
 
     sendError(res, 404, 'not-found');
