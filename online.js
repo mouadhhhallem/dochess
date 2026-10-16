@@ -331,6 +331,7 @@ const OnlineRatings = {
     },
     _write(uid, data) {
         try { localStorage.setItem(this.key(uid), JSON.stringify(data)); } catch (_) {}
+        try { if (uid && window.DoChessSync && typeof window.DoChessSync.notify === 'function') window.DoChessSync.notify(); } catch (_) {}
     },
     get(uid, cat) {
         const d = this._read(uid);
@@ -380,6 +381,7 @@ const OnlineRatings = {
         // games" list; the server keeps its own copy without this bound).
         h = h.slice(0, 500);
         try { localStorage.setItem(this.histKey(uid), JSON.stringify(h)); } catch (_) {}
+        try { if (window.DoChessSync && typeof window.DoChessSync.notify === 'function') window.DoChessSync.notify(); } catch (_) {}
     },
     history(uid) {
         try { return JSON.parse(localStorage.getItem(this.histKey(uid)) || '[]'); } catch (_) { return []; }

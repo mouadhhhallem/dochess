@@ -636,6 +636,8 @@ function saveLibrary(lib) {
                 positions: lib.positions
             };
             localStorage.setItem(studyKey(), JSON.stringify(plain));
+            // Cloud mirror: studies must survive new logins/devices.
+            try { if (window.DoChessSync && typeof window.DoChessSync.notify === 'function') window.DoChessSync.notify(); } catch (_) {}
         } catch (_) {}
     }, 250);
 }
@@ -1049,6 +1051,15 @@ function doPlayMove(from, to, promotion) {
     const r = playOn(before, from, to, promotion);
     if (r.illegal) { toast('Illegal move.'); return; }
     S.node = r.node; S.sel = null;
+    // Piece-move sound inside the Study panel (same clip as Play).
+    try {
+        if (window.app && window.app.snd) {
+            const san = (r.node && r.node.san) || r.san || '';
+            if (san.includes('+') || san.includes('#')) window.app.snd.playCheck();
+            else if (san.includes('x')) window.app.snd.playCapture();
+            else window.app.snd.playMove();
+        }
+    } catch (_) {}
     if (r.isNew) touch(st);
     render(); // re-render movelist + panels
     scheduleAnalyze();
@@ -2486,8 +2497,33 @@ function openPosition(opts) {
     toast(kept ? `Analysis ready - ${kept} half-moves loaded.` : 'Analysis ready - position loaded.');
     return true;
 }
+/* Import an in-memory move list (bot games) as a "My games" chapter.
+   Moves are {from,to,promotion} in algebraic form; illegal tails stop. */
+function importMoves(moves, title) {
+    wireOnce();
+    if (!S.lib) S.lib = loadLibrary();
+    const list = Array.isArray(moves) ? moves : [];
+    if (!list.length) { toast('No moves to study yet — finish a game first.'); return false; }
+    let st = S.lib.studies.find(s => s.title === 'My games');
+    if (!st) { st = blankStudy('My games'); S.lib.studies.unshift(st); }
+    const ch = blankChapter(String(title || 'Practice game').slice(0, 80), START_FEN);
+    let n = ch.root, kept = 0;
+    list.forEach(m => {
+        if (!m || typeof m.from !== 'string' || typeof m.to !== 'string') return;
+        const r = playOn(n, m.from, m.to, m.promotion || m.promo || undefined);
+        if (r.illegal) return;
+        n = r.node; kept++;
+    });
+    if (!kept) { toast('Those moves are no longer legal — import skipped.'); return false; }
+    st.chapters.push(ch);
+    touch(st);
+    openChapter(st, ch);
+    try { if (window.app) window.app.showStudy(); } catch (_) {}
+    toast(`Study ready — ${kept} half-moves loaded. Engine analysis is on.`);
+    return true;
+}
 window.DoChessStudy = {
-    open, importGame, openPosition,
+    open, importGame, openPosition, importMoves,
     version: '1.0.0',
     _t: { parsePgnText, classifyMove, treeToPgn, treeRoot, studyKey, evalWords, fmtScore, currentPgn: () => { const st = curStudy(), ch = curChapter(st); return st && ch ? treeToPgn(st, ch) : ''; } }
 };

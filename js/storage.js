@@ -102,6 +102,7 @@ export function loadProgress(backend = safeBackend()) {
 export function saveProgress(state, backend = safeBackend()) {
     try {
         backend.set(STORAGE_KEY, JSON.stringify(state));
+        try { if (window.DoChessSync && typeof window.DoChessSync.notify === 'function') window.DoChessSync.notify(); } catch (_) {}
         return true;
     } catch (_) {
         return false;

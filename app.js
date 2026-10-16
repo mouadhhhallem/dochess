@@ -266,6 +266,12 @@ class ChessCourseApp {
                 else if (a === 'vs-bots') this.showVsBots();
                 else if (a === 'vs-bot') this.startBotGame(action.dataset.bot);
                 else if (a === 'qm-cancel') this._quickCancel();
+                else if (a === 'qm-bot') this._qmSoloBot(action.dataset.bot);
+                else if (a === 'qm-wait') {
+                    document.getElementById('qm-solo')?.remove();
+                    try { if (this._qm) this._qm.t0 = Date.now(); } catch (_) {}
+                    this._qmSetStatus('Still looking…');
+                }
                 else if (a === 'online-copy-link') {
                     const inp = document.getElementById('invite-link');
                     const prev = action.textContent;
@@ -284,6 +290,7 @@ class ChessCourseApp {
                 else if (a === 'online-result-close') this._onlineResultDismiss();
                 else if (a === 'online-result-open') this._onlineResultOpen();
                 else if (a === 'online-review') this._onlineReview();
+                else if (a === 'bot-to-study') this._botToStudy();
                 else if (a === 'mute') this.toggleMute();
                 else if (a === 'flip-board') this._flipLessonBoard();
                 else if (a === 'flip-online') this._flipOnlineBoard();
@@ -510,6 +517,30 @@ class ChessCourseApp {
     // Progress is namespaced per signed-in Clerk user id; anonymous
     // learners keep the legacy shared key, untouched by sign-in.
     _progressKey() { return 'ccp_v4' + (this.userId ? '_' + this.userId : ''); }
+    /* One-time guest→account carry-over: if the account is brand-new on
+       this device but the guest shelf has real data, copy it over so
+       nothing (lessons, learn, studies, ratings, games, achievements)
+       looks "reset" after logging in. Never overwrites real account data. */
+    _adoptGuestData(uid) {
+        try {
+            const has = (k) => { try { const v = localStorage.getItem(k); return v !== null && v !== '[]' && v !== '{}' && v !== ''; } catch (_) { return false; } };
+            const copy = (from, to) => {
+                try {
+                    if (!has(to) && has(from)) localStorage.setItem(to, localStorage.getItem(from));
+                } catch (_) {}
+            };
+            copy('ccp_v4', 'ccp_v4_' + uid);
+            copy('dochess:v1', 'dochess:v1');
+            copy('dcstudy_v1_anon', 'dcstudy_v1_' + uid);
+            copy('ccr_guest', 'ccr_' + uid);
+            copy('ccr_anon', 'ccr_' + uid);
+            copy('ccgh_guest', 'ccgh_' + uid);
+            copy('ccgh_anon', 'ccgh_' + uid);
+            copy('cca_v1_guest', 'cca_v1_' + uid);
+            copy('cc_time_guest', 'cc_time_' + uid);
+            copy('dochess:puzzles:v1', 'dochess:puzzles:v1');
+        } catch (_) {}
+    }
     _loadProgress() {
         // Safe parse + shape validation: malformed / old-version data must
         // never break the course. Unknown ids are dropped, order preserved.
@@ -538,6 +569,8 @@ class ChessCourseApp {
     }
     _saveProgress() {
         try { localStorage.setItem(this._progressKey(), JSON.stringify(this.progress)); } catch (_) {}
+        // Cloud mirror: lessons must survive new logins/devices.
+        try { if (window.DoChessSync && typeof window.DoChessSync.notify === 'function' && this.userId) window.DoChessSync.notify(); } catch (_) {}
     }
     /* Cloud persistence (js/sync.js): the Clerk session token is the ONLY
        credential — the server derives the user id from it, never from the
@@ -565,12 +598,29 @@ class ChessCourseApp {
         if (this.userId === (userId || null)) return;
         this._flushStudyTime();
         this._studySince = Date.now();
+        // First sign-in on this device: carry the guest shelf over so
+        // lessons / studies / ratings / games are not "lost" — the user
+        // should never replay lessons just because they logged in.
+        try { if (userId) this._adoptGuestData(userId); } catch (_) {}
         this.userId = userId || null;
         this.progress = this._loadProgress();
         this._histShown = 10; // history paging is per player
         this._studyGameId = null; this._studyPly = null; // study viewer is per player
         this._syncProgress();
         this._startCloudSync();
+        // Fresh pull: the account's cloud copy wins over this device.
+        try {
+            if (userId && window.DoChessSync && typeof window.DoChessSync.pull === 'function') {
+                window.DoChessSync.pull().then(() => {
+                    try {
+                        this.progress = this._loadProgress();
+                        this._syncProgress();
+                        if (document.getElementById('lessons-screen')?.classList.contains('active')) this._renderLessons();
+                        if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
+                    } catch (_) {}
+                }).catch(() => {});
+            }
+        } catch (_) {}
         if (document.getElementById('lessons-screen')?.classList.contains('active')) this._renderLessons();
         if (document.getElementById('profile-screen')?.classList.contains('active')) this._renderProfile();
         // Auth resolving (or signing out) mid-game: repaint my own photo
@@ -686,6 +736,7 @@ class ChessCourseApp {
     startBotGame(botId, opts) {
         const bot = ChessCourseApp.BOTS.find(b => b && b.id === botId);
         if (!bot) return;
+        try { document.body.classList.add('is-playing'); } catch (_) {}
         const l = this.lessons.find(x => x.id === 10);
         if (!l) return;
         const want = (opts && opts.color) || 'random';
@@ -758,9 +809,27 @@ class ChessCourseApp {
         try {
             const bot = this._cpuBot;
             if (!bot) return;
+            // Coherence guards: never speak game-over lines mid-game, never
+            // celebrate the wrong side, never utter a line with an empty
+            // slot ("on " / "100 pawns"). Falls back to a quiet line.
+            if (this.game && this.game.gameOver && !/^end/.test(event)) return;
+            if (!this.game && /^end/.test(event)) return;
+            let ev = event;
+            let sl = Object.assign({}, slots || {});
+            // Greeting must match who moves first: the roster lines assume
+            // the player is White. When the player is Black, say so plainly.
+            if (ev === 'greeting' && this._sidePlayer && this._sidePlayer() === 'black') {
+                this._botSetMood('straight');
+                this._botSay(`Hey! I'm ${bot.name}. I open as White — good luck, defend well!`);
+                return;
+            }
+            // Slots that need a square/piece: without one the sentence is
+            // nonsense ("my piece on "). Fall back to a quiet remark.
+            if ((ev === 'hanging' || ev === 'tip') && !sl.square) ev = 'quiet';
+            if ((ev === 'captureWon' || ev === 'badTrade' || ev === 'evenTrade') && !sl.piece) sl.piece = 'piece';
             if (window.DoChessDialogue) {
                 const n = Math.max(1, moveNo || Math.ceil(((this.game && this.game.moveHistory) || []).length / 2) || 1);
-                const r = DoChessDialogue.say(bot.id, event, slots || {}, n);
+                const r = DoChessDialogue.say(bot.id, ev, sl, n);
                 if (r && r.text) {
                     this._botSetMood(r.mood || 'straight');
                     this._botSay(r.text);
@@ -768,7 +837,7 @@ class ChessCourseApp {
                 }
             }
             // Fallback (module missing): short neutral line, correct face.
-            this._botSetMood((DoChessDialogue && DoChessDialogue.MOODS[event]) || 'straight');
+            this._botSetMood((DoChessDialogue && DoChessDialogue.MOODS[ev]) || 'straight');
             this._botSay('Noted.');
         } catch (_) {}
     }
@@ -852,6 +921,91 @@ class ChessCourseApp {
         return { mood: 'straight', cat: 'quiet' };
     }
 
+    /* ── Post-game review (chess.com-style, beginner-friendly) ──────
+       Replays the finished game through the built-in search and grades
+       every ply from the mover's perspective:
+         brilliant ≥ +250 · great ≥ +150 · good ≥ +60 ·
+         inaccuracy ≤ -60 · mistake ≤ -150 · blunder ≤ -300.
+       No engine jargon reaches the screen — only counts, icons and one
+       plain-language line each. Used by the online result card AND the
+       bot game-over card, with a one-tap "Open in Study" handoff. */
+    _gradeGameMoves(moveHistory, myColor) {
+        const out = { brilliant: 0, great: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0, total: 0, mine: null };
+        try {
+            const hist = Array.isArray(moveHistory) ? moveHistory : [];
+            if (!hist.length || typeof ChessGame === 'undefined') return out;
+            const g = new ChessGame();
+            let prev = 0;
+            try { prev = this._botSearchPov(g, 'white', 2); } catch (_) { prev = 0; }
+            let started = true;
+            const mine = { brilliant: 0, great: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0, total: 0 };
+            hist.forEach((m, i) => {
+                try {
+                    const mover = (i % 2 === 0) ? 'white' : 'black';
+                    const from = g.algebraicToCoords(m.from);
+                    const to = g.algebraicToCoords(m.to);
+                    let promo = m.promotion || m.promo || null;
+                    if (promo && mover === 'white') promo = String(promo).toUpperCase();
+                    if (promo && mover === 'black') promo = String(promo).toLowerCase();
+                    g.movePiece(from, to, promo);
+                    let cur = prev;
+                    try { cur = this._botSearchPov(g, 'white', 2); } catch (_) {}
+                    const whiteDelta = cur - prev;
+                    const delta = mover === 'white' ? whiteDelta : -whiteDelta;
+                    prev = cur;
+                    const cat = delta >= 250 ? 'brilliant' : delta >= 150 ? 'great'
+                        : delta >= 60 ? 'good' : delta <= -300 ? 'blunder'
+                        : delta <= -150 ? 'mistake' : delta <= -60 ? 'inaccuracy' : null;
+                    if (cat) {
+                        out[cat]++;
+                        if (!myColor || mover === myColor) mine[cat]++;
+                    }
+                    out.total++;
+                    if (!myColor || mover === myColor) mine.total++;
+                } catch (_) {}
+            });
+            if (started) out.mine = mine;
+        } catch (_) {}
+        return out;
+    }
+
+    _reviewHTML(review, opts) {
+        const o = opts || {};
+        const r = review && typeof review === 'object' ? review : null;
+        const scope = (r && r.mine) || r || { brilliant: 0, great: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0 };
+        const chip = (kind, icon, label) => `
+            <div class="review-chip" data-kind="${kind}">
+                <span class="review-ico" aria-hidden="true">${icon}</span>
+                <div><strong>${scope[kind] || 0} ${label}</strong><span>${this._reviewHint(kind)}</span></div>
+            </div>`;
+        return `<div class="review-box" aria-label="Game review summary">
+            <h4>📊 Game review ${o.titleSuffix ? `· ${esc(o.titleSuffix)}` : ''}</h4>
+            <div class="review-grid">
+                ${chip('brilliant', '✨', 'Brilliant')}
+                ${chip('great', '🌟', 'Great')}
+                ${chip('good', '👍', 'Good')}
+                ${chip('inaccuracy', '🤔', 'Inaccuracy')}
+                ${chip('mistake', '⚠️', 'Mistake')}
+                ${chip('blunder', '💥', 'Blunder')}
+            </div>
+            <div class="review-cta">
+                ${o.studyBtn ? `<button class="btn-primary sm" data-action="${esc(o.studyBtn.action)}" ${o.studyBtn.game ? `data-game="${esc(o.studyBtn.game)}"` : ''} type="button">🔍 ${esc(o.studyBtn.label || 'Open in Study')}</button>` : ''}
+                ${o.rematchBtn ? `<button class="btn-secondary sm" data-action="online-rematch" type="button">↺ Rematch</button>` : ''}
+            </div>
+        </div>`;
+    }
+
+    _reviewHint(kind) {
+        return {
+            brilliant: 'Best move!',
+            great: 'Excellent!',
+            good: 'Solid play',
+            inaccuracy: 'Slightly off',
+            mistake: 'Lost ground',
+            blunder: 'Costly error'
+        }[kind] || '';
+    }
+
     /** Rate the player's just-played move and react as a coach. Call only
         in bot mode, right after White's move, while the game continues.
         Two layers: an INSTANT verdict from our own engine and attack maps
@@ -867,6 +1021,7 @@ class ChessCourseApp {
             const g = this.game;
             const names = ChessCourseApp.BOT_PIECE_NAMES;
             const me = this._sidePlayer();
+            const foe = this._sideBot();
             const before = (typeof this._botEvalBefore === 'number') ? this._botEvalBefore : null;
             const after = this._botSearchPov(g, me, 2); // player's perspective
             // The player gained when their own search score rises.
@@ -976,9 +1131,15 @@ class ChessCourseApp {
                 evt('captureWon');
             } else if (last.captured) {
                 evt('evenTrade');
-            } else if (status.startsWith('check-black')) {
+            } else if (status.startsWith(`check-${foe}`)) {
+                // The BOT is in check (player just gave check): celebrate the
+                // player. The old code fired on check-black regardless of
+                // sides, so it cheered when the PLAYER was mated-in-spirit.
                 story.checks++;
-                evt('checkGiven');
+                evt('checkGiven', { square: sqSlot });
+            } else if (status.startsWith('check-') && !status.startsWith(`check-${foe}`)) {
+                // Player is in check: own it as danger, not praise.
+                evt('inaccuracy');
             } else if (isCastle) {
                 evt('castle');
             } else if (developed && delta > -80) {
@@ -1314,6 +1475,7 @@ class ChessCourseApp {
     }
 
     showVsBots() {
+        try { document.body.classList.remove('is-playing'); } catch (_) {}
         this._go('vs-bots-screen');
         this._renderVsBots();
     }
@@ -2940,10 +3102,17 @@ class ChessCourseApp {
         // control (a mid-game lobby-wheel change must not mislabel it).
         const cat = (this.online && this.online.control && this.online.control.id)
             ? this.online.control.id : this._onlineControl().id;
+        let img = (u && (u.imageUrl || u.profileImageUrl || u.avatar)) || null;
+        // Only https photos ever render (http/data/blob avatars broke the
+        // Carlos/result cards into broken-image icons).
+        if (typeof img !== 'string' || !/^https:/.test(img)) img = null;
+        else if (img.length > 2048) img = img.slice(0, 2048);
+        let name = u ? (u.fullName || u.username || 'Player') : 'Guest';
+        name = String(name).replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 24) || 'Guest';
         return {
             id: this.userId || 'guest',
-            name: u ? (u.fullName || u.username || 'Player') : 'Guest',
-            img: (u && (u.imageUrl || u.profileImageUrl || u.avatar)) || null,
+            name,
+            img,
             ratings: cats,
             rating: cats[cat]
         };
@@ -2962,6 +3131,7 @@ class ChessCourseApp {
     _renderOnlineLobby() {
         const box = document.getElementById('online-content');
         if (!box) return;
+        try { document.body.classList.remove('is-playing'); } catch (_) {}
         // Leaving any game view: the result modal state dies with it.
         try { document.getElementById('online-screen')?.classList.remove('or-open', 'or-over'); } catch (_) {}
         this._stopOnlineTick();
@@ -3461,7 +3631,38 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             if (t) t.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
             const r = document.getElementById('qm-range');
             if (r) r.textContent = `±${qm.range}`;
+            // Solo-queue rescue: nobody else searching means an infinite
+            // spinner. After 45s offer the closest-Elo bot instead of
+            // stranding the player — they can keep waiting if they want.
+            if (s >= 45 && !qm.done && !document.getElementById('qm-solo')) {
+                this._qmSoloOffer();
+            }
         }, 500);
+    }
+
+    _qmSoloOffer() {
+        const qm = this._qm;
+        if (!qm || !qm.active || qm.done) return;
+        const card = document.querySelector('#qm-overlay .qm-card');
+        if (!card || document.getElementById('qm-solo')) return;
+        const elo = OnlineRatings.get(this.userId, this._onlineControl().id);
+        const bot = [...ChessCourseApp.BOTS].sort((a, b) => Math.abs(a.elo - elo) - Math.abs(b.elo - elo))[0];
+        const row = document.createElement('div');
+        row.id = 'qm-solo';
+        row.className = 'qm-solo';
+        row.innerHTML = `
+            <p class="qm-solo-txt">No rivals searching right now. Warm up against <strong>${esc(bot.name)} (${bot.elo})</strong> while you wait?</p>
+            <div class="qm-solo-btns">
+                <button class="btn-primary sm" data-action="qm-bot" data-bot="${esc(bot.id)}" type="button">Play ${esc(bot.name)}</button>
+                <button class="btn-secondary sm" data-action="qm-wait" type="button">Keep waiting</button>
+            </div>`;
+        card.appendChild(row);
+        this._qmSetStatus('Still looking — no rivals in the queue yet.');
+    }
+
+    _qmSoloBot(botId) {
+        try { this._quickCancel(); } catch (_) {}
+        try { this.startBotGame(botId || 'nico'); } catch (_) {}
     }
 
     _qmSetStatus(txt) {
@@ -3501,9 +3702,20 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         const ctrl = new AbortController();
         const to = setTimeout(() => ctrl.abort(), 6000);
         try {
+            // The server gates /api/mm/* behind Clerk JWTs (401 without
+            // one). The old code sent no Authorization header, so the queue
+            // ALWAYS 401'd and silently fell back to P2P — server
+            // matchmaking never worked. Same token pattern as cloud sync.
+            let token = null;
+            try {
+                const sess = this._clerk && this._clerk.session;
+                if (sess && typeof sess.getToken === 'function') token = await sess.getToken();
+            } catch (_) { token = null; }
+            const headers = body === undefined ? {} : { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
             const res = await fetch(`${base}/api/mm/${path}`, {
                 method: body === undefined ? 'GET' : 'POST',
-                headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+                headers,
                 body: body === undefined ? undefined : JSON.stringify(body),
                 signal: ctrl.signal,
             });
@@ -4424,6 +4636,8 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         const s = this.online;
         const box = document.getElementById('online-content');
         if (!box || !s) return;
+        // Tab bar hides only while a live game is on the board (lobby keeps it).
+        try { document.body.classList.toggle('is-playing', s.phase === 'play'); } catch (_) {}
         const mine = s.myColor === 'white' ? 'White' : 'Black';
         const theirs = s.myColor === 'white' ? 'Black' : 'White';
         const over = s.phase === 'over';
@@ -4462,6 +4676,21 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
             const theme = s.result === 'win' ? 'or-win' : s.result === 'loss' ? 'or-loss' : 'or-draw';
             const glyph = s.result === 'win' ? '♛' : s.result === 'loss' ? '♟' : '½';
             const title = s.result === 'win' ? 'You Win!' : s.result === 'loss' ? 'You Lose' : 'Draw';
+            // Move-quality review: graded from the finished position, cached
+            // per game so reopening the card never re-searches.
+            let reviewBlock = '';
+            try {
+                if (!s._review || s._reviewGame !== s.gameId) {
+                    s._review = this._gradeGameMoves(s.engine ? s.engine.moveHistory : [], s.myColor);
+                    s._reviewGame = s.gameId;
+                }
+                if (s._review && s._review.total > 0) {
+                    reviewBlock = this._reviewHTML(s._review, {
+                        titleSuffix: `${movesPlayed} moves`,
+                        studyBtn: { action: 'online-review', label: 'Open in Study' }
+                    });
+                }
+            } catch (_) {}
             return `<div class="or-card ${theme}" role="dialog" aria-modal="true" aria-label="Game result">
                 <button class="or-close" data-action="online-result-close" type="button" aria-label="Close result and view board">×</button>
                 <div class="or-hero"><span class="or-glyph" aria-hidden="true">${glyph}</span>
@@ -4475,6 +4704,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                 </div>
                 <p class="or-sub">${rateLine}${xpLine} <span class="or-moves">${movesPlayed} moves</span></p>
                 ${noteLine}
+                ${reviewBlock}
                 <div class="or-actions">
                     <button class="btn-primary sm" data-action="online-rematch" type="button">${ChessCourseApp.ACT_ICONS.rematch}<span class="btn-act-tx">Rematch</span></button>
                     ${this._clerk?.user ? `<button class="btn-secondary sm" data-action="online-quick" type="button"><span class="btn-icon">▶</span><span class="btn-act-tx">New game</span></button>` : ''}
@@ -4566,17 +4796,20 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     _oppCardAvatarHTML() {
         const s = this.online;
         const name = s?.opp?.name || 'Opponent';
-        if (s?.opp?.img) return this._oppImgHTML(name, s.opp.img);
+        const img = s?.opp?.img;
+        // Only https photos render; anything else becomes the letter tile
+        // (http/blob/data URLs broke into broken-image icons in the cards).
+        if (typeof img === 'string' && /^https:/.test(img)) return this._oppImgHTML(name, img.slice(0, 2048));
         return `<div class="avatar-letter">${esc((name || 'F')[0].toUpperCase())}</div>`;
     }
     _oppImgHTML(name, src) {
-        return `<img class="avatar" src="${esc(src)}" width="52" height="52" alt="${esc(name)}" data-opp-img="1">`;
+        return `<img class="avatar" src="${esc(src)}" width="52" height="52" alt="${esc(name)}" data-opp-img="1" loading="eager" decoding="async" referrerpolicy="no-referrer">`;
     }
     // My own photo on the You-card — letter tile until auth resolves, and
     // again if the photo cannot load or the player signs out.
     _myAvatarHTML() {
         const u = this._meTag();
-        if (u.img) return `<img class="avatar you" src="${esc(u.img)}" width="52" height="52" alt="${esc(u.name)}" data-my-img="1">`;
+        if (u.img) return `<img class="avatar you" src="${esc(u.img)}" width="52" height="52" alt="${esc(u.name)}" data-my-img="1" loading="eager" decoding="async" referrerpolicy="no-referrer">`;
         return `<div class="avatar-letter you">${esc((u.name || 'Y')[0].toUpperCase())}</div>`;
     }
     // Targeted repaint of MY avatar (auth resolving late, sign-out mid-game)
@@ -4628,7 +4861,7 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         const theirs = s.myColor === 'white' ? 'Black' : 'White';
         const name = s.opp?.name || 'Opponent';
         const cur = card.querySelector('img.avatar, .avatar-letter');
-        const wantImg = !!s.opp?.img;
+        const wantImg = typeof s.opp?.img === 'string' && /^https:/.test(s.opp.img);
         const isImg = !!cur && cur.tagName === 'IMG';
         if (wantImg !== isImg || (wantImg && cur.getAttribute('src') !== s.opp.img)) {
             const fresh = wantImg ? this._oppImgHTML(name, s.opp.img) : `<div class="avatar-letter">${esc((name || 'F')[0].toUpperCase())}</div>`;
@@ -4716,11 +4949,32 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         else if (status.startsWith('draw-')) {
             title = 'Draw';
             body = { 'draw-insufficient': 'Neither side can possibly checkmate.', 'draw-repetition': 'Threefold repetition.', 'draw-fifty': 'Fifty-move rule.' }[status] || '';
+        } else if (status.startsWith('resign-') || status.startsWith('timeout-') || status === 'resigned' || status === 'aborted') {
+            // Resign / timeout / abort still deserves the card (old code hid
+            // it, so resigning with 0 moves showed nothing above the board).
+            const winner = (status.split('-')[1] || (mine ? 'white' : 'black'));
+            const w = winner === this._sidePlayer();
+            title = w ? 'You win!' : `${(bot && bot.name) || 'Opponent'} wins`;
+            body = status.includes('resign') ? 'by resignation. Every master has resigned — review, then run it back!'
+                : status.includes('timeout') ? 'on time. Keep an eye on the clock next game!'
+                : 'Game over — no rating change.';
         } else { card.style.display = 'none'; this._gameOverShown = false; return; }
+        // Beginner-friendly review: same grader as online play.
+        let reviewBlock = '';
+        try {
+            const hist = (this.game && this.game.moveHistory) || [];
+            if (hist.length) {
+                const norm = hist.map(m => ({ from: m.from, to: m.to, promotion: m.promotion || null }));
+                const rv = this._gradeGameMoves(norm, this._sidePlayer());
+                if (rv && rv.total > 0) reviewBlock = this._reviewHTML(rv, { titleSuffix: `${hist.length} plies` });
+            }
+        } catch (_) {}
         card.innerHTML = `<h3 id="gameover-title" tabindex="-1">${title}</h3><p>${body}</p>
+            ${reviewBlock}
             <div class="lesson-actions">
                 <button class="btn-primary btn-glow-strong" data-action="reset-board">Rematch</button>
                 <button class="btn-secondary" data-action="gameover-hide">Review board</button>
+                <button class="btn-secondary" data-action="bot-to-study" type="button">🔍 Study</button>
                 ${bot
                     ? `<button class="btn-secondary" data-action="back-bots">Bots</button>`
                     : `<button class="btn-secondary" data-action="back-lessons">Lessons</button>`}
@@ -5146,6 +5400,23 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         this._drawOnline();
         this._onlineStatus('Reviewing the game — step with …');
     }
+    _botToStudy() {
+        try {
+            const hist = (this.game && this.game.moveHistory) || [];
+            if (!hist.length) return;
+            const moves = hist.map(m => ({ from: m.from, to: m.to, promotion: m.promotion || null }));
+            const bot = this._botGame ? this._cpuBot : null;
+            const title = bot ? `vs ${bot.name} · practice` : 'Practice game';
+            if (window.DoChessStudy && typeof window.DoChessStudy.importMoves === 'function') {
+                if (window.DoChessStudy.importMoves(moves, title)) return;
+            }
+            if (window.DoChessStudy && typeof window.DoChessStudy.openPosition === 'function') {
+                const uci = moves.map(m => `${m.from}${m.to}${m.promotion ? String(m.promotion).toLowerCase().slice(-1) : ''}`);
+                if (window.DoChessStudy.openPosition({ title, moves: uci })) return;
+            }
+            this.showStudy();
+        } catch (_) { try { this.showStudy(); } catch (_) {} }
+    }
     _onlineResign() {
         const s = this.online;
         if (!s || s.phase !== 'play' || s.result) return;
@@ -5386,11 +5657,27 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
         document.getElementById('auth-btn')?.addEventListener('click', () => this._authSignIn());
         document.getElementById('logout-btn')?.addEventListener('click', async () => { try { if (window.DoChessFriends) await window.DoChessFriends.presenceLeave(); } catch (_) {} try { await this._clerk?.signOut(); } catch (_) {} });
         // Returning session? Restore silently so the avatar is already there.
+        // Also boot right after an OAuth/email redirect (Clerk lands back on
+        // this page with ?__clerk_* params): without this the user had to
+        // press Sign-in a SECOND time before the session appeared.
         let returning = false;
         try {
-            returning = localStorage.getItem('cc_had_session') === '1' || /(^|;\s*)__session=/.test(document.cookie);
+            const q = location.search || '';
+            const returningRedirect = /__clerk|clerk_ticket|sign_in_callback|created_session/i.test(q);
+            returning = localStorage.getItem('cc_had_session') === '1' || /(^|;\s*)__session=/.test(document.cookie) || returningRedirect;
         } catch (_) {}
         if (returning) this._ensureClerk();
+        // Phones evict JS state when the tab sleeps: if we remembered a
+        // session but Clerk isn't up when the tab wakes, reload it instead
+        // of silently dropping to guest (the "logged out every time" bug).
+        try {
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) return;
+                try {
+                    if (localStorage.getItem('cc_had_session') === '1' && !this._clerk) this._ensureClerk();
+                } catch (_) {}
+            });
+        } catch (_) {}
     }
     _clerkLoadP = null;
     async _ensureClerk() {
@@ -5404,14 +5691,22 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
                     ui: 'sha384-4GUvezHdeeeXUl+biTEv1J5e48+PY6g69mc75RUZASJcYBS2ziMHnctpzk/vXwHQ',
                     js: 'sha384-cEAsa1TiyCAEmd4+EaWuF7yatGWPa1+FeHkoewWSl71xCJYSy5nyAOJ7TKzd5Rzo'
                 };
-                const loadScript = (src, integrity, keyAttr) => new Promise((res, rej) => {
+                const loadScript = (src, integrity, keyAttr, noSRI) => new Promise((res, rej) => {
                     const s = document.createElement('script');
                     s.src = src; s.async = true; s.crossOrigin = 'anonymous';
-                    if (integrity) s.integrity = integrity;
+                    if (integrity && !noSRI) s.integrity = integrity;
                     // The UMD bundle reads its key off its own script tag at
                     // evaluation time and aborts without it (per Clerk docs).
                     if (keyAttr) s.setAttribute('data-clerk-publishable-key', keyAttr);
-                    s.onload = res; s.onerror = () => rej(new Error('auth unavailable'));
+                    s.onload = res;
+                    s.onerror = () => {
+                        // A stale SRI hash (CDN republish) must never kill
+                        // sign-in outright: retry once without the hash over
+                        // the same pinned HTTPS URL before giving up.
+                        if (integrity && !noSRI) {
+                            loadScript(src, null, keyAttr, true).then(res, rej);
+                        } else rej(new Error('auth unavailable'));
+                    };
                     document.head.appendChild(s);
                 });
                 // Pinned CDN bundles (the per-instance /npm path 307-redirects
@@ -5438,7 +5733,11 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     }
     async _authSignIn() {
         const c = await this._ensureClerk();
-        if (c) { try { c.openSignIn({}); } catch (_) {} }
+        if (c) { try { c.openSignIn({}); } catch (_) {} return; }
+        // Auth SDK failed to load (offline / blocked CDN): say so instead
+        // of a dead button. Guest play + invite links keep working.
+        try { this._fb('Sign-in is unreachable right now — check your connection and retry. Guests can still play via invite links.', 'error'); } catch (_) {}
+        try { this._onlineLobbyMsg('Sign-in is unreachable right now — check your connection and retry.', 'error'); } catch (_) {}
     }
     _syncAuthUI() {
         const slot = document.getElementById('userbutton-slot');
@@ -6571,6 +6870,14 @@ the same code, and every move is saved so a dead tab can resume. Got an invite l
     _go(id) {
         this._trackScreen(id);
         try { document.body.dataset.screen = id; } catch (_) {}
+        // Tab bar owns the chrome except while a game is live: hide it
+        // during bot + online play (JS class, never a fragile :has rule, so
+        // the bar cannot vanish in the lobby or linger over the board).
+        try {
+            const playing = (id === 'lesson-screen' && !!this._botGame)
+                || (id === 'online-screen' && !!(this.online && this.online.phase === 'play'));
+            document.body.classList.toggle('is-playing', !!playing);
+        } catch (_) {}
         // Achievements: record section coverage (Explorer badge) + day touch.
         try { if (typeof DoChessAchievements !== 'undefined') DoChessAchievements.touch(this.userId, id); } catch (_) {}
         // learn-screen is module-owned (showLearn/showPickerHome) but must
